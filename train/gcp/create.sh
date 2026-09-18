@@ -30,9 +30,9 @@ gcloud compute instances create "$VM" \
   --accelerator="type=${GPU},count=${GPU_COUNT}" \
   --maintenance-policy=TERMINATE \
   --boot-disk-size=50GB \
-  --image-family=pytorch-latest-gpu \
+  --image-family=pytorch-2-9-cu129-ubuntu-2404-nvidia-580 \
   --image-project=deeplearning-platform-release \
-  --metadata="install-nvidia-driver=True" \
+  --metadata="install-nvidia-driver=True,enable-oslogin=TRUE" \
   --scopes=cloud-platform
 
 echo "created $VM in $PROJECT ($ZONE)"

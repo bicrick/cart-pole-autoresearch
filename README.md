@@ -113,10 +113,12 @@ Do not train on `pumpkin-minecraft-server`.
 Persistent SA on `cartpole-demo` (not the Minecraft project):
 
 - Email: `cartpole-bot@cartpole-demo.iam.gserviceaccount.com`
-- Roles: Compute Admin, Storage Admin, Service Account User, Logging Admin, Monitoring Editor, Service Usage Consumer
+- Roles: Compute Admin, Storage Admin, Service Account User, Logging Admin, Monitoring Admin, Service Usage Admin, Secret Manager Admin, OS Admin Login, IAP tunnel
 - Can attach the Compute default SA to VMs it creates
+- OS Login is on for the project; IAP SSH firewall `allow-iap-ssh` (tcp:22 from `35.235.240.0/20`)
 - Bucket: `gs://cartpole-demo-413636930404` (`configs/`, `checkpoints/`, `policies/`)
 - JSON key (local only, not in git): `~/.config/gcloud/cartpole-bot-cartpole-demo.json`
+- GPU: `GPUS_ALL_REGIONS` is 1 (T4 can launch). Request in flight to 4 (`cartpole-gpus-all-regions-1`).
 
 Grok-bot should set `GOOGLE_APPLICATION_CREDENTIALS` to that key path. See [`train/gcp/bot.env.example`](train/gcp/bot.env.example).
 
