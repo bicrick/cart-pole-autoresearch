@@ -403,3 +403,14 @@ Live L4 FT `20260918-134605_ft-e32768-r256-hardwalls-center-ch030-uub055-her01` 
 **Spong 1995 × Xin 2008 (extends v/ac):** raising align-ramped `center_hold_w` 0.18→0.30 is a **capture-stay** lever (keep cart near mid-track once aligned), orthogonal to discrete-eq HER. Early signal: after UU warmup, the UD intermediate recovers its hold floor faster without thrashing mean reward/align transfer from the ckpt. That matches Spong's local capture region needing *stay* pressure, not more hindsight relabel. Xin potential ordering still makes UD the nearest wrong sink — judge the bump on whether successive UD crash floors trend up toward 0.7 over the rest of this 400-u FT, not on the u50 reward spike (aa).
 
 **Do not redesign mid-run.** GPU ~15% / ~4.3 GB — throughput bump only after this FT finishes still short. Keep `her_ratio≤0.1`, `uu_bias≥0.55`; optional shorter `episode_len` only if min-gate still stalls after this hold-pressure stretch.
+
+## (ae) Edge-case curriculum is the new deal (2026-09-18 ~09:42 CT)
+
+Mean align ~0.71–0.74 under near-goal-heavy FT is mostly **local capture** diluted by long hang→goal stretches — Spong/Xin swing-up was never the training distribution. New Phase ("edge"):
+
+- **`hang_start_p≈0.45`**: reset near hanging (θ≈π) so the policy must inject energy toward the assigned goal (DD→UU and hang→any).
+- **`wrong_eq_p≈0.25`**: start at a *different* discrete equilibrium than the goal (anywhere↔anywhere without mid-flight flip).
+- **`goal_switch_p≈0.002`/step**: mid-episode goal change without reset (interactive picker).
+- Drop **`near_goal_p` to ~0.15**, raise **`energy_w≈0.35`**, **`episode_len≈1200`**, slightly harder impulses — keep `her_ratio≤0.1`, `center_hold_w≥0.30`, `uu_bias≥0.55`.
+
+Apply on natural restart only; leave improving mid-run alone.

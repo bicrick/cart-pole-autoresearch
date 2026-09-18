@@ -138,6 +138,24 @@ def parse_args():
         help="Probability a reset spawns angles near the assigned goal",
     )
     parser.add_argument(
+        "--hang-start-p",
+        type=float,
+        default=0.0,
+        help="Probability a reset spawns near hanging (DD) — swing-up / energy-pump edge",
+    )
+    parser.add_argument(
+        "--wrong-eq-p",
+        type=float,
+        default=0.0,
+        help="Probability a reset spawns near a different discrete equilibrium than the goal",
+    )
+    parser.add_argument(
+        "--goal-switch-p",
+        type=float,
+        default=0.0,
+        help="Per-step P(change goal mid-episode without reset) — interactive toggle edge",
+    )
+    parser.add_argument(
         "--uu-bias",
         type=float,
         default=0.0,
@@ -171,8 +189,19 @@ def default_run_name(args) -> str:
     parts.append("hardwalls")
     if getattr(args, "center_hold_w", 0) and args.center_hold_w > 0:
         parts.append("center")
+        if args.center_hold_w != 0.18:
+            parts.append(f"ch{args.center_hold_w:g}".replace(".", ""))
     if getattr(args, "uu_bias", 0):
         parts.append(f"uub{args.uu_bias:g}".replace(".", "p"))
+    her = getattr(args, "her_ratio", None)
+    if her is not None:
+        parts.append(f"her{her:g}".replace(".", ""))
+    if getattr(args, "hang_start_p", 0):
+        parts.append(f"hang{args.hang_start_p:g}".replace(".", ""))
+    if getattr(args, "wrong_eq_p", 0):
+        parts.append(f"xeq{args.wrong_eq_p:g}".replace(".", ""))
+    if getattr(args, "goal_switch_p", 0):
+        parts.append(f"gsw{args.goal_switch_p:g}".replace(".", "p"))
     if getattr(args, "warmup_updates", 0):
         parts.append(f"wu{args.warmup_updates}{args.warmup_goal}")
     return "-".join(parts)
@@ -190,7 +219,21 @@ def reward_kwargs(args):
     )
 
 
-def random_states(n, device, constants, mild=False, goals=None, near_goal_p=0.0):
+def random_states(
+    n,
+    device,
+    constants,
+    mild=False,
+    goals=None,
+    near_goal_p=0.0,
+    hang_start_p=0.0,
+    wrong_eq_p=0.0,
+):
+    """Reset distribution.
+
+    Priority on each env (exclusive): near-goal capture → hang (DD-ish swing-up)
+    → wrong discrete equilibrium (anywhere↔anywhere edge) → uniform / mild.
+    """
     x = torch.empty(n, device=device).uniform_(-2.0, 2.0)
     xd = torch.empty(n, device=device).uniform_(-3.0, 3.0)
     th1 = torch.empty(n, device=device).uniform_(-math.pi, math.pi)
@@ -205,9 +248,12 @@ def random_states(n, device, constants, mild=False, goals=None, near_goal_p=0.0)
         th2[:k] = torch.empty(k, device=device).uniform_(-0.25, 0.25)
         th1d[:k] = torch.empty(k, device=device).uniform_(-0.5, 0.5)
         th2d[:k] = torch.empty(k, device=device).uniform_(-0.5, 0.5)
-    # Goal-conditioned local capture: spawn near the requested equilibrium.
+
+    claimed = torch.zeros(n, dtype=torch.bool, device=device)
+
+    # Local capture near the requested goal.
     if goals is not None and near_goal_p > 0:
-        hit = torch.rand(n, device=device) < near_goal_p
+        hit = (torch.rand(n, device=device) < near_goal_p) & ~claimed
         if hit.any():
             angles = goal_angles(goals, device=device, dtype=torch.float32)
             n_hit = int(hit.sum())
@@ -217,6 +263,40 @@ def random_states(n, device, constants, mild=False, goals=None, near_goal_p=0.0)
             th2[hit] = angles[hit, 1] + torch.empty(n_hit, device=device).uniform_(-0.3, 0.3)
             th1d[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
             th2d[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
+            claimed |= hit
+
+    # Hang / near-DD: forces energy pumping toward whatever goal is assigned.
+    if hang_start_p > 0:
+        hit = (torch.rand(n, device=device) < hang_start_p) & ~claimed
+        if hit.any():
+            n_hit = int(hit.sum())
+            x[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
+            xd[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
+            # θ=0 upright; hang is ±π. Small noise so it's not a singular rest.
+            th1[hit] = math.pi + torch.empty(n_hit, device=device).uniform_(-0.35, 0.35)
+            th2[hit] = math.pi + torch.empty(n_hit, device=device).uniform_(-0.35, 0.35)
+            th1d[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
+            th2d[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
+            claimed |= hit
+
+    # Start at a *different* discrete equilibrium than the goal (switch / recover edge).
+    if goals is not None and wrong_eq_p > 0:
+        hit = (torch.rand(n, device=device) < wrong_eq_p) & ~claimed
+        if hit.any():
+            n_hit = int(hit.sum())
+            other = torch.randint(0, 4, (n,), device=device)
+            # Reroll collisions with the assigned goal.
+            same = other == goals
+            if same.any():
+                other = torch.where(same, (other + 1 + torch.randint(0, 3, (n,), device=device)) % 4, other)
+            angles = goal_angles(other, device=device, dtype=torch.float32)
+            x[hit] = torch.empty(n_hit, device=device).uniform_(-0.6, 0.6)
+            xd[hit] = torch.empty(n_hit, device=device).uniform_(-0.6, 0.6)
+            th1[hit] = angles[hit, 0] + torch.empty(n_hit, device=device).uniform_(-0.25, 0.25)
+            th2[hit] = angles[hit, 1] + torch.empty(n_hit, device=device).uniform_(-0.25, 0.25)
+            th1d[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
+            th2d[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
+
     return torch.stack((x, xd, th1, th1d, th2, th2d), dim=-1)
 
 
@@ -424,6 +504,8 @@ def main():
         f"track_limit={args.track_limit} reward_clip={args.reward_clip} "
         f"warmup={args.warmup_updates}x{args.warmup_goal} uu_bias={args.uu_bias} "
         f"anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
+        f"hang_start_p={args.hang_start_p} wrong_eq_p={args.wrong_eq_p} "
+        f"goal_switch_p={args.goal_switch_p} "
         f"her_ratio={args.her_ratio}",
         flush=True,
     )
@@ -452,6 +534,8 @@ def main():
         mild=True,
         goals=goals,
         near_goal_p=args.near_goal_p,
+        hang_start_p=args.hang_start_p,
+        wrong_eq_p=args.wrong_eq_p,
     )
     steps_left = torch.randint(1, args.episode_len + 1, (args.num_envs,), device=device)
 
@@ -476,6 +560,22 @@ def main():
                 raw, log_prob, value = model.act(obs)
             force = tanh_action(raw, constants["forceLimit"]).squeeze(-1)
             state = apply_impulses(state, args.impulse_p)
+            # Mid-episode goal flip (no state reset) — interactive picker edge case.
+            if args.goal_switch_p > 0:
+                flip = torch.rand(args.num_envs, device=device) < args.goal_switch_p
+                if flip.any():
+                    new_g = sample_goals(
+                        args.num_envs, device, allowed=allowed, probs=goal_probs
+                    )
+                    # Avoid no-op flips when possible.
+                    same = new_g == goals
+                    if same.any():
+                        new_g = torch.where(
+                            same,
+                            (new_g + 1 + torch.randint(0, 3, (args.num_envs,), device=device)) % 4,
+                            new_g,
+                        )
+                    goals = torch.where(flip, new_g, goals)
             next_state = step(state, force, constants=constants)
             rew = goal_reward(next_state, force, goals, constants, **rkw)
             steps_left -= 1
@@ -497,6 +597,8 @@ def main():
                     mild=True,
                     goals=reset_goals,
                     near_goal_p=args.near_goal_p,
+                    hang_start_p=args.hang_start_p,
+                    wrong_eq_p=args.wrong_eq_p,
                 )
                 next_state = torch.where(done.unsqueeze(-1), reset, next_state)
                 goals = reset_goals
