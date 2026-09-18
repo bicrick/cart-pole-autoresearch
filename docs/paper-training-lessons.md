@@ -414,3 +414,12 @@ Mean align ~0.71–0.74 under near-goal-heavy FT is mostly **local capture** dil
 - Drop **`near_goal_p` to ~0.15**, raise **`energy_w≈0.35`**, **`episode_len≈1200`**, slightly harder impulses — keep `her_ratio≤0.1`, `center_hold_w≥0.30`, `uu_bias≥0.55`.
 
 Apply on natural restart only; leave improving mid-run alone.
+
+
+## (af) Mid ch030: mean rebounds to early HW; min-gate still her01 crash floor (2026-09-18 ~09:46 CT)
+
+Live L4 FT `20260918-134605_ft-e32768-r256-hardwalls-center-ch030-uub055-her01` (`center_hold_w=0.30`, `her_ratio=0.1`, near-goal-heavy) at **u160**: reward~**920**, align~**0.725** (early HW still **u50** ~943 / ~0.737); `at_goal` UU/UD/DU/DD **~0.596/0.491/0.591/0.471**. Recovered from u120–u140 trough (align~0.67–0.69). **Min-gate flipped to DD ~0.471** (UD ~0.491) — same 0.44–0.55 crash-floor band as parent her01 (z/ab), not a Phase A lift. Phase A open; **leave knobs alone** mid-run (~240 updates left @ ~22 s/u).
+
+**Spong 1995 × Xin 2008 × (ae):** raising `center_hold_w` 0.18→0.30 under `near_goal_p=0.5` bought faster post-warmup UD floor recovery (ad) but by mid-FT the mean is again **local-capture saturated** (align~0.72–0.74 band) while `min(at_goal)` stays in the her01 interference floor. Hold pressure alone does not force hang→goal energy injection or wrong-eq transitions — those ICs are still rare under near-goal-heavy sampling. Confirms edge curriculum (ae) as the next natural-restart lever, not another mid-run hold bump.
+
+**Staged for next natural restart:** VM `scripts/next-train.sh` synced to edge defaults (`hang_start_p=0.45`, `wrong_eq_p=0.25`, `goal_switch_p=0.002`, `near_goal_p=0.15`, `energy_w=0.35`, `episode_len=1200`, `her_ratio=0.1`, `center_hold_w=0.30`). Do **not** kill this improving ch030 FT. GPU ~16% / ~4.3 GB.
