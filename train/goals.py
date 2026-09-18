@@ -127,6 +127,8 @@ def goal_reward(
     align_w: float = 1.5,
     energy_w: float = 0.15,
     spin_w: float = 0.0003,
+    center_w: float = 0.06,
+    center_hold_w: float = 0.18,
     track_limit: float = 4.0,
     reward_clip: float = 8.0,
 ):
@@ -137,6 +139,8 @@ def goal_reward(
       at rest; kinetic is soft-capped so swing-up pumping is not crushed.
     - Cart / spin penalties use soft-capped magnitudes so a drifting cart cannot
       produce −10k episode returns (root cause of the collapsed GCP eval curve).
+    - center_w always pulls toward x=0; center_hold_w ramps up as links align so
+      "balanced at the rail" is not a free lunch (Xin regulates cart with energy).
     - Optional flat OOB hitch when |x| > track_limit (train also marks done).
     """
     x = state[..., 0]
@@ -150,10 +154,12 @@ def goal_reward(
     a2 = angle_align(th2, angles[..., 1])
     align = a1 + a2
 
-    # Soft-bound cart penalty to the track (obs / termination scale).
+    # Soft-bound cart penalty; stronger when already near the goal pose.
     x_eff = x.clamp(-track_limit, track_limit)
     xd_eff = xd.clamp(-20.0, 20.0)
-    center = 0.02 * (x_eff * x_eff + 0.1 * xd_eff * xd_eff)
+    hold = (0.5 * (a1.clamp(min=0.0) + a2.clamp(min=0.0))).clamp(0.0, 1.0)
+    center_coef = center_w + center_hold_w * hold
+    center = center_coef * (x_eff * x_eff + 0.2 * xd_eff * xd_eff)
     oob = (x.abs() > track_limit).to(state.dtype)
 
     # Soft-cap spin so energy pumping (Spong) is not dominated by ω².

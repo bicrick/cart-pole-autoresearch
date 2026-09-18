@@ -188,3 +188,10 @@ Live walls soft-UU fine-tune `20260918-061318` (8192×256 from archived healthy 
 Run `20260918-061318` at **u180/400** (8192×256, soft `uu_bias=0.55`): `eval/reward~804`, `align~0.53`, per-goal align UU/UD/DU/DD **0.54/0.50/0.57/0.49**, `at_goal` **0.41/0.29/0.46/0.35** — all four clearly nonzero and roughly balanced (UD still weakest). Soft bias after short UU warmup recovered UU *and* let hanging/partial goals keep rising (contrast hard-cut paper-recipe where UU collapsed to ~0.01).
 
 **Paper link:** Gustafsson local-balance mass + Xin/Spong hybrid capture — sustained P(UU)≥0.55 protects the hard upright without starving other equilibria. **Throughput:** still ~7.6 s/update, GPU ~36% / 2.1 GB of 15 GB → after finish, sync `perf/*` train.py and FT again at **NUM_ENVS=16384** × rollout 256–384, `WARMUP_UPDATES=20`.
+
+---
+
+## Center / no rail-parking (2026-09-18)
+
+Live demo @ ~u230: UU `at goal` with **x≈+2.4** (on the wall). Old `center=0.02 x²` was too weak vs align, so parking at the rail was free. Fix: `center_w=0.06` always + `center_hold_w=0.18` scaled by how aligned the links are (Xin-style cart regulation once upright). Next FT should use these defaults; do not cold-start.
+

@@ -115,6 +115,10 @@ def parse_args():
     parser.add_argument("--align-w", type=float, default=1.5)
     parser.add_argument("--energy-w", type=float, default=0.15)
     parser.add_argument("--spin-w", type=float, default=0.0003)
+    parser.add_argument("--center-w", type=float, default=0.06,
+                        help="Always-on |x| centering weight")
+    parser.add_argument("--center-hold-w", type=float, default=0.18,
+                        help="Extra |x| weight when links are aligned (kill rail-parking)")
     parser.add_argument(
         "--warmup-updates",
         type=int,
@@ -157,6 +161,8 @@ def reward_kwargs(args):
         align_w=args.align_w,
         energy_w=args.energy_w,
         spin_w=args.spin_w,
+        center_w=args.center_w,
+        center_hold_w=args.center_hold_w,
         track_limit=args.track_limit,
         reward_clip=args.reward_clip,
     )
@@ -390,7 +396,7 @@ def main():
         f"updates={args.updates} obs_dim={OBS_DIM} goals={GOAL_IDS} logdir={logdir}"
     )
     print(
-        f"reward: align_w={args.align_w} energy_w={args.energy_w} spin_w={args.spin_w} "
+        f"reward: align_w={args.align_w} energy_w={args.energy_w} spin_w={args.spin_w} center_w={args.center_w} center_hold_w={args.center_hold_w} "
         f"track_limit={args.track_limit} reward_clip={args.reward_clip} "
         f"warmup={args.warmup_updates}x{args.warmup_goal} uu_bias={args.uu_bias} "
         f"anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "

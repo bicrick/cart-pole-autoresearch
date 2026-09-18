@@ -27,6 +27,8 @@ exec python3 train/train.py \
   --align-w 1.5 \
   --energy-w 0.15 \
   --spin-w 0.0003 \
+  --center-w "${CENTER_W:-0.06}" \
+  --center-hold-w "${CENTER_HOLD_W:-0.18}" \
   --warmup-updates "${WARMUP_UPDATES}" \
   --warmup-goal UU \
   --uu-bias "${UU_BIAS}" \
