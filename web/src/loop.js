@@ -1,9 +1,26 @@
-import { grabForces, observe, normalizeObs, step, tipPositions } from "./physics.js";
+import { grabForces, observe, normalizeObs, step, tipPositions, offTrack } from "./physics.js";
 import { conditionedObs } from "./goals.js";
 
 const STIFFNESS = 40;
 const DAMPING = 4;
 const PHYS_HZ = 120;
+
+function respawnState() {
+  // Mild near-hang / mid-track respawn after falling into the void.
+  const hang = Math.random() < 0.5;
+  const jitter = () => (Math.random() - 0.5) * 0.2;
+  if (hang) {
+    return {
+      x: (Math.random() - 0.5) * 1.5,
+      xd: 0,
+      th1: Math.PI + jitter(),
+      th1d: 0,
+      th2: Math.PI + jitter(),
+      th2d: 0,
+    };
+  }
+  return { x: 0, xd: 0, th1: 0.05 + jitter(), th1d: 0, th2: -0.04 + jitter(), th2d: 0 };
+}
 
 export function startLoop({
   canvas,
@@ -42,6 +59,10 @@ export function startLoop({
       force = Math.max(-fmax, Math.min(fmax, force + manual));
       lastForce = force;
       state = step(state, force, extraQ, constants);
+      if (offTrack(state, constants)) {
+        state = respawnState();
+        lastForce = 0;
+      }
       acc -= dtMs;
     }
     const tips = tipPositions(state, constants);
@@ -56,6 +77,9 @@ export function startLoop({
     },
     getState() {
       return state;
+    },
+    setState(next) {
+      state = next;
     },
   };
 }

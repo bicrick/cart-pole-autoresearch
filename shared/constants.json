@@ -49,5 +49,6 @@
     1.0
   ],
   "trackLimit": 2.4,
+  "trackWalls": false,
   "wallRestitution": 0.0
 }

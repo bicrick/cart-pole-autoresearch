@@ -33,17 +33,13 @@ def main():
     assert a[0, 1] < 0, a
     print("physics ok", nxt.tolist()[0], a.tolist()[0])
 
-    # Cart-only inelastic endstops: stay inside rail; cart speed killed on hit.
+    # No walls: sustained force lets the cart leave the track limit.
     track = float(constants.get("trackLimit", 2.4))
     s = torch.tensor([[track - 0.01, 8.0, 0.2, 1.0, -0.2, -1.0]], dtype=torch.float64)
-    th1d0, th2d0 = float(s[0, 3]), float(s[0, 5])
     for _ in range(30):
         s = step(s, torch.tensor([20.0], dtype=torch.float64), constants=constants)
-    assert float(s[0, 0]) <= track + 1e-9, s
-    assert float(s[0, 0]) >= -track - 1e-9, s
-    assert abs(float(s[0, 1])) < 1.0, s  # cart not bouncing hard
-    # Poles were never clamped by the wall (angles/vels evolve freely).
-    print("walls ok", float(s[0, 0]), float(s[0, 1]), float(s[0, 3]), float(s[0, 5]))
+    assert float(s[0, 0]) > track, s
+    print("nowalls ok", float(s[0, 0]), float(s[0, 1]))
 
 
 if __name__ == "__main__":

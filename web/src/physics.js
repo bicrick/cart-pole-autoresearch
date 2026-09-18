@@ -11,6 +11,7 @@ export const DEFAULT_CONSTANTS = {
   forceLimit: 20.0,
   dt: 0.008333333333333333,
   trackLimit: 2.4,
+  trackWalls: false,
   wallRestitution: 0.0,
   hidden: 128,
   obsDim: 16,
@@ -85,25 +86,22 @@ export function step(state, force, extraQ, constants = DEFAULT_CONSTANTS) {
   const xd = state.xd + acc.xdd * dt;
   const th1d = state.th1d + acc.t1dd * dt;
   const th2d = state.th2d + acc.t2dd * dt;
-  let x = state.x + xd * dt;
-  // HARD cart-only endstop. Poles never hit the wall; no bounce.
-  const track = constants.trackLimit ?? 2.4;
-  let nxd = xd;
-  if (x > track) {
-    x = track;
-    nxd = 0;
-  } else if (x < -track) {
-    x = -track;
-    nxd = 0;
-  }
+  const x = state.x + xd * dt;
+  // No walls — cart can run into the void; loop.js respawns on oob.
   return {
     x,
-    xd: nxd,
+    xd,
     th1: state.th1 + th1d * dt,
     th1d,
     th2: state.th2 + th2d * dt,
     th2d,
   };
+}
+
+/** True when the cart has left the visible track (demo void / train episode end). */
+export function offTrack(state, constants = DEFAULT_CONSTANTS) {
+  const track = constants.trackLimit ?? 2.4;
+  return Math.abs(state.x) > track;
 }
 
 export function observe(state) {

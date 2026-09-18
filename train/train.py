@@ -186,7 +186,7 @@ def default_run_name(args) -> str:
     parts.append("ft" if ckpt and Path(ckpt).is_file() else "cold")
     parts.append(f"e{args.num_envs}")
     parts.append(f"r{args.rollout}")
-    parts.append("hardwalls")
+    parts.append("nowalls")
     if getattr(args, "center_hold_w", 0) and args.center_hold_w > 0:
         parts.append("center")
         if args.center_hold_w != 0.18:

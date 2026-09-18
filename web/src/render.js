@@ -44,6 +44,7 @@ function sizeCanvas(canvas) {
 
 function drawTrack(ctx, camera, canvas, constants, dpr) {
   const track = constants.trackLimit ?? 2.4;
+  // Open rail: no end-posts. Past ±track is the void (respawn).
   const left = camera.worldToScreen(-track, 0, canvas);
   const right = camera.worldToScreen(track, 0, canvas);
   ctx.strokeStyle = RAIL;
@@ -52,14 +53,17 @@ function drawTrack(ctx, camera, canvas, constants, dpr) {
   ctx.moveTo(left.x, left.y);
   ctx.lineTo(right.x, right.y);
   ctx.stroke();
-  ctx.strokeStyle = "rgba(33, 35, 45, 0.35)";
-  ctx.lineWidth = 2.5 * dpr;
+  // Soft fade marks at the void edges (not walls).
+  ctx.strokeStyle = "rgba(33, 35, 45, 0.2)";
+  ctx.setLineDash([4 * dpr, 4 * dpr]);
+  ctx.lineWidth = 1.5 * dpr;
   ctx.beginPath();
-  ctx.moveTo(left.x, left.y - 12 * dpr);
-  ctx.lineTo(left.x, left.y + 12 * dpr);
-  ctx.moveTo(right.x, right.y - 12 * dpr);
-  ctx.lineTo(right.x, right.y + 12 * dpr);
+  ctx.moveTo(left.x, left.y - 10 * dpr);
+  ctx.lineTo(left.x, left.y + 10 * dpr);
+  ctx.moveTo(right.x, right.y - 10 * dpr);
+  ctx.lineTo(right.x, right.y + 10 * dpr);
   ctx.stroke();
+  ctx.setLineDash([]);
 }
 
 function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr) {

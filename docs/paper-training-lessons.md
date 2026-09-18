@@ -447,3 +447,7 @@ Live L4 triple FT (16k envs each, GPU ~99%/5.6GB; ~8.4h VM up):
 
 **Action:** leave edge/swing alone (~65 min left). Armed one-shot hot watcher to restart from `checkpoint-hot.pt` on natural u400 finish (no idle under budget). Do **not** revive ch030 brute. Promote best min-gate → `checkpoint.pt` when stretches finish.
 
+
+## (ai) No walls / void respawn (2026-09-18 ~11:55 CT)
+
+Hard endstops let policies prop UU / pump against the rail. Demo goal: leave the track → fall into the void → respawn. Training matches: **no clamp walls** in `physics.step`; `|x| > trackLimit` still ends the episode (train reset / web `offTrack` respawn). Fine-tune from the best edge ckpt on this plant.
