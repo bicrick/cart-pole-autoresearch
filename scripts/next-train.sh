@@ -4,10 +4,11 @@
 # hard warmup cut diluted UU — keep P(UU)>=0.55 after a short capture warmup.
 # Do not launch a second GPU job while one is still running.
 set -euo pipefail
+# Throughput defaults: large env count + longer rollout to fill the T4.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-NUM_ENVS="${NUM_ENVS:-4096}"
+NUM_ENVS="${NUM_ENVS:-8192}"
 UPDATES="${UPDATES:-400}"
 LOGDIR="${LOGDIR:-runs}"
 # Short pure-UU warmup when fine-tuning; soft bias covers the rest.
@@ -18,7 +19,7 @@ ANNEAL_UPDATES="${ANNEAL_UPDATES:-0}"
 exec python3 train/train.py \
   --num-envs "${NUM_ENVS}" \
   --updates "${UPDATES}" \
-  --rollout 128 \
+  --rollout "${ROLLOUT:-256}" \
   --episode-len 800 \
   --track-limit 2.4 \
   --reward-clip 8.0 \
