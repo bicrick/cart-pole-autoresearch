@@ -247,3 +247,14 @@ Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u160**:
 **HER (Andrychowicz 2017) × Xin 2008:** hindsight relabel replaces the intended goal with a goal actually reached in the episode. Under Xin potential ordering **UU > UD > DU > DD**, failed UU rollouts that undershoot energy most often land in **UD** (lesson m). Relabeling those as UD successes turns the nearest wrong attractor into a *dense* HER target — so a nonzero `her_ratio` can amplify the UD gate even while `uu_bias` protects on-policy sampling. That is distinct from “judge on per-goal at_goal” (l) or “UD is nearest sink” (m): it is a **replay** mechanism that can fight the curriculum.
 
 **Next restart only (if UD plateaus while UU/DU/DD keep rising):** drop `her_ratio` (e.g. 0.3→0.1) or skip UU→UD / UU→DU relabels; do **not** raise `uu_bias` further first. No mid-run change while reward/align still oscillate in a rising band.
+
+
+## (o) Visit≠hold: Spong capture region vs sparse@1.0 (2026-09-18 ~04:20 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u190**: reward~**691**, align~**0.56**, `at_goal` UU/UD/DU/DD **~0.52/0.35/0.53/0.41** — still oscillating in the u110–u180 band (peak reward~738 / align~0.59 @u180; UD align dipped 0.62→0.46 on this step). Phase A open; leave knobs alone mid-run.
+
+**Spong 1995:** swing-up then switch to a *local* LQR whose capture region is small — arriving near the upright manifold is not the same as staying there. Our dense `align_w=1.5` pays for cos-proximity every step, while `sparse_bonus=1.0` only fires on `at_goal` (cos≥0.95). That asymmetry explains a sustained **align≳0.55 with at_goal stuck ~0.35–0.52**: the policy learns to *visit* goal neighborhoods but is under-paid for *holding* inside the capture ball — exactly Spong's hybrid gap, not a missing equilibrium.
+
+**HER shape note (Andrychowicz 2017):** our `her_relabel_inplace` uses **end-of-rollout nearest achieved equilibrium**, not paper-`future` k=4. Under Xin UU>UD>DU>DD (lesson m/n), final-state HER preferentially stamps **UD** on failed UU episodes. Dropping `her_ratio` on the next natural restart (if UD still gates) remains preferred over switching to unfiltered `future` relabels.
+
+**Next restart only (if still short of Phase A at u400):** raise hold pressure (`sparse_bonus` or `center_hold_w`) and/or drop `her_ratio` 0.3→0.1 — do **not** kill this FT early; GPU still ~16% / 7.8 GB (throughput bump only after finish).
