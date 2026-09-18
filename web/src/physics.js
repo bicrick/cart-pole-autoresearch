@@ -86,16 +86,15 @@ export function step(state, force, extraQ, constants = DEFAULT_CONSTANTS) {
   const th1d = state.th1d + acc.t1dd * dt;
   const th2d = state.th2d + acc.t2dd * dt;
   let x = state.x + xd * dt;
-  // Cart-only endstop (inelastic by default). Poles never hit the wall.
+  // HARD cart-only endstop. Poles never hit the wall; no bounce.
   const track = constants.trackLimit ?? 2.4;
-  const rest = constants.wallRestitution ?? 0.0;
   let nxd = xd;
   if (x > track) {
     x = track;
-    nxd = -rest * xd;
+    nxd = 0;
   } else if (x < -track) {
     x = -track;
-    nxd = -rest * xd;
+    nxd = 0;
   }
   return {
     x,
