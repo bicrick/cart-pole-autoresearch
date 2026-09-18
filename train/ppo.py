@@ -45,6 +45,7 @@ class ActorCritic(nn.Module):
         mean = self._actor_mean(obs)
         log_std = self.log_std.clamp(-5.0, 2.0)
         std = log_std.exp().expand_as(mean)
+        std = torch.nan_to_num(std, nan=1.0, posinf=1.0, neginf=1.0).clamp(min=1e-6)
         return Normal(mean, std)
 
     def act(self, obs):

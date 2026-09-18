@@ -24,7 +24,7 @@ from goals import (
     nearest_goal,
     sample_goals,
 )
-from physics import load_constants, normalize_obs, observe, step
+from physics import _MAX_ANG_VEL, _MAX_CART_VEL, load_constants, normalize_obs, observe, step
 from ppo import ActorCritic, export_actor, tanh_action
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,6 +87,10 @@ def apply_impulses(state, p):
     kick[:, 1] += torch.empty(n, device=state.device).uniform_(-4.0, 4.0)
     kick[:, 3] += torch.empty(n, device=state.device).uniform_(-6.0, 6.0)
     kick[:, 5] += torch.empty(n, device=state.device).uniform_(-6.0, 6.0)
+    # Same soft caps as physics.step so a kick cannot leave unbounded velocities.
+    kick[:, 1].clamp_(-_MAX_CART_VEL, _MAX_CART_VEL)
+    kick[:, 3].clamp_(-_MAX_ANG_VEL, _MAX_ANG_VEL)
+    kick[:, 5].clamp_(-_MAX_ANG_VEL, _MAX_ANG_VEL)
     return torch.where(hit.unsqueeze(-1), kick, state)
 
 

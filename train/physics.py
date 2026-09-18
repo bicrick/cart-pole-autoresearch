@@ -124,6 +124,7 @@ def observe(state):
 def normalize_obs(obs, constants=None):
     if constants is None:
         constants = load_constants()
+    obs = torch.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0)
     low = obs.new_tensor(constants["obsLow"])
     high = obs.new_tensor(constants["obsHigh"])
     mid = 0.5 * (low + high)
