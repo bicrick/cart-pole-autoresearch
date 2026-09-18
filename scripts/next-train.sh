@@ -29,6 +29,7 @@ exec python3 train/train.py \
   --rollout "${ROLLOUT}" \
   --episode-len "${EPISODE_LEN}" \
   --track-limit 2.4 \
+  --oob-penalty "${OOB_PENALTY:-20}" \
   --reward-clip 8.0 \
   --align-w 1.5 \
   --energy-w "${ENERGY_W}" \

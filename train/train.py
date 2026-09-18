@@ -112,6 +112,12 @@ def parse_args():
         help="|x| beyond this ends the episode (Duan/Gustafsson-style track fail)",
     )
     parser.add_argument("--reward-clip", type=float, default=8.0)
+    parser.add_argument(
+        "--oob-penalty",
+        type=float,
+        default=20.0,
+        help="Terminal void-death cost when |x|>track_limit (after reward_clip)",
+    )
     parser.add_argument("--align-w", type=float, default=1.5)
     parser.add_argument("--energy-w", type=float, default=0.15)
     parser.add_argument("--spin-w", type=float, default=0.0003)
@@ -216,6 +222,7 @@ def reward_kwargs(args):
         center_hold_w=args.center_hold_w,
         track_limit=args.track_limit,
         reward_clip=args.reward_clip,
+        oob_penalty=args.oob_penalty,
     )
 
 
@@ -501,7 +508,7 @@ def main():
     )
     print(
         f"reward: align_w={args.align_w} energy_w={args.energy_w} spin_w={args.spin_w} center_w={args.center_w} center_hold_w={args.center_hold_w} "
-        f"track_limit={args.track_limit} reward_clip={args.reward_clip} "
+        f"track_limit={args.track_limit} reward_clip={args.reward_clip} oob_penalty={args.oob_penalty} "
         f"warmup={args.warmup_updates}x{args.warmup_goal} uu_bias={args.uu_bias} "
         f"anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
         f"hang_start_p={args.hang_start_p} wrong_eq_p={args.wrong_eq_p} "
@@ -553,6 +560,7 @@ def main():
         state_buf = []
         force_buf = []
         goal_buf = []
+        oob_hits = 0
 
         for _ in range(args.rollout):
             obs = make_obs(state, goals, constants)
@@ -581,6 +589,7 @@ def main():
             steps_left -= 1
             oob = next_state[:, 0].abs() > args.track_limit
             done = (steps_left <= 0) | oob
+            oob_hits += int(oob.sum().item())
             # Buffer transition under the goal that produced the reward (pre-reset).
             goal_buf.append(goals.detach().clone())
             state_buf.append(next_state.detach())
@@ -699,6 +708,11 @@ def main():
         dt = max(1e-6, t_now - t_prev)
         t_prev = t_now
         env_steps = float(args.num_envs * args.rollout)
+        writer.add_scalar(
+            "train/oob_rate",
+            float(oob_hits) / float(args.num_envs * args.rollout),
+            update,
+        )
         writer.add_scalar("perf/sec_per_update", dt, update)
         writer.add_scalar("perf/updates_per_sec", 1.0 / dt, update)
         writer.add_scalar("perf/env_steps_per_sec", env_steps / dt, update)

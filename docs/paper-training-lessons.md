@@ -451,3 +451,7 @@ Live L4 triple FT (16k envs each, GPU ~99%/5.6GB; ~8.4h VM up):
 ## (ai) No walls / void respawn (2026-09-18 ~11:55 CT)
 
 Hard endstops let policies prop UU / pump against the rail. Demo goal: leave the track → fall into the void → respawn. Training matches: **no clamp walls** in `physics.step`; `|x| > trackLimit` still ends the episode (train reset / web `offTrack` respawn). Fine-tune from the best edge ckpt on this plant.
+
+## (aj) Catastrophic void-death (2026-09-18 ~12:14 CT)
+
+Without walls the policy ran off-track cheaply under a −2 OOB hitch (clipped away by `reward_clip=8`). Fix: `--oob-penalty` default **20**, applied **after** reward clip so terminal void-death stays ~−20, plus episode end. Log `train/oob_rate`. Restart nowalls FT with this.

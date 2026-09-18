@@ -131,6 +131,7 @@ def goal_reward(
     center_hold_w: float = 0.18,
     track_limit: float = 4.0,
     reward_clip: float = 8.0,
+    oob_penalty: float = 20.0,
 ):
     """Dense goal reward with bounded penalties (see docs/paper-training-lessons.md).
 
@@ -141,7 +142,8 @@ def goal_reward(
       produce −10k episode returns (root cause of the collapsed GCP eval curve).
     - center_w always pulls toward x=0; center_hold_w ramps up as links align so
       "balanced at the rail" is not a free lunch (Xin regulates cart with energy).
-    - Optional flat OOB hitch when |x| > track_limit (train also marks done).
+    - oob_penalty on |x| > track_limit (applied AFTER reward_clip so void-death
+      stays catastrophic; train also marks done).
     """
     x = state[..., 0]
     xd = state[..., 1]
@@ -173,9 +175,11 @@ def goal_reward(
     kin_soft = (0.05 * xd_eff * xd_eff + 0.02 * spin_raw).clamp(max=40.0)
     energy = energy_w * (align - 0.25 * kin_soft)
 
-    rew = align_w * align + energy - center - spin - effort + sparse - 2.0 * oob
+    rew = align_w * align + energy - center - spin - effort + sparse
     if reward_clip is not None and reward_clip > 0:
         rew = rew.clamp(-reward_clip, reward_clip)
+    # Void-death after clip so a −20 terminal hit is not softened to −8.
+    rew = rew - float(oob_penalty) * oob
     return rew
 
 
