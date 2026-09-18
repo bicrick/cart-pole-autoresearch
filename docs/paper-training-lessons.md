@@ -1,7 +1,8 @@
 # Paper training lessons → next cart-double-pendulum runs
 
-Audit of `papers/*.pdf` against `train/goals.py` + `train/train.py` (goal-conditioned UU/UD/DU/DD, θ=0 upright).  
-Current GCP run (`--num-envs 4096 --updates 400`, HER 0.8) is **not** a keeper: eval reward ~−130 → ~−8000…−11000 after updates ~50–100, `align≈0`. Do not kill that job; restart with the config below after it finishes.
+Audit of `papers/*.pdf` against `train/goals.py` + `train/train.py` (goal-conditioned UU/UD/DU/DD, θ=0 upright).
+
+**Status 2026-09-18 ~00:30 CT:** Collapsed HER@0.8 run finished at update 400 with `eval/reward≈−8916`, `align≈0` (discard). Fresh paper-recipe run `20260918-052042` is live on `cartpole-train` (commit `20a3ae4` knobs): at **update ~210/400**, `eval/reward≈+253`, `eval/align≈0.21` (rising; no −10k collapse). TB: http://34.148.138.48:6006/. **Do not kill / redesign mid-run** while reward and align keep climbing.
 
 ---
 
@@ -106,4 +107,18 @@ Helper: `scripts/next-train.sh` wraps the same knobs for GCP `train.sh` env over
 
 **Success gates (TensorBoard):** `eval/align` rising above ~0.5 within ~100 updates; `eval/reward` staying in roughly `[-2000, +2000]` (not −10k); `eval/at_goal/UU` nonzero before enabling full multi-goal pressure (warmup already does UU-first).
 
-**Do not** start a second GPU train while updates ~370/400 of the current job are still running.
+**Do not** start a second GPU train while the live paper-recipe job is still running (quota `GPUS_ALL_REGIONS=1`).
+
+
+---
+
+## (d) Live-run lesson: soft goal curriculum (2026-09-18)
+
+Paper-recipe run (`warmup=80×UU`, then uniform multi-goal) fixed the cart-quadratic collapse, but TB shows a **UU regression at the hard warmup cut**:
+
+- During UU warmup, `eval/align/UU` peaked ~0.19 (update 60) with `eval/reward/UU` ~+216.
+- Right after warmup ended (update 80→100), UU goal fraction fell ~0.86→0.27 and `align/UU` dropped ~0.13→0.06; by update 200 `align/UU≈0.09` while hanging/partial goals lead (`at_goal/DD≈0.12`, `UD≈0.09`, `UU≈0.01`).
+
+**Paper link:** Gustafsson — learn local balance on one equilibrium before full swing-up/multi-goal. Spong/Xin — hybrid swing-up then *local capture*; other equilibria are unstable attractors under a UU energy target. Abrupt 4-way mixing dilutes the capture basin before UU is stable.
+
+**Next experiment (only if this run plateaus before a usable UU):** replace the hard warmup cut with an **annealed goal mix** — e.g. keep `P(UU)≥0.5` (or raise `--warmup-updates` to 150–200) until `eval/at_goal/UU` clears a gate, then unlock UD/DU/DD one-by-one (rank 6). Do **not** change knobs while `eval/reward` and `eval/align` are still rising.
