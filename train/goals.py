@@ -68,8 +68,22 @@ def goal_encoding(goal_ids: torch.Tensor, device=None, dtype=None) -> torch.Tens
     return torch.cat((onehot, sincos), dim=-1)
 
 
-def sample_goals(n: int, device, dtype=torch.long, allowed=None) -> torch.Tensor:
-    """Uniform over all goals, or over an explicit list/tensor of allowed ids."""
+def sample_goals(n: int, device, dtype=torch.long, allowed=None, probs=None) -> torch.Tensor:
+    """Sample goal ids.
+
+    - probs: length-NUM_GOALS weights (any device); categorical over all goals.
+    - allowed: uniform over an explicit id list/tensor (legacy hard curriculum).
+    - else: uniform over all goals.
+    """
+    if probs is not None:
+        p = probs if torch.is_tensor(probs) else torch.tensor(probs, dtype=torch.float32)
+        p = p.to(device=device, dtype=torch.float32).clamp_min(0)
+        s = p.sum()
+        if s <= 0:
+            p = torch.ones(NUM_GOALS, device=device, dtype=torch.float32) / NUM_GOALS
+        else:
+            p = p / s
+        return torch.multinomial(p, n, replacement=True).to(dtype=dtype)
     if allowed is None:
         return torch.randint(0, NUM_GOALS, (n,), device=device, dtype=dtype)
     if not torch.is_tensor(allowed):

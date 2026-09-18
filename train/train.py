@@ -82,6 +82,18 @@ def parse_args():
         default=0.5,
         help="Probability a reset spawns angles near the assigned goal",
     )
+    parser.add_argument(
+        "--uu-bias",
+        type=float,
+        default=0.0,
+        help="After hard warmup, P(warmup-goal) for anneal window (0=uniform). Soft curriculum.",
+    )
+    parser.add_argument(
+        "--anneal-updates",
+        type=int,
+        default=0,
+        help="Post-warmup updates keeping --uu-bias (0 with uu-bias>0 => rest of run)",
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument("--checkpoint", type=Path, default=ROOT / "policies" / "checkpoint.pt")
     parser.add_argument("--out", type=Path, default=POLICY_PATH)
@@ -265,9 +277,36 @@ def rollout_eval(model, constants, device, rkw, n=64, steps=400, track_limit=4.0
 
 
 def allowed_goals_for_update(args, update: int):
+    """Legacy hard allow-list (pure warmup). Prefer goal_probs_for_update."""
     if args.warmup_updates > 0 and update <= args.warmup_updates:
         return [GOAL_INDEX[args.warmup_goal]]
     return None
+
+
+def goal_probs_for_update(args, update: int):
+    """Curriculum mix: hard UU warmup, then optional soft UU bias, then uniform.
+
+    Returns (probs_tensor_or_None, allowed_list_or_None). When probs is set,
+    sample_goals uses multinomial; when only allowed is set, uniform over that
+    subset; both None => uniform over all four goals.
+    """
+    n = NUM_GOALS
+    warm = int(args.warmup_updates)
+    bias = float(args.uu_bias)
+    anneal = int(args.anneal_updates)
+    gid = GOAL_INDEX[args.warmup_goal]
+    if warm > 0 and update <= warm:
+        return None, [gid]
+    # Soft anneal window after hard cut (Gustafsson: keep local capture mass).
+    if bias > 0.0:
+        end = warm + anneal if anneal > 0 else args.updates
+        if update <= end:
+            bias = min(max(bias, 0.0), 1.0)
+            rest = (1.0 - bias) / max(1, n - 1)
+            probs = [rest] * n
+            probs[gid] = bias
+            return probs, None
+    return None, None
 
 
 def main():
@@ -280,6 +319,8 @@ def main():
         args.minibatch = 64
         args.episode_len = 64
         args.warmup_updates = 0
+        args.uu_bias = 0.0
+        args.anneal_updates = 0
     if args.device:
         device_name = args.device
     elif torch.cuda.is_available():
@@ -300,7 +341,8 @@ def main():
     print(
         f"reward: align_w={args.align_w} energy_w={args.energy_w} spin_w={args.spin_w} "
         f"track_limit={args.track_limit} reward_clip={args.reward_clip} "
-        f"warmup={args.warmup_updates}x{args.warmup_goal} near_goal_p={args.near_goal_p} "
+        f"warmup={args.warmup_updates}x{args.warmup_goal} uu_bias={args.uu_bias} "
+        f"anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
         f"her_ratio={args.her_ratio}",
         flush=True,
     )
@@ -308,7 +350,8 @@ def main():
 
     model = ActorCritic(obs_dim=OBS_DIM, hidden=constants["hidden"]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
-    goals = sample_goals(args.num_envs, device, allowed=allowed_goals_for_update(args, 1))
+    _probs, _allowed = goal_probs_for_update(args, 1)
+    goals = sample_goals(args.num_envs, device, allowed=_allowed, probs=_probs)
     state = random_states(
         args.num_envs,
         device,
@@ -322,7 +365,7 @@ def main():
     best_align = -1e9
     t0 = time.time()
     for update in range(1, args.updates + 1):
-        allowed = allowed_goals_for_update(args, update)
+        goal_probs, allowed = goal_probs_for_update(args, update)
         obs_buf = []
         raw_buf = []
         log_buf = []
@@ -349,7 +392,9 @@ def main():
             state_buf.append(next_state.detach())
             force_buf.append(force.detach())
             if done.any():
-                new_goals = sample_goals(args.num_envs, device, allowed=allowed)
+                new_goals = sample_goals(
+                    args.num_envs, device, allowed=allowed, probs=goal_probs
+                )
                 reset_goals = torch.where(done, new_goals, goals)
                 reset = random_states(
                     args.num_envs,
@@ -452,7 +497,17 @@ def main():
         writer.add_scalar("train/value_loss", last_value, update)
         writer.add_scalar("train/entropy", last_ent, update)
         writer.add_scalar("train/loss", last_loss, update)
-        writer.add_scalar("train/warmup_active", float(allowed is not None), update)
+        writer.add_scalar(
+            "train/warmup_active",
+            float(allowed is not None or goal_probs is not None),
+            update,
+        )
+        if goal_probs is not None:
+            writer.add_scalar(
+                f"train/goal_target_frac/{args.warmup_goal}",
+                float(goal_probs[GOAL_INDEX[args.warmup_goal]]),
+                update,
+            )
         for gid, name in enumerate(GOAL_IDS):
             frac = float((goal_t[-1] == gid).float().mean())
             writer.add_scalar(f"train/goal_frac/{name}", frac, update)

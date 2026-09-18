@@ -129,3 +129,21 @@ Paper-recipe run (`warmup=80×UU`, then uniform multi-goal) fixed the cart-quadr
 
 User ask + Duan-style rail: physics now has elastic walls at `|x|=trackLimit` (default **2.4**, restitution **0.3**) in `train/physics.py` and `web/src/physics.js` via `shared/constants.json`. Cart no longer runs to infinity; demo can stay no-reset. Next GCP restart after the current paper-recipe run should pick this up via sync + `scripts/next-train.sh` (`--track-limit 2.4`).
 
+---
+
+## (e) Soft UU anneal after paper-recipe finish (2026-09-18)
+
+Paper-recipe run `20260918-052042` **finished healthy** (no cart-quadratic collapse):
+
+| Metric | Final (update 400) | Notes |
+| --- | --- | --- |
+| `eval/reward` | **~416** | Was −8900 on legacy run |
+| `eval/align` | **~0.32** | Rising through run (best at end) |
+| `align/UU` | ~0.15 (peak ~0.19 @60) | Hard cut at warmup=80 diluted UU |
+| `at_goal/DD` / `UD` | ~0.18 / ~0.16 | Hanging/partial lead; UU ~0.01 |
+
+**Paper link:** Gustafsson — protect local balance mass; Spong/Xin — hybrid swing-up then capture. Abrupt 4-way mix after 80 updates lets DD/UD dominate.
+
+**Change implemented:** `--uu-bias` + `--anneal-updates` soft curriculum. After hard `--warmup-updates`, sample with `P(UU)=uu_bias` (rest split) for the anneal window (`anneal_updates=0` ⇒ rest of run). `scripts/next-train.sh` defaults: walls `track_limit=2.4`, fine-tune checkpoint, `warmup=40`, `uu_bias=0.55`.
+
+**Next restart:** sync walled physics + this curriculum, **fine-tune** from VM `policies/checkpoint.pt` (do not cold-start; do not archive — this checkpoint is a keeper).
