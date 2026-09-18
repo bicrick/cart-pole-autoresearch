@@ -335,3 +335,12 @@ Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_
 
 **Spong visit≠hold (o) still binds:** align~0.68 vs min `at_goal`~0.42. **Next restart only (unchanged from v):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`. GPU ~16% / ~4.3 GB — no throughput bump mid-run.
 
+
+
+## (x) Post-trough new high-water under low HER (2026-09-18 ~06:49 CT)
+
+Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1`) at **u170**: reward~**962**, align~**0.725**, `at_goal` UU/UD/DU/DD **~0.632/0.524/0.592/0.503**. Broke prior run high-water **u70–u80** (~926–928 / ~0.71). Recovered from the u110–u150 trough (w: UD min-gate had slid to ~0.42 @u120). **All four `at_goal` ≥0.50** for the first sustained snapshot this FT; min-gate still **UD ~0.524**. Phase A open (bars align≳0.85 / at_goal≳0.7); **leave knobs alone** mid-run.
+
+**Spong 1995 × Andrychowicz 2017 × Xin 2008 (extends u/v/w):** under `her_ratio=0.1`, a DU↔UD interference trough is not a ceiling — the subsequent climb set a **new** mean high-water *and* lifted all four holds together. Contrast the parent FT at `her_ratio=0.3`, where late mean bounces never sustainably beat the u220 peak while `min(at_goal)` stayed stuck ~0.34–0.39 (s/t). Low discrete-eq HER therefore does three related things: preserves ckpt manifolds through UU warmup (u), lets min-gate climb with the mean (v), and lets capture basins **expand past earlier peaks** after an interference blip because recovery credit is not reshuffled onto wrong Xin attractors.
+
+**Spong visit≠hold (o) still binds:** align~0.725 vs min `at_goal`~0.503 (gap narrowing vs 0.68 vs 0.42 @u120). **Next restart only (unchanged from v/w):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`. GPU ~16% / ~4.3 GB — no throughput bump mid-run (~230 updates left @ ~22 s/u).
