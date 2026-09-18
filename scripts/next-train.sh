@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fine-tune from policies/checkpoint.pt (hard walls + center + soft UU).
-# her_ratio default 0.1 per lessons (n)/(s)/(t) — discrete-eq HER was reshuffling wrong attractors at 0.3.
+# her_ratio default 0.1 per lessons (n)/(s)/(t)/(ab).
+# center_hold_w default 0.30 per lessons (v)–(ab) — raise hold pressure before raising HER.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -13,7 +14,7 @@ WARMUP_UPDATES="${WARMUP_UPDATES:-20}"
 UU_BIAS="${UU_BIAS:-0.55}"
 ANNEAL_UPDATES="${ANNEAL_UPDATES:-0}"
 HER_RATIO="${HER_RATIO:-0.1}"
-RUN_NAME="${RUN_NAME:-ft-e${NUM_ENVS}-r${ROLLOUT}-hardwalls-center-uub055-her01}"
+RUN_NAME="${RUN_NAME:-ft-e${NUM_ENVS}-r${ROLLOUT}-hardwalls-center-ch030-uub055-her01}"
 
 exec python3 train/train.py \
   --num-envs "${NUM_ENVS}" \
@@ -26,7 +27,7 @@ exec python3 train/train.py \
   --energy-w 0.15 \
   --spin-w 0.0003 \
   --center-w "${CENTER_W:-0.06}" \
-  --center-hold-w "${CENTER_HOLD_W:-0.18}" \
+  --center-hold-w "${CENTER_HOLD_W:-0.30}" \
   --warmup-updates "${WARMUP_UPDATES}" \
   --warmup-goal UU \
   --uu-bias "${UU_BIAS}" \

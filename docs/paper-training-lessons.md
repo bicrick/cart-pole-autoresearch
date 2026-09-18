@@ -376,3 +376,12 @@ Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_
 
 **Practical:** do not interpret a mid-run reward spike as reason to raise HER or kill the FT — and do not declare Phase A progress from reward HW if the min-gate has not moved. **Next restart only (unchanged from v–z):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`; optional shorter `episode_len` only if min-gate stalls after hold bump. GPU ~15% / ~4.3 GB — no throughput bump mid-run (~90 updates left @ ~22 s/u).
 
+
+## (ab) Finish-stretch: non-min goals can peak while min-gate stays flat (2026-09-18 ~08:08 CT)
+
+Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1`) at **u380** (~20 updates left): reward~**953**, align~**0.714** (new align HW **0.729 @u360**, nearly tying reward HW **973 @u310/u360**). `at_goal` UU/UD/DU/DD **~0.581/0.523/0.593/0.556** — **DD set a run peak @u380**; UU spiked **0.633 @u370**; **UD min-gate still oscillates 0.46–0.55** (troughs @u350/~0.467, @u370/~0.464 — same crash floor as lesson z). Phase A bars (align≳0.85 / at_goal≳0.7 all four) will miss u400. **Leave knobs alone** for the last ~20 updates.
+
+**Xin 2008 × Spong 1995 × UVFA (extends aa/z):** late in a soft multi-goal FT, **non-min equilibria can print new `at_goal` highs in the finish stretch while `min(at_goal)` is frozen**. DD (Xin lowest potential) and brief UU spikes are easier capture expansions than holding the mixed UD intermediate; mean align/reward HWs (aa) therefore co-occur with *asymmetric* per-goal peaks that do **not** move the Phase A gate. Judging “almost there” from DD/UU late peaks would false-positive Phase A progress.
+
+**Confirms next natural restart plan (v–aa):** after u400, raise hold pressure — bump `center_hold_w` **0.18→0.30** in `scripts/next-train.sh` (align-ramped mid-track term; Spong capture needs stay-near-goal, not more HER). Keep `her_ratio≤0.1`, `uu_bias≥0.55`. Optional shorter `episode_len` only if min-gate still stalls after the hold bump. GPU ~16% / ~4.3 GB — no throughput bump mid-run; consider env bump only on a later restart if still short after hold-pressure FT.
+
