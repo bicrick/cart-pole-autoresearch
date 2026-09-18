@@ -258,3 +258,12 @@ Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u190**:
 **HER shape note (Andrychowicz 2017):** our `her_relabel_inplace` uses **end-of-rollout nearest achieved equilibrium**, not paper-`future` k=4. Under Xin UU>UD>DU>DD (lesson m/n), final-state HER preferentially stamps **UD** on failed UU episodes. Dropping `her_ratio` on the next natural restart (if UD still gates) remains preferred over switching to unfiltered `future` relabels.
 
 **Next restart only (if still short of Phase A at u400):** raise hold pressure (`sparse_bonus` or `center_hold_w`) and/or drop `her_ratio` 0.3→0.1 — do **not** kill this FT early; GPU still ~16% / 7.8 GB (throughput bump only after finish).
+
+
+## (p) Multi-goal interference: UU climb can steal UD hold (2026-09-18 ~04:31 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u220**: reward~**783**, align~**0.632** — broke the u110–u190 plateau (peak was ~738/0.59 @u180). Per-goal align UU/UD/DU/DD **~0.70/0.59/0.60/0.64**; `at_goal` **~0.54/0.38/0.50/0.47**. UU `at_goal` rose (0.52→0.54) while **UD `at_goal` dipped** (0.45@u200 → 0.38@u220) even as mean align/reward hit run highs. Phase A still open; leave knobs alone mid-run.
+
+**UVFA (Schaul 2015) × Gustafsson local-balance:** a shared goal-conditioned policy has finite capacity; when soft `uu_bias=0.55` plus on-policy success pushes more mass into UU, gradient steps that improve UU capture can *regress* the UD hold manifold without collapsing mean align (align pays for visiting neighborhoods; `at_goal` pays for hold). Treat mean-align breakouts that coincide with UD `at_goal` dips as **interference**, not as Phase A progress — keep judging the gate on `eval/at_goal/UD`.
+
+**Next restart only (unchanged from n/o):** if UD still gates at u400 while UU/DU/DD are ahead, drop `her_ratio` 0.3→0.1 and/or raise hold pressure (`sparse_bonus` / `center_hold_w`). Do not kill this FT; GPU still ~14% / 7.8 GB.
