@@ -305,3 +305,14 @@ Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u390/40
 **Confirms (s)/(r):** discrete-equilibrium HER keeps reshuffling credit among wrong attractors into the finish; mean reward/align bounce (u360–u380 ~715–736 / ~0.57–0.59) does not lift `min(at_goal)`. Phase A bars (align ≳0.85, at_goal ≳0.7 all four) will not clear at u400.
 
 **Next natural restart (after u400):** drop `her_ratio` 0.3→**0.1** (scripts/next-train.sh), keep `uu_bias≥0.55`, optionally raise hold pressure later if min-gate still stuck. GPU ~13% / 7.8 GB.
+
+## (u) Lower HER preserves checkpoint manifolds through UU warmup (2026-09-18 ~06:00 CT)
+
+New FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1` from prior u400 ckpt) at **u40**: reward~**880**, align~**0.677**, `at_goal` UU/UD/DU/DD **~0.59/0.40/0.59/0.50**. Already above the parent FT's u400 finish (reward~786 / align~0.622 / at_goal ~0.58/0.39/0.53/0.42) and far above that run's own post-warmup u40 (reward~248 / align~0.31 / UD~0.10). Warmup dip still exists (u20 reward~25 / align~0.11) but rebound is sharper and all-four `at_goal` recover together. Phase A still open (bars align≳0.85 / at_goal≳0.7); leave knobs alone mid-run.
+
+**Andrychowicz 2017 × Xin 2008 (n/s/t confirmed early):** discrete-eq HER at 0.3 was not only late-run reshuffling among wrong attractors — it also **fought warm-start transfer**. During UU-only warmup, failed non-UU episodes still get end-of-rollout HER stamps onto UD/DU/DD; at `her_ratio=0.3` that dilutes the checkpoint's already-learned hold manifolds before multi-goal training resumes. Dropping to **0.1** lets the ckpt ride through warmup with less attractor reshuffle, so u40 already sits at prior high-water rather than rebuilding from a thrashed UD gate.
+
+**Spong 1995:** a warm-started local capture region is fragile; heavy hindsight relabel during a single-goal warmup is the opposite of protecting it. Prefer low/zero HER across UU warmup when fine-tuning from a multi-goal ckpt; raise HER only if later switching toward sparse@goal.
+
+**Do not redesign mid-run.** GPU still ~16% / ~4.3 GB used (headroom); throughput bump only on a later natural restart if Phase A still open after this 400-u stretch.
+
