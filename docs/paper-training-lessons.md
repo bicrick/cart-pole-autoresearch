@@ -231,3 +231,10 @@ Run `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` (hard walls, center
 Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u60**: mean `eval/reward`/`align` dipped u50→u60 (**469→442**, **0.456→0.425**) while **`at_goal` UU/UD/DU/DD rose to ~0.41/0.21/0.40/0.25** (UD **0.10→0.21**). Do not treat a single-update mean-align dip as collapse while per-goal at_goal (esp. the UD gate) is climbing.
 
 **Xin 2008:** if energy converges to a value ≠ `E_uu`, the plant remains at the **UD / DU / DD** equilibria (unstable attractors of the energy controller). That is why UD stays the hardest Phase A gate under soft multi-goal — keep `uu_bias≥0.55` and judge progress on **`eval/at_goal/{UU,UD,DU,DD}`**, not noisy mean align. No recipe change mid-run.
+
+
+## (m) UD is the nearest wrong energy sink to UU (2026-09-18 ~03:50 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u110**: reward~**702**, align~**0.58**, `at_goal` UU/UD/DU/DD **~0.48/0.41/0.47/0.40** — big climb from u60 (reward~442 / align~0.43 / UD~0.21). UD remains weakest but **doubled again** (0.21→0.41). Still Phase A; leave recipe alone.
+
+**Xin 2008 potential:** \(P=\beta_1\cos\theta_1+\beta_2\cos\theta_2\) with \(\beta_1>\beta_2\) (outer mass on longer lever). Ordering of equilibria energies is **UU > UD > DU > DD**. Under energy control targeting \(E_{uu}\), undershoot parks first at **UD** — the nearest incorrect unstable attractor — before DU/DD. That is a sharper reason UD is the standing Phase A gate than “one of three wrong attractors” alone (lesson l): protect UU mass (`uu_bias≥0.55`) and keep judging on per-goal `at_goal`, especially UD. No mid-run knob change.
