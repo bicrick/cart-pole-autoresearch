@@ -1,0 +1,49 @@
+Reference PDFs for architecture and training.
+Read these before changing the goal-conditioned trainer.
+
+uvfa-schaul-2015.pdf
+  Schaul, Horgan, Gregor, Silver.
+  Universal Value Function Approximators.
+  ICML 2015.
+  https://proceedings.mlr.press/v37/schaul15.html
+  Why: one policy V(s, g) / pi(a | s, g) over many equilibria.
+
+her-andrychowicz-2017.pdf
+  Andrychowicz et al.
+  Hindsight Experience Replay.
+  NeurIPS 2017. arXiv:1707.01495
+  Why: sparse "did we reach this equilibrium?" rewards become usable
+  by relabeling failed rollouts with the goal we actually landed in.
+
+spong-acrobot-swingup-1995.pdf
+  Spong, M. W.
+  The Swing Up Control Problem for the Acrobot.
+  IEEE Control Systems Magazine, 1995.
+  Why: energy-based swing-up + local capture. The hybrid template
+  behind UU/UD/DU/DD transitions.
+
+energy-swingup-dip-ifac-2008.pdf
+  IFAC 2008 analysis of energy-based swing-up for a double pendulum
+  on a cart (cites Zhong & Rock, IEEE CCA 2001).
+  https://skoge.folk.ntnu.no/prost/proceedings/ifac2008/data/papers/2922.pdf
+  Why: energy landscape and multiple equilibria of this exact plant.
+
+deep-rl-continuous-control-2016.pdf
+  Duan, Chen, Houthooft, Schulman, Abbeel.
+  Benchmarking Deep Reinforcement Learning for Continuous Control.
+  arXiv:1604.06778
+  Why: DDPG / continuous-control baselines; double inverted pendulum
+  as a benchmark task.
+
+inverted-double-pendulum-rl-gustafsson-2016.pdf
+  Gustafsson.
+  Control of Inverted Double Pendulum using Reinforcement Learning.
+  Stanford CS229, 2016.
+  Why: practical RL on inverted double pendulum; notes on swing-up
+  vs local balance.
+
+mb-rl-double-pendulum-2024.pdf
+  Learning control of underactuated double pendulum with
+  Model-Based Reinforcement Learning.
+  arXiv:2409.05811
+  Why: recent model-based RL on an underactuated double pendulum.

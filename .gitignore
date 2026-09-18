@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env.*
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Training artifacts (keep exported policy.json)
+*.pt
+*.pth
+*.ckpt
+policies/checkpoint.pt
+policies/*.log
+train.log
+
+# Node / Vite
+node_modules/
+web/dist/
+web/.vite/
+dist/
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs / secrets
+*.log
+*.pem
+credentials.json
+.gcloud/
