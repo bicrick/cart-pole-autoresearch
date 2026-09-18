@@ -33,6 +33,15 @@ def main():
     assert a[0, 1] < 0, a
     print("physics ok", nxt.tolist()[0], a.tolist()[0])
 
+    # Track walls: cart driven outward should bounce and stay inside rail.
+    track = float(constants.get("trackLimit", 2.4))
+    s = torch.tensor([[track - 0.01, 8.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float64)
+    for _ in range(30):
+        s = step(s, torch.tensor([20.0], dtype=torch.float64), constants=constants)
+    assert float(s[0, 0]) <= track + 1e-9, s
+    assert float(s[0, 0]) >= -track - 1e-9, s
+    print("walls ok", float(s[0, 0]), float(s[0, 1]))
+
 
 if __name__ == "__main__":
     main()

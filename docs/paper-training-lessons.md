@@ -122,3 +122,10 @@ Paper-recipe run (`warmup=80×UU`, then uniform multi-goal) fixed the cart-quadr
 **Paper link:** Gustafsson — learn local balance on one equilibrium before full swing-up/multi-goal. Spong/Xin — hybrid swing-up then *local capture*; other equilibria are unstable attractors under a UU energy target. Abrupt 4-way mixing dilutes the capture basin before UU is stable.
 
 **Next experiment (only if this run plateaus before a usable UU):** replace the hard warmup cut with an **annealed goal mix** — e.g. keep `P(UU)≥0.5` (or raise `--warmup-updates` to 150–200) until `eval/at_goal/UU` clears a gate, then unlock UD/DU/DD one-by-one (rank 6). Do **not** change knobs while `eval/reward` and `eval/align` are still rising.
+
+---
+
+## Track walls (2026-09-18)
+
+User ask + Duan-style rail: physics now has elastic walls at `|x|=trackLimit` (default **2.4**, restitution **0.3**) in `train/physics.py` and `web/src/physics.js` via `shared/constants.json`. Cart no longer runs to infinity; demo can stay no-reset. Next GCP restart after the current paper-recipe run should pick this up via sync + `scripts/next-train.sh` (`--track-limit 2.4`).
+

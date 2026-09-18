@@ -14,7 +14,7 @@ exec python3 train/train.py \
   --updates "${UPDATES}" \
   --rollout 128 \
   --episode-len 800 \
-  --track-limit 4.0 \
+  --track-limit 2.4 \
   --reward-clip 8.0 \
   --align-w 1.5 \
   --energy-w 0.15 \
