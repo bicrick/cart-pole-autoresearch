@@ -385,3 +385,12 @@ Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_
 
 **Confirms next natural restart plan (v–aa):** after u400, raise hold pressure — bump `center_hold_w` **0.18→0.30** in `scripts/next-train.sh` (align-ramped mid-track term; Spong capture needs stay-near-goal, not more HER). Keep `her_ratio≤0.1`, `uu_bias≥0.55`. Optional shorter `episode_len` only if min-gate still stalls after the hold bump. GPU ~16% / ~4.3 GB — no throughput bump mid-run; consider env bump only on a later restart if still short after hold-pressure FT.
 
+
+
+## (ac) her01 finish spike still misses Phase A; hold-pressure FT started (2026-09-18 ~08:44 CT)
+
+Prior L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1`, `center_hold_w=0.18`) **finished u400**: reward~**1015**, align~**0.744** (new run HWs; prior ~973 / ~0.729 @u310–u360). `at_goal` UU/UD/DU/DD **~0.618/0.553/0.636/0.551** — **UD still min-gate ~0.55**; Phase A bars (align ≳0.85, at_goal ≳0.7 all four) **missed**. Finish stretch confirms (ab): mean/align can print a late spike while min-gate stays in the 0.46–0.55 crash-floor band (z).
+
+**Spong 1995 visit≠hold × Xin 2008:** align~0.74 vs min `at_goal`~0.55 is still a capture-enter/leave gap, not a near-Phase-A miss. Low HER let the mean climb (v–x) but did not alone buy sustained hold.
+
+**Action taken (natural restart):** started `20260918-134605_ft-e32768-r256-hardwalls-center-ch030-uub055-her01` from the u400 ckpt with `center_hold_w` **0.18→0.30**, keep `her_ratio=0.1`, `uu_bias=0.55`, NUM_ENVS=32768. Leave knobs alone mid-run; judge on whether UD crash floors trend up and whether min `at_goal` closes on 0.7. Throughput bump only if this FT finishes still short with VRAM headroom.
