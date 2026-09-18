@@ -316,3 +316,14 @@ New FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_rati
 
 **Do not redesign mid-run.** GPU still ~16% / ~4.3 GB used (headroom); throughput bump only on a later natural restart if Phase A still open after this 400-u stretch.
 
+## (v) Low HER lets min-gate climb with the mean; UVFA interference is bidirectional (2026-09-18 ~06:20 CT)
+
+Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1`) at **u90**: reward~**905**, align~**0.691**, `at_goal` UU/UD/DU/DD **~0.59/0.51/0.57/0.51**. Vs prior fire @u40 (880 / 0.677 / 0.59/0.40/0.59/0.50): **UD min-gate +0.11** and DD co-lifted; run high-water ~**u70–u80** (reward~926–928 / align~0.71). Phase A still open (bars align≳0.85 / at_goal≳0.7); **leave knobs alone** mid-run.
+
+**Andrychowicz 2017 × Xin 2008 (extends n/s/t/u past warmup):** parent FT at `her_ratio=0.3` kept `min(at_goal)` stuck ~0.34–0.39 while mean reward/align bounced. At 0.1, **min-gate rises in lockstep with the mean** through the first ~90 multi-goal updates — so discrete-eq HER dilution was the dominant Phase A blocker, not only a warmup-transfer issue (u). Spong visit≠hold (o) still binds (align~0.69 vs min `at_goal`~0.51) but the gap is narrowing together rather than mean-only thrash.
+
+**UVFA (Schaul 2015) bidirectional blip:** @u80 UU `at_goal` dipped **0.59→0.51** while UD/DU/DD briefly peaked (~0.49/0.61/0.55); @u90 UU recovered and the four re-balanced near ~0.51–0.59. Complements lesson (p) (UU stealing UD): under a softer HER mix the capacity fight runs **both ways**. Treat single-goal dips during a rising band as interference noise, not collapse (q).
+
+**Next restart only (if Phase A still open at/after u400):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER again; keep `her_ratio≤0.1` and `uu_bias≥0.55`. GPU ~16% / ~4.3 GB — throughput bump only after this FT finishes.
+
+
