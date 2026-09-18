@@ -180,3 +180,11 @@ Live run `20260918-055004` (fine-tune from paper-recipe u400, walls `|x|=2.4`, `
 Live walls soft-UU fine-tune `20260918-061318` (8192×256 from archived healthy u400): during pure-UU warmup, logged `eval/reward` dipped toward ~0 / slightly negative while `align/UU` stayed ~0.6 — then by **u80–u100** recovered to **reward~740–792, align~0.50–0.53**, with `at_goal` UU/UD/DU/DD ~**0.36/0.22/0.39/0.26** (ahead of prior finished FT). Do **not** treat the mid-warmup reward dip as collapse.
 
 **Turcato et al. 2024 (MC-PILCO / AI Olympics):** cost is saturated distance to goal angles with **no velocity in the cost**; they emphasize a **short policy horizon (2–3 s)** to force fast swing-up before local stabilization. If later `at_goal` plateaus while `align` is already high, prefer shortening `episode_len` (denser credit / faster capture pressure) over raising `spin_w`.
+
+---
+
+## (h) Soft-UU walls FT mid-run: all-four at_goal gate clearing (2026-09-18 ~01:35 CT)
+
+Run `20260918-061318` at **u180/400** (8192×256, soft `uu_bias=0.55`): `eval/reward~804`, `align~0.53`, per-goal align UU/UD/DU/DD **0.54/0.50/0.57/0.49**, `at_goal` **0.41/0.29/0.46/0.35** — all four clearly nonzero and roughly balanced (UD still weakest). Soft bias after short UU warmup recovered UU *and* let hanging/partial goals keep rising (contrast hard-cut paper-recipe where UU collapsed to ~0.01).
+
+**Paper link:** Gustafsson local-balance mass + Xin/Spong hybrid capture — sustained P(UU)≥0.55 protects the hard upright without starving other equilibria. **Throughput:** still ~7.6 s/update, GPU ~36% / 2.1 GB of 15 GB → after finish, sync `perf/*` train.py and FT again at **NUM_ENVS=16384** × rollout 256–384, `WARMUP_UPDATES=20`.

@@ -5,14 +5,15 @@
 # Do not launch a second GPU job while one is still running.
 set -euo pipefail
 # Throughput defaults: large env count + longer rollout to fill the T4.
+# After 8192×256 left util ~35–39% / ~2.1GB, bump to 16384 (VRAM headroom).
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-NUM_ENVS="${NUM_ENVS:-8192}"
+NUM_ENVS="${NUM_ENVS:-16384}"
 UPDATES="${UPDATES:-400}"
 LOGDIR="${LOGDIR:-runs}"
-# Short pure-UU warmup when fine-tuning; soft bias covers the rest.
-WARMUP_UPDATES="${WARMUP_UPDATES:-40}"
+# Shorten pure-UU warmup on FT (soft uu_bias covers the rest); 40 caused a long dip.
+WARMUP_UPDATES="${WARMUP_UPDATES:-20}"
 UU_BIAS="${UU_BIAS:-0.55}"
 ANNEAL_UPDATES="${ANNEAL_UPDATES:-0}"
 
