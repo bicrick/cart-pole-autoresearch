@@ -350,6 +350,18 @@ def main():
 
     model = ActorCritic(obs_dim=OBS_DIM, hidden=constants["hidden"]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+    if args.checkpoint.is_file():
+        ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
+        state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+        model.load_state_dict(state_dict)
+        prev = ckpt.get("update") if isinstance(ckpt, dict) else None
+        print(
+            f"loaded checkpoint {args.checkpoint}"
+            + (f" (saved at update={prev})" if prev is not None else ""),
+            flush=True,
+        )
+    else:
+        print(f"no checkpoint at {args.checkpoint}; cold start", flush=True)
     _probs, _allowed = goal_probs_for_update(args, 1)
     goals = sample_goals(args.num_envs, device, allowed=_allowed, probs=_probs)
     state = random_states(
