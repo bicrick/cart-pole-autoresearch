@@ -56,7 +56,18 @@ Specialist weights per goal are a fallback if one net will not cover all four. P
 
 Exported in `policy.json` as `obs_layout`, `goals`, and `layers` (same linear/tanh format the web loader already understands).
 
-## Run the demo
+## Play it (pygame)
+
+Uses the same Python physics the trainer steps:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 train/play.py
+```
+
+Loads `policies/checkpoint.pt` if present (hot-reloads when that file changes). Mouse-drag the cart or either pole. A/D or arrows shove the cart. Click a goal chip, or `1`–`4` / Tab, to change the desired pose (`UU` / `UD` / `DU` / `DD`). `P` toggles the policy. The faint ghost is the target configuration.
+
+## Run the browser demo
 
 ```bash
 cd web
