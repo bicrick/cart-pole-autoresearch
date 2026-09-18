@@ -435,3 +435,15 @@ Live L4 triple FT (16k envs each, GPU ~99%/5.6GB):
 **Turcato specialization × UVFA interference (q/p):** three ckpts on one GPU are doing what a single shared UVFA cannot — edge keeps the balanced min-gate, swing protects UU under hang-heavy energy, hot's aggressive PPO (lr=1e-3, clip=0.3) is **re-allocating** capacity toward UD/DU at UU's expense. Treat swing mean dip and hot UU collapse as **strategy divergence**, not a reason to kill either mid-run (lesson l/o: mid-run troughs ≠ collapse). Promote later by `min(at_goal)` when a stretch finishes; do **not** revive ch030 brute.
 
 **Action:** leave all three alone through their 400-u stretches. GPU saturated — no fourth train.py. Phase A still open (align≪0.85, min at_goal≪0.7).
+
+## (ah) Hot UU recovers; strategy min-gates diverge further (2026-09-18 ~11:16 CT)
+
+Live L4 triple FT (16k envs each, GPU ~99%/5.6GB; ~8.4h VM up):
+- **edge** `…edge-hang-xeq-gsw-ch030-her01` @**u220**: reward~**1070**, align~**0.759**; `at_goal` UU/UD/DU/DD ~**0.595/0.499/0.643/0.478** (min flipped to **DD**). vs ~u160 (1082/0.767 / min UD~0.508): mean flat; UU up; DD dipped into min-gate.
+- **swing** `…swing-hang070-ew045-uub070-her01` @**u220**: reward~**1013**, align~**0.699**; `at_goal` ~**0.622/0.476/0.598/0.434** (min **DD**). **Recovered** vs ~u160 trough (948/0.659 / DU~0.483) — UU specialty ~0.62; DU back; DD now weakest.
+- **hot** `…hot-lr1e3-clip03-edge` @**u370** (~30 u left, ~5 min): reward~**1050**, align~**0.761**; `at_goal` ~**0.536/0.475/0.597/0.537** (min **UD**). **UU recovered** from collapse ~0.438@u260 → **0.536** (extends ag: mid-run trough ≠ permanent loss under hot PPO).
+
+**Turcato specialization × lesson (ag)/(l):** swing mean dip and hot UU crash both reversed without knob changes — confirms leave-alone through 400-u. Best `min(at_goal)` still **edge ~0.478** (swing 0.434, hot 0.475). Phase A still open.
+
+**Action:** leave edge/swing alone (~65 min left). Armed one-shot hot watcher to restart from `checkpoint-hot.pt` on natural u400 finish (no idle under budget). Do **not** revive ch030 brute. Promote best min-gate → `checkpoint.pt` when stretches finish.
+
