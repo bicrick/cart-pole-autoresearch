@@ -276,3 +276,12 @@ Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u260**:
 **Spong 1995 × UVFA interference (p):** a shared policy that briefly enters a better capture region can leave it again — swing-up proximity ≠ stable local LQR hold. Mean-align/reward breakouts under soft multi-goal are **noisy high-water marks**, not new floors; judging Phase A on the post-peak trough would falsely call collapse while per-goal `at_goal` stays in the same band (complement to lesson l, which warned against treating dips *during* climbs as collapse).
 
 **Next restart only (unchanged from n/o/p):** if UD still gates at u400, drop `her_ratio` 0.3→0.1 and/or raise hold pressure (`sparse_bonus` / `center_hold_w`). Do not kill this FT; GPU ~16% / 7.8 GB.
+
+
+## (r) Intermediate-equilibrium competition: DU climb can steal UD (2026-09-18 ~05:04 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u310**: reward~**637**, align~**0.514**, `at_goal` UU/UD/DU/DD **~0.52/0.39/0.46/0.33**. Since lesson (q) @u260 the run recovered toward **u270–u300** (reward~735–730 / align~0.58–0.59; UU `at_goal` back ~0.55) then dipped again @u310. At **u300** DU `at_goal` spiked to **~0.56** while **UD crashed to ~0.33** (from ~0.42 @u290) and **DD stayed weak ~0.33–0.40**. Run high-water still **u220** (783 / 0.632). Phase A open; leave knobs alone mid-run.
+
+**Xin 2008 × UVFA (Schaul 2015) × Turcato 2024:** Xin potential orders **UU > UD > DU > DD**, so UD and DU are *adjacent* intermediate attractors. Lesson (p) noted UU mass can steal UD hold; the u300 snapshot shows the same capacity fight **between the two intermediates** — a shared UVFA that improves DU capture can regress UD without collapsing mean align. DD (`at_goal` floor ~0.33) is now co-gating with UD. Turcato/MC-PILCO only swing-up+stabilize *one* unstable equilibrium per task; our four-way UVFA pays an interference tax they avoid by specialization.
+
+**Phase A judge:** use **`min(at_goal/{UU,UD,DU,DD})`**, not mean align or the strongest goal. **Next restart only (unchanged from n/o/p/q):** if min still ≪0.7 at u400, drop `her_ratio` 0.3→0.1 and/or raise hold pressure; optionally consider goal-specialist heads if interference persists. Do not kill this FT; GPU ~17% / 7.8 GB; ~90 updates left (~22 s/u).
