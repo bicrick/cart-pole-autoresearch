@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT="${PROJECT:-cartpole-demo}"
-ZONE="${ZONE:-us-central1-a}"
+ZONE="${ZONE:-us-east1-c}"
 VM="${VM:-cartpole-train}"
 NUM_ENVS="${NUM_ENVS:-4096}"
 UPDATES="${UPDATES:-400}"

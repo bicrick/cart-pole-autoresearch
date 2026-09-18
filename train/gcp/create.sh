@@ -4,7 +4,7 @@ set -euo pipefail
 ACCOUNT="patrickbrown5530@gmail.com"
 PROJECT="${PROJECT:-cartpole-demo}"
 BILLING="${BILLING:-01EFF4-172B86-5368F2}"
-ZONE="${ZONE:-us-central1-a}"
+ZONE="${ZONE:-us-east1-c}"
 VM="${VM:-cartpole-train}"
 MACHINE="${MACHINE:-n1-standard-8}"
 GPU="${GPU:-nvidia-tesla-t4}"
