@@ -344,3 +344,14 @@ Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_
 **Spong 1995 × Andrychowicz 2017 × Xin 2008 (extends u/v/w):** under `her_ratio=0.1`, a DU↔UD interference trough is not a ceiling — the subsequent climb set a **new** mean high-water *and* lifted all four holds together. Contrast the parent FT at `her_ratio=0.3`, where late mean bounces never sustainably beat the u220 peak while `min(at_goal)` stayed stuck ~0.34–0.39 (s/t). Low discrete-eq HER therefore does three related things: preserves ckpt manifolds through UU warmup (u), lets min-gate climb with the mean (v), and lets capture basins **expand past earlier peaks** after an interference blip because recovery credit is not reshuffled onto wrong Xin attractors.
 
 **Spong visit≠hold (o) still binds:** align~0.725 vs min `at_goal`~0.503 (gap narrowing vs 0.68 vs 0.42 @u120). **Next restart only (unchanged from v/w):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`. GPU ~16% / ~4.3 GB — no throughput bump mid-run (~230 updates left @ ~22 s/u).
+
+
+## (y) Long dense episodes buy late visits; Turcato short-horizon forces early capture (2026-09-18 ~07:06 CT)
+
+Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1`) at **u210**: reward~**938**, align~**0.706**, `at_goal` UU/UD/DU/DD **~0.579/0.498/0.602/0.527**. Vs prior fire @u170 (962 / 0.725 / 0.632/0.524/0.592/0.503): soft post-peak oscillation (u180–u190 dip then u200 rebound ~962/0.722). Run high-water still **u170/u200** (~962 / ~0.72–0.725). **UD min-gate ~0.50**. Phase A open; **leave knobs alone** mid-run.
+
+**Turcato / MC-PILCO 2024 × Spong visit≠hold (o):** competition eval is T=10 s, but they deliberately optimize the swing-up policy on a **much shorter horizon (T=2–3 s)** so the optimizer must reach the unstable equilibrium *early*, then hand off to LQR inside the capture region. Our `episode_len=800` at `dt≈1/120` ≈ **6.7 s** of dense `align_w` credit — long enough that a policy can score mid/high align by **late-episode neighborhood visits** without early hold (align~0.71 vs min `at_goal`~0.50). That is the same Spong gap, now with a concrete horizon lever: short optimization horizons force capture timing; long dense episodes subsidize visit≠hold.
+
+**Also (Turcato saturated cost):** their `1−exp(−‖q−q_G‖²_Σ)` (ℓ_c=3) has **no velocity term** yet still encourages zero-velocity arrival — our spin_w is already tiny (0.0003); next-restart hold pressure should come from `sparse_bonus` / `center_hold_w` (or optional shorter `episode_len`), not from re-raising spin.
+
+**Next restart only (unchanged from v/w/x + optional horizon):** raise hold pressure before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`; consider shorter `episode_len` only if min-gate still stalls after hold-pressure bump. GPU ~16% / ~4.3 GB — no throughput bump mid-run (~190 updates left @ ~22 s/u).
