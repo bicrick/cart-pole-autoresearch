@@ -6,12 +6,12 @@ ZONE="${ZONE:-us-east1-c}"
 VM="${VM:-cartpole-train}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
-gcloud compute ssh "$VM" --project="$PROJECT" --zone="$ZONE" --command="mkdir -p ~/CartPoleDemo"
-gcloud compute scp --recurse --project="$PROJECT" --zone="$ZONE" \
+gcloud compute ssh "$VM" --project="$PROJECT" --zone="$ZONE" --tunnel-through-iap --command="mkdir -p ~/CartPoleDemo"
+gcloud compute scp --recurse --tunnel-through-iap --project="$PROJECT" --zone="$ZONE" \
   "$ROOT/train" "$ROOT/shared" "$ROOT/scripts" "$ROOT/requirements.txt" \
   "$VM:~/CartPoleDemo/"
 # docs when present (paper lessons for the VM copy)
 if [[ -d "$ROOT/docs" ]]; then
-  gcloud compute scp --recurse --project="$PROJECT" --zone="$ZONE" \
+  gcloud compute scp --recurse --tunnel-through-iap --project="$PROJECT" --zone="$ZONE" \
     "$ROOT/docs" "$VM:~/CartPoleDemo/"
 fi

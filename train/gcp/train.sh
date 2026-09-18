@@ -4,13 +4,13 @@ set -euo pipefail
 PROJECT="${PROJECT:-cartpole-demo}"
 ZONE="${ZONE:-us-east1-c}"
 VM="${VM:-cartpole-train}"
-NUM_ENVS="${NUM_ENVS:-4096}"
+NUM_ENVS="${NUM_ENVS:-8192}"
 UPDATES="${UPDATES:-400}"
 # Set USE_LEGACY=1 to restore the pre-curriculum command (not recommended).
 USE_LEGACY="${USE_LEGACY:-0}"
 
 if [[ "$USE_LEGACY" == "1" ]]; then
-  gcloud compute ssh "$VM" --project="$PROJECT" --zone="$ZONE" --command="
+  gcloud compute ssh "$VM" --project="$PROJECT" --zone="$ZONE" --tunnel-through-iap --command="
   set -euo pipefail
   cd ~/CartPoleDemo
   python3 -m pip install -q -r requirements.txt
@@ -22,7 +22,7 @@ if [[ "$USE_LEGACY" == "1" ]]; then
   echo started pid=\$(cat policies/train.pid)
 "
 else
-  gcloud compute ssh "$VM" --project="$PROJECT" --zone="$ZONE" --command="
+  gcloud compute ssh "$VM" --project="$PROJECT" --zone="$ZONE" --tunnel-through-iap --command="
   set -euo pipefail
   cd ~/CartPoleDemo
   python3 -m pip install -q -r requirements.txt
