@@ -172,3 +172,11 @@ Live run `20260918-055004` (fine-tune from paper-recipe u400, walls `|x|=2.4`, `
 
 `train/train.py` logs under `perf/`: `sec_per_update`, `updates_per_sec`, `env_steps_per_sec`, `samples_per_update`, `num_envs`, `rollout`, and every 5 updates `gpu_util_percent`, `gpu_mem_used_mb`, `gpu_mem_total_mb`, `torch_cuda_allocated_mb`, `cpu_percent`. Use these to decide 8192→16384 bumps.
 
+
+---
+
+## (g) FT warmup dip is transient; Turcato short-horizon note (2026-09-18)
+
+Live walls soft-UU fine-tune `20260918-061318` (8192×256 from archived healthy u400): during pure-UU warmup, logged `eval/reward` dipped toward ~0 / slightly negative while `align/UU` stayed ~0.6 — then by **u80–u100** recovered to **reward~740–792, align~0.50–0.53**, with `at_goal` UU/UD/DU/DD ~**0.36/0.22/0.39/0.26** (ahead of prior finished FT). Do **not** treat the mid-warmup reward dip as collapse.
+
+**Turcato et al. 2024 (MC-PILCO / AI Olympics):** cost is saturated distance to goal angles with **no velocity in the cost**; they emphasize a **short policy horizon (2–3 s)** to force fast swing-up before local stabilization. If later `at_goal` plateaus while `align` is already high, prefer shortening `episode_len` (denser credit / faster capture pressure) over raising `spin_w`.
