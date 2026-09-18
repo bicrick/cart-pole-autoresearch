@@ -224,3 +224,10 @@ Run `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` (hard walls, center
 **Throughput:** ~22 s/update, ~382k env-steps/s, GPU util ~**16%**, VRAM **7.8/23 GB** (~34%). Headroom remains after this 400-update stretch; bump envs/rollout only on a *natural* restart if Phase A still open — never kill an improving FT just to fill the L4.
 
 **Xin 2008 reminder:** if energy settles off UU, the plant parks at unstable UD/DU/DD attractors — keep soft `uu_bias≥0.55` until Phase A bars clear.
+
+
+## (l) Phase A gate = per-goal at_goal, not 1-step mean align (2026-09-18 ~03:30 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u60**: mean `eval/reward`/`align` dipped u50→u60 (**469→442**, **0.456→0.425**) while **`at_goal` UU/UD/DU/DD rose to ~0.41/0.21/0.40/0.25** (UD **0.10→0.21**). Do not treat a single-update mean-align dip as collapse while per-goal at_goal (esp. the UD gate) is climbing.
+
+**Xin 2008:** if energy converges to a value ≠ `E_uu`, the plant remains at the **UD / DU / DD** equilibria (unstable attractors of the energy controller). That is why UD stays the hardest Phase A gate under soft multi-goal — keep `uu_bias≥0.55` and judge progress on **`eval/at_goal/{UU,UD,DU,DD}`**, not noisy mean align. No recipe change mid-run.
