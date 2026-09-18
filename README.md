@@ -90,6 +90,18 @@ GCP scripts (personal account, project `cartpole-demo`, sibling to `qwop-wr`):
 
 Do not train on `pumpkin-minecraft-server`.
 
+### Bot service account
+
+Persistent SA on `cartpole-demo` (not the Minecraft project):
+
+- Email: `cartpole-bot@cartpole-demo.iam.gserviceaccount.com`
+- Roles: Compute Admin, Storage Admin, Service Account User, Logging Admin, Monitoring Editor, Service Usage Consumer
+- Can attach the Compute default SA to VMs it creates
+- Bucket: `gs://cartpole-demo-413636930404` (`configs/`, `checkpoints/`, `policies/`)
+- JSON key (local only, not in git): `~/.config/gcloud/cartpole-bot-cartpole-demo.json`
+
+Grok-bot should set `GOOGLE_APPLICATION_CREDENTIALS` to that key path. See [`train/gcp/bot.env.example`](train/gcp/bot.env.example).
+
 ## Physics convention
 
 State is `[x, xdot, theta1, theta1dot, theta2, theta2dot]`. `theta = 0` is **upright**. Observation is `[x, xdot, sin θ1, cos θ1, sin θ2, cos θ2, θ1dot, θ2dot]`. Episodes do not die when a pole falls. Training may time-cap; the browser never resets.
