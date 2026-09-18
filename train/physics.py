@@ -109,12 +109,14 @@ def step(state, force, extra_q=None, constants=None):
     x = state[..., 0] + xd * dt
     th1 = state[..., 2] + th1d * dt
     th2 = state[..., 4] + th2d * dt
-    # Elastic track walls (classic cart-pole rail). Keeps |x| bounded for
-    # training and the no-reset browser demo.
+    # Cart-only endstops. Clamp x and kill cart velocity — never bounce.
+    # Poles do not collide with walls; an elastic rebound was coupling impulse
+    # into the links and letting UU "prop" itself on the rail.
     track = float(constants.get("trackLimit", 2.4))
-    rest = float(constants.get("wallRestitution", 0.3))
+    rest = float(constants.get("wallRestitution", 0.0))
     hit = (x > track) | (x < -track)
     x = x.clamp(-track, track)
+    # rest=0 => inelastic stop; rest>0 => damped bounce (discouraged).
     xd = torch.where(hit, -rest * xd, xd)
     next_state = torch.stack((x, xd, th1, th1d, th2, th2d), dim=-1)
     return torch.nan_to_num(next_state, nan=0.0, posinf=0.0, neginf=0.0)

@@ -203,3 +203,9 @@ Run `20260918-061318` still live at **u300–u320/400** (8192×256, soft `uu_bia
 
 **Insight:** soft-UU walls FT is past the “all-four nonzero” gate and into **interactive-demo-adjacent** align (≥0.55 sustained, peaks ~0.61) without collapsing UU. Remaining gap to the “damn good” bar (align ≳0.85 / at_goal ≳0.7) is **hold quality**, especially **UD capture** — not missing equilibria. This run’s TB has **no `perf/*` scalars** (older `train.py` on VM); after finish, sync main (perf logging + `center_w`/`center_hold_w`) then FT from this checkpoint at **16384×256**, `WARMUP_UPDATES=20`. If `at_goal` plateaus while align stays mid-0.5s, prefer Turcato-style shorter `episode_len` over more spin penalty.
 
+---
+
+## Walls are cart-only / inelastic (2026-09-18)
+
+User: elastic rail bounce was letting UU prop itself at the wall (demo x≈+2.4 at goal). Walls must **not** act like a pole brace. Change: `wallRestitution=0` — clamp cart `x`, kill cart `ẋ`, leave pole states untouched (no pole–wall collision exists; bounce coupling was the cheat). Stronger center reward still pulls back to mid.
+

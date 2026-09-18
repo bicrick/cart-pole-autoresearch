@@ -11,7 +11,7 @@ export const DEFAULT_CONSTANTS = {
   forceLimit: 20.0,
   dt: 0.008333333333333333,
   trackLimit: 2.4,
-  wallRestitution: 0.3,
+  wallRestitution: 0.0,
   hidden: 128,
   obsDim: 16,
   obsLow: [-4.0, -6.0, -1.0, -1.0, -1.0, -1.0, -12.0, -12.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0, -1.0, -1.0],
@@ -86,8 +86,9 @@ export function step(state, force, extraQ, constants = DEFAULT_CONSTANTS) {
   const th1d = state.th1d + acc.t1dd * dt;
   const th2d = state.th2d + acc.t2dd * dt;
   let x = state.x + xd * dt;
+  // Cart-only endstop (inelastic by default). Poles never hit the wall.
   const track = constants.trackLimit ?? 2.4;
-  const rest = constants.wallRestitution ?? 0.3;
+  const rest = constants.wallRestitution ?? 0.0;
   let nxd = xd;
   if (x > track) {
     x = track;
