@@ -296,3 +296,12 @@ Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u360**:
 **Spong visit≠hold still binds:** align~0.59 vs min `at_goal`~0.39.
 
 **Next natural restart (at/after u400 if Phase A still open):** execute prior plan — drop `her_ratio` 0.3→0.1 and/or raise hold pressure (`sparse_bonus` / `center_hold_w`); keep `uu_bias≥0.55`. Do **not** start another identical 400-u stretch with the same HER mix. GPU still ~13% / 7.8 GB — throughput bump only after this FT finishes.
+
+
+## (t) Finish stretch: DD re-co-gates; Phase A will miss u400 (2026-09-18 ~05:34 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u390/400**: reward~**678**, align~**0.548**, `at_goal` UU/UD/DU/DD **~0.56/0.38/0.46/0.34**. UU late high (~0.56) while **min-gate flipped to DD ~0.34** (was UD-led ~0.39 @u360; DD had briefly climbed to 0.44 then relapsed). UD still ~0.38 — neither clears 0.7. Run high-water still **u220** (783 / 0.632). ~10 updates left; **do not kill** — leave knobs alone mid-run.
+
+**Confirms (s)/(r):** discrete-equilibrium HER keeps reshuffling credit among wrong attractors into the finish; mean reward/align bounce (u360–u380 ~715–736 / ~0.57–0.59) does not lift `min(at_goal)`. Phase A bars (align ≳0.85, at_goal ≳0.7 all four) will not clear at u400.
+
+**Next natural restart (after u400):** drop `her_ratio` 0.3→**0.1** (scripts/next-train.sh), keep `uu_bias≥0.55`, optionally raise hold pressure later if min-gate still stuck. GPU ~13% / 7.8 GB.

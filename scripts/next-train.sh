@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Fine-tune from policies/checkpoint.pt (hard walls + center + soft UU).
+# her_ratio default 0.1 per lessons (n)/(s)/(t) — discrete-eq HER was reshuffling wrong attractors at 0.3.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -11,7 +12,8 @@ ROLLOUT="${ROLLOUT:-256}"
 WARMUP_UPDATES="${WARMUP_UPDATES:-20}"
 UU_BIAS="${UU_BIAS:-0.55}"
 ANNEAL_UPDATES="${ANNEAL_UPDATES:-0}"
-RUN_NAME="${RUN_NAME:-ft-e${NUM_ENVS}-r${ROLLOUT}-hardwalls-center-uub055}"
+HER_RATIO="${HER_RATIO:-0.1}"
+RUN_NAME="${RUN_NAME:-ft-e${NUM_ENVS}-r${ROLLOUT}-hardwalls-center-uub055-her01}"
 
 exec python3 train/train.py \
   --num-envs "${NUM_ENVS}" \
@@ -30,7 +32,7 @@ exec python3 train/train.py \
   --uu-bias "${UU_BIAS}" \
   --anneal-updates "${ANNEAL_UPDATES}" \
   --near-goal-p 0.5 \
-  --her-ratio 0.3 \
+  --her-ratio "${HER_RATIO}" \
   --impulse-p 0.005 \
   --logdir "${LOGDIR}" \
   --run-name "${RUN_NAME}" \
