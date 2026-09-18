@@ -423,3 +423,15 @@ Live L4 FT `20260918-134605_ft-e32768-r256-hardwalls-center-ch030-uub055-her01` 
 **Spong 1995 × Xin 2008 × (ae):** raising `center_hold_w` 0.18→0.30 under `near_goal_p=0.5` bought faster post-warmup UD floor recovery (ad) but by mid-FT the mean is again **local-capture saturated** (align~0.72–0.74 band) while `min(at_goal)` stays in the her01 interference floor. Hold pressure alone does not force hang→goal energy injection or wrong-eq transitions — those ICs are still rare under near-goal-heavy sampling. Confirms edge curriculum (ae) as the next natural-restart lever, not another mid-run hold bump.
 
 **Staged for next natural restart:** VM `scripts/next-train.sh` synced to edge defaults (`hang_start_p=0.45`, `wrong_eq_p=0.25`, `goal_switch_p=0.002`, `near_goal_p=0.15`, `energy_w=0.35`, `episode_len=1200`, `her_ratio=0.1`, `center_hold_w=0.30`). Do **not** kill this improving ch030 FT. GPU ~16% / ~4.3 GB.
+
+
+## (ag) Multi-strategy mid-run: edge holds, swing dips, hot steals UU (2026-09-18 ~10:52 CT)
+
+Live L4 triple FT (16k envs each, GPU ~99%/5.6GB):
+- **edge** `…edge-hang-xeq-gsw-ch030-her01` @**u160**: reward~**1082**, align~**0.767**; `at_goal` UU/UD/DU/DD ~**0.550/0.508/0.644/0.534** (min **UD**). Flat/slightly up vs ~u60 (1085/0.759 / min UD~0.517).
+- **swing** `…swing-hang070-ew045-uub070-her01` @**u160**: reward~**948**, align~**0.659**; `at_goal` ~**0.602/0.447/0.483/0.488** (min **UD**). **Regressed** vs ~u60 (1014/0.692 / UD~0.427) — mean down, DU down hard; UU hold still the swing specialty (~0.60).
+- **hot** `…hot-lr1e3-clip03-edge` @**u260** (rollout 128, faster clock): reward~**1046**, align~**0.750**; `at_goal` ~**0.438/0.554/0.643/0.467** (min flipped to **UU**). vs ~u70 (1032/0.752 / min DD~0.488): UD/DU up, **UU collapsed ~0.52→0.44**.
+
+**Turcato specialization × UVFA interference (q/p):** three ckpts on one GPU are doing what a single shared UVFA cannot — edge keeps the balanced min-gate, swing protects UU under hang-heavy energy, hot's aggressive PPO (lr=1e-3, clip=0.3) is **re-allocating** capacity toward UD/DU at UU's expense. Treat swing mean dip and hot UU collapse as **strategy divergence**, not a reason to kill either mid-run (lesson l/o: mid-run troughs ≠ collapse). Promote later by `min(at_goal)` when a stretch finishes; do **not** revive ch030 brute.
+
+**Action:** leave all three alone through their 400-u stretches. GPU saturated — no fourth train.py. Phase A still open (align≪0.85, min at_goal≪0.7).
