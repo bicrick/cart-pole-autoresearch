@@ -267,3 +267,12 @@ Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u220**:
 **UVFA (Schaul 2015) × Gustafsson local-balance:** a shared goal-conditioned policy has finite capacity; when soft `uu_bias=0.55` plus on-policy success pushes more mass into UU, gradient steps that improve UU capture can *regress* the UD hold manifold without collapsing mean align (align pays for visiting neighborhoods; `at_goal` pays for hold). Treat mean-align breakouts that coincide with UD `at_goal` dips as **interference**, not as Phase A progress — keep judging the gate on `eval/at_goal/UD`.
 
 **Next restart only (unchanged from n/o):** if UD still gates at u400 while UU/DU/DD are ahead, drop `her_ratio` 0.3→0.1 and/or raise hold pressure (`sparse_bonus` / `center_hold_w`). Do not kill this FT; GPU still ~14% / 7.8 GB.
+
+
+## (q) Post-breakout regression ≠ collapse; Spong capture still unstable (2026-09-18 ~04:47 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u260**: reward~**698**, align~**0.572**, `at_goal` UU/UD/DU/DD **~0.48/0.37/0.48/0.42**. Run high-water remains **u220** (reward~783 / align~0.632); then **u230–u250** correlated multi-goal dip (reward trough ~624 @u250, UU `at_goal` 0.54→0.42, DD 0.47→0.33) with partial recovery by u260. **UD `at_goal` stuck ~0.37** (peak since u200 was 0.45 @u200) — still the Phase A gate. Leave knobs alone mid-run.
+
+**Spong 1995 × UVFA interference (p):** a shared policy that briefly enters a better capture region can leave it again — swing-up proximity ≠ stable local LQR hold. Mean-align/reward breakouts under soft multi-goal are **noisy high-water marks**, not new floors; judging Phase A on the post-peak trough would falsely call collapse while per-goal `at_goal` stays in the same band (complement to lesson l, which warned against treating dips *during* climbs as collapse).
+
+**Next restart only (unchanged from n/o/p):** if UD still gates at u400, drop `her_ratio` 0.3→0.1 and/or raise hold pressure (`sparse_bonus` / `center_hold_w`). Do not kill this FT; GPU ~16% / 7.8 GB.
