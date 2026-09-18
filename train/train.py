@@ -342,6 +342,10 @@ def main():
                 value_loss = 0.5 * (value - ret_flat[idx]).pow(2).mean()
                 loss = policy_loss + 0.5 * value_loss - args.ent * ent.mean()
                 opt.zero_grad(set_to_none=True)
+                if not torch.isfinite(loss):
+                    # Skip poisoned minibatches (NaN reward / value) instead of
+                    # writing NaNs into the policy weights.
+                    continue
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 opt.step()

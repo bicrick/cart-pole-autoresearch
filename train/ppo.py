@@ -35,9 +35,16 @@ class ActorCritic(nn.Module):
         nn.init.orthogonal_(last.weight, gain=0.01)
         nn.init.zeros_(last.bias)
 
-    def dist(self, obs):
+    def _actor_mean(self, obs):
+        # Keep Normal(loc, scale) finite on MPS/CUDA when physics NaNs leak into obs.
         mean = self.actor(obs)
-        std = self.log_std.exp().expand_as(mean)
+        mean = torch.nan_to_num(mean, nan=0.0, posinf=10.0, neginf=-10.0)
+        return mean.clamp(-10.0, 10.0)
+
+    def dist(self, obs):
+        mean = self._actor_mean(obs)
+        log_std = self.log_std.clamp(-5.0, 2.0)
+        std = log_std.exp().expand_as(mean)
         return Normal(mean, std)
 
     def act(self, obs):
@@ -55,7 +62,7 @@ class ActorCritic(nn.Module):
         return log_prob, entropy, value
 
     def deterministic(self, obs):
-        return self.actor(obs)
+        return self._actor_mean(obs)
 
 
 def tanh_action(raw, force_limit):

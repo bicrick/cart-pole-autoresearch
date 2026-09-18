@@ -81,21 +81,36 @@ def accelerations(state, force, extra_q=None, constants=None):
     return torch.stack((xdd, t1dd, t2dd), dim=-1)
 
 
+# Soft caps so impulse / stiff grabs cannot explode semi-implicit Euler into NaNs.
+_MAX_CART_VEL = 30.0
+_MAX_ANG_VEL = 50.0
+_MAX_ACC = 1e4
+
+
 def step(state, force, extra_q=None, constants=None):
     """Semi-implicit Euler. Returns next state with the same leading dims."""
     if constants is None:
         constants = load_constants()
     dt = state.new_tensor(constants["dt"])
     fmax = constants["forceLimit"]
-    force = force.clamp(-fmax, fmax)
+    # Cap inbound velocities (impulses / prior blow-ups) before mass solve.
+    state = state.clone()
+    state[..., 1] = state[..., 1].clamp(-_MAX_CART_VEL, _MAX_CART_VEL)
+    state[..., 3] = state[..., 3].clamp(-_MAX_ANG_VEL, _MAX_ANG_VEL)
+    state[..., 5] = state[..., 5].clamp(-_MAX_ANG_VEL, _MAX_ANG_VEL)
+    force = torch.nan_to_num(force, nan=0.0, posinf=fmax, neginf=-fmax).clamp(-fmax, fmax)
     acc = accelerations(state, force, extra_q=extra_q, constants=constants)
-    xd = state[..., 1] + acc[..., 0] * dt
-    th1d = state[..., 3] + acc[..., 1] * dt
-    th2d = state[..., 5] + acc[..., 2] * dt
+    acc = torch.nan_to_num(acc, nan=0.0, posinf=_MAX_ACC, neginf=-_MAX_ACC).clamp(
+        -_MAX_ACC, _MAX_ACC
+    )
+    xd = (state[..., 1] + acc[..., 0] * dt).clamp(-_MAX_CART_VEL, _MAX_CART_VEL)
+    th1d = (state[..., 3] + acc[..., 1] * dt).clamp(-_MAX_ANG_VEL, _MAX_ANG_VEL)
+    th2d = (state[..., 5] + acc[..., 2] * dt).clamp(-_MAX_ANG_VEL, _MAX_ANG_VEL)
     x = state[..., 0] + xd * dt
     th1 = state[..., 2] + th1d * dt
     th2 = state[..., 4] + th2d * dt
-    return torch.stack((x, xd, th1, th1d, th2, th2d), dim=-1)
+    next_state = torch.stack((x, xd, th1, th1d, th2, th2d), dim=-1)
+    return torch.nan_to_num(next_state, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def observe(state):
