@@ -215,3 +215,12 @@ User: elastic rail bounce was letting UU prop itself at the wall (demo x≈+2.4 
 Run `20260918-061318` completed at **u400**: `eval/reward≈890`, `align≈0.575`, `at_goal` UU/UD/DU/DD **0.45 / 0.30 / 0.48 / 0.47**. All four nonzero; **UD remains the gate**. Still short of Phase A bars (align ≳0.85, at_goal ≳0.7 all four + mid-track return).
 
 **Next:** keep Phase A — FT from this checkpoint with hard endstops + `center_w=0.06` / `center_hold_w=0.18` at **16384×256** (run `20260918-072313` after spot restart). No Phase B mid-episode switches yet. GPU ~35% / ~2.3 GB — bump `NUM_ENVS` further only on a later restart if util stays soft after warmup.
+
+
+## (k) 32768 L4 FT: same warmup dip, soft GPU util (2026-09-18 ~03:25 CT)
+
+Run `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` (hard walls, center_w/hold, soft uu_bias=0.55, warmup=20) on `cartpole-train-od` L4: through **u20** reward~−154 / align~0 while **align/UU stayed ~0.68** (lesson g pattern at larger batch); by **u40** recovered to reward~**248**, align~**0.31**, at_goal UU/UD/DU/DD **0.38/0.10/0.35/0.13** — UD still the gate. **Do not redesign mid-run.**
+
+**Throughput:** ~22 s/update, ~382k env-steps/s, GPU util ~**16%**, VRAM **7.8/23 GB** (~34%). Headroom remains after this 400-update stretch; bump envs/rollout only on a *natural* restart if Phase A still open — never kill an improving FT just to fill the L4.
+
+**Xin 2008 reminder:** if energy settles off UU, the plant parks at unstable UD/DU/DD attractors — keep soft `uu_bias≥0.55` until Phase A bars clear.
