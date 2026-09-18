@@ -285,3 +285,14 @@ Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u310**:
 **Xin 2008 × UVFA (Schaul 2015) × Turcato 2024:** Xin potential orders **UU > UD > DU > DD**, so UD and DU are *adjacent* intermediate attractors. Lesson (p) noted UU mass can steal UD hold; the u300 snapshot shows the same capacity fight **between the two intermediates** — a shared UVFA that improves DU capture can regress UD without collapsing mean align. DD (`at_goal` floor ~0.33) is now co-gating with UD. Turcato/MC-PILCO only swing-up+stabilize *one* unstable equilibrium per task; our four-way UVFA pays an interference tax they avoid by specialization.
 
 **Phase A judge:** use **`min(at_goal/{UU,UD,DU,DD})`**, not mean align or the strongest goal. **Next restart only (unchanged from n/o/p/q):** if min still ≪0.7 at u400, drop `her_ratio` 0.3→0.1 and/or raise hold pressure; optionally consider goal-specialist heads if interference persists. Do not kill this FT; GPU ~17% / 7.8 GB; ~90 updates left (~22 s/u).
+
+
+## (s) Late FT: HER redistributes among wrong attractors; mean recovery ≠ min-gate close (2026-09-18 ~05:21 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u360**: reward~**750**, align~**0.590**, `at_goal` UU/UD/DU/DD **~0.54/0.39/0.50/0.44**. Recovered from the u310 dip (636/0.514); DD `at_goal` climbed **0.33→0.44** while **UD stayed the min-gate ~0.39–0.43**. Run high-water still **u220** (783 / 0.632). ~40 updates left (~22 s/u). Phase A open; **do not kill** — leave knobs alone mid-run.
+
+**Andrychowicz 2017 × Xin 2008 (new angle on n/o):** classic HER assumes achieved goals form a *useful continuum* toward the intended goal. Our goals are **four discrete unstable equilibria** with Xin energy order UU>UD>DU>DD, so “achieved” states on failed UU/DD episodes are usually **other wrong attractors**, not waypoints on a path to the requested hold. Late in a soft multi-goal FT, nonzero `her_ratio` therefore mostly **reshuffles credit among UD/DU/DD** (mean reward/align and the non-min goals bounce back) while **`min(at_goal)` stays stuck** — exactly the u310→u360 pattern. That is stronger than “HER amplifies UD” (n): even when UD is not the HER stamp, discrete-equilibrium HER still fails to close the Phase A min-gate.
+
+**Spong visit≠hold still binds:** align~0.59 vs min `at_goal`~0.39.
+
+**Next natural restart (at/after u400 if Phase A still open):** execute prior plan — drop `her_ratio` 0.3→0.1 and/or raise hold pressure (`sparse_bonus` / `center_hold_w`); keep `uu_bias≥0.55`. Do **not** start another identical 400-u stretch with the same HER mix. GPU still ~13% / 7.8 GB — throughput bump only after this FT finishes.
