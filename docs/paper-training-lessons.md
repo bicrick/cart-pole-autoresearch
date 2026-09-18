@@ -147,3 +147,22 @@ Paper-recipe run `20260918-052042` **finished healthy** (no cart-quadratic colla
 **Change implemented:** `--uu-bias` + `--anneal-updates` soft curriculum. After hard `--warmup-updates`, sample with `P(UU)=uu_bias` (rest split) for the anneal window (`anneal_updates=0` ⇒ rest of run). `scripts/next-train.sh` defaults: walls `track_limit=2.4`, fine-tune checkpoint, `warmup=40`, `uu_bias=0.55`.
 
 **Next restart:** sync walled physics + this curriculum, **fine-tune** from VM `policies/checkpoint.pt` (do not cold-start; do not archive — this checkpoint is a keeper).
+
+---
+
+## (f) Soft UU bias on walls fine-tune (2026-09-18)
+
+Live run `20260918-055004` (fine-tune from paper-recipe u400, walls `|x|=2.4`, `warmup=40×UU`, `uu_bias=0.55`, `anneal=0`):
+
+| Metric | Paper-recipe end (u400) | Walls FT ~u320 |
+| --- | --- | --- |
+| `eval/reward` | ~416 | **~730** |
+| `eval/align` | ~0.32 | **~0.50** |
+| `align/UU` | ~0.15 | **~0.54** |
+| `at_goal/UU` | ~0.01 | **~0.28** |
+| `at_goal` UD/DU/DD | ~0.16/—/0.18 | **~0.21 / 0.41 / 0.22** |
+
+**Paper link:** Gustafsson — keep balance-mass on the hard equilibrium; Spong/Xin — hybrid swing-up then capture. Sustained `P(UU)≥0.55` for the whole fine-tune (no hard 4-way cut) recovered UU without starving hanging/partial goals.
+
+**Throughput note:** same recipe leaves T4 ~35–40% util / ~0.6 GB VRAM at 4096×128 (~3 s/update). Next iteration: **8192 envs × rollout 256** (already `scripts/next-train.sh` defaults) once this run finishes — do not kill while reward/align still rising.
+
