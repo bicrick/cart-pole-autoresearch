@@ -1,9 +1,11 @@
+import { ghostTips } from "./goals.js";
+
 const PAPER = "#fbfbfa";
 const INK = "#21232d";
 const INK_SOFT = "#2a2d38";
-const INK_MUTED = "#5a5e6b";
 const LINK = "#2563eb";
 const RAIL = "#e8e8e6";
+const GHOST = "rgba(90, 94, 107, 0.38)";
 
 export function createCamera() {
   const camera = {
@@ -23,9 +25,6 @@ export function createCamera() {
         y: (canvas.height * 0.62 - sy) / camera.scale,
       };
     },
-    follow(x) {
-      camera.x += 0.12 * (x - camera.x);
-    },
   };
   return camera;
 }
@@ -43,23 +42,64 @@ function sizeCanvas(canvas) {
   return dpr;
 }
 
-export function draw(canvas, ctx, state, tips, camera, pointer) {
+function drawTrack(ctx, camera, canvas, constants, dpr) {
+  const track = constants.trackLimit ?? 2.4;
+  const left = camera.worldToScreen(-track, 0, canvas);
+  const right = camera.worldToScreen(track, 0, canvas);
+  ctx.strokeStyle = RAIL;
+  ctx.lineWidth = 2 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(left.x, left.y);
+  ctx.lineTo(right.x, right.y);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(33, 35, 45, 0.35)";
+  ctx.lineWidth = 2.5 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(left.x, left.y - 12 * dpr);
+  ctx.lineTo(left.x, left.y + 12 * dpr);
+  ctx.moveTo(right.x, right.y - 12 * dpr);
+  ctx.lineTo(right.x, right.y + 12 * dpr);
+  ctx.stroke();
+}
+
+function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr) {
+  const ghost = ghostTips(state.x, goalId, constants);
+  const g0 = camera.worldToScreen(ghost.cart.x, 0, canvas);
+  const g1 = camera.worldToScreen(ghost.lower.x, ghost.lower.y, canvas);
+  const g2 = camera.worldToScreen(ghost.upper.x, ghost.upper.y, canvas);
+  ctx.strokeStyle = GHOST;
+  ctx.lineWidth = 3 * dpr;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(g0.x, g0.y);
+  ctx.lineTo(g1.x, g1.y);
+  ctx.lineTo(g2.x, g2.y);
+  ctx.stroke();
+  ctx.fillStyle = GHOST;
+  ctx.beginPath();
+  ctx.arc(g1.x, g1.y, 4 * dpr, 0, Math.PI * 2);
+  ctx.arc(g2.x, g2.y, 5 * dpr, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalId) {
   const dpr = sizeCanvas(canvas);
   camera.canvas = canvas;
-  camera.scale = Math.min(canvas.width, canvas.height) * 0.28;
-  camera.follow(state.x);
+  camera.x = 0;
+  const track = constants.trackLimit ?? 2.4;
+  const reach = (constants.poleLength1 ?? 0.5) + (constants.poleLength2 ?? 0.5);
+  const halfSpan = track + reach * 0.55;
+  const scaleX = canvas.width / (2 * halfSpan);
+  const scaleY = canvas.height / 2.7;
+  camera.scale = Math.min(scaleX, scaleY);
   camera.tips = tips;
 
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const railY = camera.worldToScreen(0, 0, canvas).y;
-  ctx.strokeStyle = RAIL;
-  ctx.lineWidth = 2 * dpr;
-  ctx.beginPath();
-  ctx.moveTo(0, railY);
-  ctx.lineTo(canvas.width, railY);
-  ctx.stroke();
+  drawTrack(ctx, camera, canvas, constants, dpr);
+  drawGhost(ctx, camera, canvas, state, goalId, constants, dpr);
 
   const cart = camera.worldToScreen(tips.cart.x, 0, canvas);
   const p1 = camera.worldToScreen(tips.lower.x, tips.lower.y, canvas);
@@ -68,6 +108,7 @@ export function draw(canvas, ctx, state, tips, camera, pointer) {
   ctx.strokeStyle = INK;
   ctx.lineWidth = 5 * dpr;
   ctx.lineCap = "round";
+  ctx.lineJoin = "round";
   ctx.beginPath();
   ctx.moveTo(cart.x, cart.y);
   ctx.lineTo(p1.x, p1.y);
@@ -112,8 +153,4 @@ export function draw(canvas, ctx, state, tips, camera, pointer) {
     ctx.stroke();
     ctx.setLineDash([]);
   }
-
-  ctx.fillStyle = INK_MUTED;
-  ctx.font = `${13 * dpr}px Geist, -apple-system, sans-serif`;
-  ctx.fillText("grab the cart or either pole", 16 * dpr, 28 * dpr);
 }

@@ -78,3 +78,51 @@ export function createInput(canvas, camera) {
     },
   };
 }
+
+export function createKeys({ onGoal, onTogglePolicy, onCycleGoal } = {}) {
+  const held = new Set();
+  const goals = ["UU", "UD", "DU", "DD"];
+
+  function onDown(event) {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const key = event.key;
+    if (key === "Tab") {
+      event.preventDefault();
+      onCycleGoal?.();
+      return;
+    }
+    if (key >= "1" && key <= "4") {
+      onGoal?.(goals[Number(key) - 1]);
+      return;
+    }
+    if (key === "p" || key === "P") {
+      onTogglePolicy?.();
+      return;
+    }
+    if (key === "a" || key === "A" || key === "ArrowLeft") held.add("left");
+    if (key === "d" || key === "D" || key === "ArrowRight") held.add("right");
+  }
+
+  function onUp(event) {
+    const key = event.key;
+    if (key === "a" || key === "A" || key === "ArrowLeft") held.delete("left");
+    if (key === "d" || key === "D" || key === "ArrowRight") held.delete("right");
+  }
+
+  window.addEventListener("keydown", onDown);
+  window.addEventListener("keyup", onUp);
+  window.addEventListener("blur", () => held.clear());
+
+  return {
+    manualForce(limit) {
+      let force = 0;
+      if (held.has("left")) force -= limit;
+      if (held.has("right")) force += limit;
+      return force;
+    },
+    destroy() {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+    },
+  };
+}

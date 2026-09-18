@@ -75,9 +75,7 @@ npm install
 npm run dev
 ```
 
-Open the printed localhost URL. Use the **goal** buttons (`UU` / `UD` / `DU` / `DD`). Drag the cart or either pole. There is no reset control.
-
-A smoke-exported `web/public/policy.json` ships so the page loads even before a long GPU train. Real multi-goal behavior needs a full run (below).
+Open the printed localhost URL. The exported `web/public/policy.json` runs in the page as a plain JS MLP — no backend, no TF.js. Click `UU` / `UD` / `DU` / `DD` (or `1`–`4` / Tab) to change the desired pose. The faint ghost is the target. Drag the cart or either pole. `P` mutes the policy; `A`/`D` shoves the cart. There is no reset control.
 
 ## Train
 

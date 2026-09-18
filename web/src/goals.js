@@ -17,3 +17,23 @@ export function goalEncoding(goalId) {
 export function conditionedObs(stateObs, goalId) {
   return stateObs.concat(goalEncoding(goalId));
 }
+
+export function atGoal(state, goalId, cosThresh = 0.95) {
+  const [t1, t2] = GOAL_ANGLES[goalId] ?? GOAL_ANGLES.UU;
+  const a1 = Math.cos(state.th1) * Math.cos(t1) + Math.sin(state.th1) * Math.sin(t1);
+  const a2 = Math.cos(state.th2) * Math.cos(t2) + Math.sin(state.th2) * Math.sin(t2);
+  return a1 > cosThresh && a2 > cosThresh;
+}
+
+export function ghostTips(cartX, goalId, constants) {
+  const [th1, th2] = GOAL_ANGLES[goalId] ?? GOAL_ANGLES.UU;
+  const l1 = constants.poleLength1;
+  const l2 = constants.poleLength2;
+  const p1x = cartX + l1 * Math.sin(th1);
+  const p1y = l1 * Math.cos(th1);
+  return {
+    cart: { x: cartX, y: 0 },
+    lower: { x: p1x, y: p1y },
+    upper: { x: p1x + l2 * Math.sin(th2), y: p1y + l2 * Math.cos(th2) },
+  };
+}
