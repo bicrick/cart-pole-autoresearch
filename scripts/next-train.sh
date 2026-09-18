@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-NUM_ENVS="${NUM_ENVS:-16384}"
+NUM_ENVS="${NUM_ENVS:-32768}"
 UPDATES="${UPDATES:-400}"
 LOGDIR="${LOGDIR:-runs}"
 ROLLOUT="${ROLLOUT:-256}"
