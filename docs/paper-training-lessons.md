@@ -166,3 +166,9 @@ Live run `20260918-055004` (fine-tune from paper-recipe u400, walls `|x|=2.4`, `
 
 **Throughput note:** same recipe leaves T4 ~35–40% util / ~0.6 GB VRAM at 4096×128 (~3 s/update). Next iteration: **8192 envs × rollout 256** (already `scripts/next-train.sh` defaults) once this run finishes — do not kill while reward/align still rising.
 
+---
+
+## Perf TensorBoard scalars (next runs)
+
+`train/train.py` logs under `perf/`: `sec_per_update`, `updates_per_sec`, `env_steps_per_sec`, `samples_per_update`, `num_envs`, `rollout`, and every 5 updates `gpu_util_percent`, `gpu_mem_used_mb`, `gpu_mem_total_mb`, `torch_cuda_allocated_mb`, `cpu_percent`. Use these to decide 8192→16384 bumps.
+

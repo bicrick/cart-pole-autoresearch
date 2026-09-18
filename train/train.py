@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import json
 import math
 import time
@@ -31,6 +33,55 @@ from ppo import ActorCritic, export_actor, tanh_action
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "policies" / "policy.json"
 WEB_POLICY_PATH = ROOT / "web" / "public" / "policy.json"
+
+
+def _cpu_percent_self() -> float:
+    """Rough process CPU% over a short sleep using /proc (no psutil)."""
+    try:
+        with open("/proc/self/stat", "r", encoding="utf-8") as f:
+            parts = f.read().split()
+        ut1, st1 = int(parts[13]), int(parts[14])
+        with open("/proc/stat", "r", encoding="utf-8") as f:
+            total1 = sum(int(x) for x in f.readline().split()[1:])
+        time.sleep(0.05)
+        with open("/proc/self/stat", "r", encoding="utf-8") as f:
+            parts = f.read().split()
+        ut2, st2 = int(parts[13]), int(parts[14])
+        with open("/proc/stat", "r", encoding="utf-8") as f:
+            total2 = sum(int(x) for x in f.readline().split()[1:])
+        d_proc = (ut2 + st2) - (ut1 + st1)
+        d_tot = max(1, total2 - total1)
+        ncpu = os.cpu_count() or 1
+        return 100.0 * d_proc / d_tot * ncpu
+    except Exception:
+        return float("nan")
+
+
+def _gpu_stats():
+    """Return (util_percent, mem_used_mb, mem_total_mb) or NaNs."""
+    if not torch.cuda.is_available():
+        return float("nan"), float("nan"), float("nan")
+    mem_used = torch.cuda.memory_allocated() / (1024 ** 2)
+    mem_reserved = torch.cuda.memory_reserved() / (1024 ** 2)
+    try:
+        out = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=utilization.gpu,memory.used,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            text=True,
+            timeout=2,
+        ).strip().split(",")
+        util = float(out[0].strip())
+        used = float(out[1].strip())
+        total = float(out[2].strip())
+        return util, used, total
+    except Exception:
+        props = torch.cuda.get_device_properties(0)
+        total = props.total_memory / (1024 ** 2)
+        return float("nan"), max(mem_used, mem_reserved), total
+
 
 
 def parse_args():
@@ -376,6 +427,7 @@ def main():
 
     best_align = -1e9
     t0 = time.time()
+    t_prev = time.perf_counter()
     for update in range(1, args.updates + 1):
         goal_probs, allowed = goal_probs_for_update(args, update)
         obs_buf = []
@@ -509,6 +561,30 @@ def main():
         writer.add_scalar("train/value_loss", last_value, update)
         writer.add_scalar("train/entropy", last_ent, update)
         writer.add_scalar("train/loss", last_loss, update)
+
+        # Throughput / hardware efficiency (every update; GPU sample is cheap).
+        t_now = time.perf_counter()
+        dt = max(1e-6, t_now - t_prev)
+        t_prev = t_now
+        env_steps = float(args.num_envs * args.rollout)
+        writer.add_scalar("perf/sec_per_update", dt, update)
+        writer.add_scalar("perf/updates_per_sec", 1.0 / dt, update)
+        writer.add_scalar("perf/env_steps_per_sec", env_steps / dt, update)
+        writer.add_scalar("perf/samples_per_update", env_steps, update)
+        writer.add_scalar("perf/num_envs", float(args.num_envs), update)
+        writer.add_scalar("perf/rollout", float(args.rollout), update)
+        if update == 1 or update % 5 == 0:
+            gpu_util, gpu_used, gpu_total = _gpu_stats()
+            writer.add_scalar("perf/gpu_util_percent", gpu_util, update)
+            writer.add_scalar("perf/gpu_mem_used_mb", gpu_used, update)
+            writer.add_scalar("perf/gpu_mem_total_mb", gpu_total, update)
+            if torch.cuda.is_available():
+                writer.add_scalar(
+                    "perf/torch_cuda_allocated_mb",
+                    torch.cuda.memory_allocated() / (1024 ** 2),
+                    update,
+                )
+            writer.add_scalar("perf/cpu_percent", _cpu_percent_self(), update)
         writer.add_scalar(
             "train/warmup_active",
             float(allowed is not None or goal_probs is not None),
