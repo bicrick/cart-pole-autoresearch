@@ -238,3 +238,12 @@ Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u60**: 
 Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u110**: reward~**702**, align~**0.58**, `at_goal` UU/UD/DU/DD **~0.48/0.41/0.47/0.40** — big climb from u60 (reward~442 / align~0.43 / UD~0.21). UD remains weakest but **doubled again** (0.21→0.41). Still Phase A; leave recipe alone.
 
 **Xin 2008 potential:** \(P=\beta_1\cos\theta_1+\beta_2\cos\theta_2\) with \(\beta_1>\beta_2\) (outer mass on longer lever). Ordering of equilibria energies is **UU > UD > DU > DD**. Under energy control targeting \(E_{uu}\), undershoot parks first at **UD** — the nearest incorrect unstable attractor — before DU/DD. That is a sharper reason UD is the standing Phase A gate than “one of three wrong attractors” alone (lesson l): protect UU mass (`uu_bias≥0.55`) and keep judging on per-goal `at_goal`, especially UD. No mid-run knob change.
+
+
+## (n) HER can reinforce the UD energy sink under UU-biased mix (2026-09-18 ~04:07 CT)
+
+Live L4 FT `20260918-080608_ft-e32768-r256-hardwalls-center-uub055` at **u160**: reward~**700**, align~**0.57**, `at_goal` UU/UD/DU/DD **~0.50/0.36/0.50/0.39** — oscillating near the u110 plateau (reward~702 / align~0.58 / UD~0.41), not collapsing. Soft `uu_bias=0.55` + `her_ratio=0.3` still on; leave knobs alone mid-run.
+
+**HER (Andrychowicz 2017) × Xin 2008:** hindsight relabel replaces the intended goal with a goal actually reached in the episode. Under Xin potential ordering **UU > UD > DU > DD**, failed UU rollouts that undershoot energy most often land in **UD** (lesson m). Relabeling those as UD successes turns the nearest wrong attractor into a *dense* HER target — so a nonzero `her_ratio` can amplify the UD gate even while `uu_bias` protects on-policy sampling. That is distinct from “judge on per-goal at_goal” (l) or “UD is nearest sink” (m): it is a **replay** mechanism that can fight the curriculum.
+
+**Next restart only (if UD plateaus while UU/DU/DD keep rising):** drop `her_ratio` (e.g. 0.3→0.1) or skip UU→UD / UU→DU relabels; do **not** raise `uu_bias` further first. No mid-run change while reward/align still oscillate in a rising band.
