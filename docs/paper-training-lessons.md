@@ -195,3 +195,11 @@ Run `20260918-061318` at **u180/400** (8192×256, soft `uu_bias=0.55`): `eval/re
 
 Live demo @ ~u230: UU `at goal` with **x≈+2.4** (on the wall). Old `center=0.02 x²` was too weak vs align, so parking at the rail was free. Fix: `center_w=0.06` always + `center_hold_w=0.18` scaled by how aligned the links are (Xin-style cart regulation once upright). Next FT should use these defaults; do not cold-start.
 
+---
+
+## (i) Late walls FT ~u300: demo-range align, UD still the gate (2026-09-18 ~01:50 CT)
+
+Run `20260918-061318` still live at **u300–u320/400** (8192×256, soft `uu_bias=0.55`, **no** stronger center knobs yet — those land on next FT): peak **`eval/reward~941`, `align~0.613`** at u300 (UU/UD/DU/DD align **0.62/0.53/0.67/0.63**); at u310 `at_goal` **0.43/0.26/0.44/0.40** with UD the clear weak link (align also dipped hardest on UD). By u320 recovered to reward~902 / align~0.59 with UD align back ~0.57.
+
+**Insight:** soft-UU walls FT is past the “all-four nonzero” gate and into **interactive-demo-adjacent** align (≥0.55 sustained, peaks ~0.61) without collapsing UU. Remaining gap to the “damn good” bar (align ≳0.85 / at_goal ≳0.7) is **hold quality**, especially **UD capture** — not missing equilibria. This run’s TB has **no `perf/*` scalars** (older `train.py` on VM); after finish, sync main (perf logging + `center_w`/`center_hold_w`) then FT from this checkpoint at **16384×256**, `WARMUP_UPDATES=20`. If `at_goal` plateaus while align stays mid-0.5s, prefer Turcato-style shorter `episode_len` over more spin penalty.
+
