@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 from physics import load_constants, normalize_obs, observe, reward, step
 from ppo import ActorCritic, export_actor, tanh_action
@@ -37,6 +38,7 @@ def parse_args():
     parser.add_argument("--device", default=None)
     parser.add_argument("--checkpoint", type=Path, default=ROOT / "policies" / "checkpoint.pt")
     parser.add_argument("--out", type=Path, default=POLICY_PATH)
+    parser.add_argument("--logdir", type=Path, default=ROOT / "runs")
     return parser.parse_args()
 
 
@@ -113,7 +115,14 @@ def main():
     else:
         device_name = "cpu"
     device = torch.device(device_name)
-    print(f"device={device} envs={args.num_envs} rollout={args.rollout} updates={args.updates}")
+    logdir = args.logdir / time.strftime("%Y%m%d-%H%M%S")
+    logdir.mkdir(parents=True, exist_ok=True)
+    writer = SummaryWriter(str(logdir))
+    print(
+        f"device={device} envs={args.num_envs} rollout={args.rollout} "
+        f"updates={args.updates} logdir={logdir}"
+    )
+    print(f"tensorboard --logdir {args.logdir}", flush=True)
 
     model = ActorCritic(hidden=constants["hidden"]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -187,6 +196,7 @@ def main():
         n = obs_flat.shape[0]
         mb = min(args.minibatch, n)
 
+        last_policy = last_value = last_ent = last_loss = None
         for _ in range(args.epochs):
             perm = torch.randperm(n, device=device)
             for start in range(0, n, mb):
@@ -203,6 +213,16 @@ def main():
                 nn_clip = 0.5
                 torch.nn.utils.clip_grad_norm_(model.parameters(), nn_clip)
                 opt.step()
+                last_policy = float(policy_loss.detach())
+                last_value = float(value_loss.detach())
+                last_ent = float(ent.mean().detach())
+                last_loss = float(loss.detach())
+
+        writer.add_scalar("train/rollout_reward", float(rew_t.mean()), update)
+        writer.add_scalar("train/policy_loss", last_policy, update)
+        writer.add_scalar("train/value_loss", last_value, update)
+        writer.add_scalar("train/entropy", last_ent, update)
+        writer.add_scalar("train/loss", last_loss, update)
 
         if update == 1 or update % 10 == 0 or args.smoke:
             mean_rew, upright = rollout_eval(model, constants, device, n=64 if args.smoke else 256)
@@ -212,6 +232,8 @@ def main():
                 f"sec={elapsed:.1f}",
                 flush=True,
             )
+            writer.add_scalar("eval/reward", mean_rew, update)
+            writer.add_scalar("eval/upright", upright, update)
             args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
             torch.save({"model": model.state_dict(), "update": update}, args.checkpoint)
             if upright >= best_upright:
@@ -219,7 +241,10 @@ def main():
                 save_policy(model, constants, args.out)
 
     save_policy(model, constants, args.out)
+    writer.flush()
+    writer.close()
     print(f"wrote {args.out} and {WEB_POLICY_PATH}")
+    print(f"tensorboard --logdir {args.logdir}")
 
 
 if __name__ == "__main__":

@@ -61,12 +61,20 @@ python3 -m pip install -r requirements.txt
 python3 train/train.py --smoke
 ```
 
-That writes `policies/policy.json` and `web/public/policy.json`.
+That writes `policies/policy.json` and `web/public/policy.json`. Event files go under `runs/`.
+
+Watch a run:
+
+```bash
+tensorboard --logdir runs --port 6006
+```
+
+Scalars: `train/rollout_reward`, `train/policy_loss`, `train/value_loss`, `train/entropy`, `eval/reward`, `eval/upright`.
 
 Real run: batched worlds on a GPU, not SB3 over one numpy env.
 
 ```bash
-python3 train/train.py --num-envs 4096 --updates 400
+python3 train/train.py --num-envs 4096 --updates 400 --logdir runs
 ```
 
 GCP scripts (personal account, project `cartpole-demo`, sibling to `qwop-wr`):

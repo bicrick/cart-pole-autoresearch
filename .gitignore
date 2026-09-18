@@ -17,6 +17,7 @@ venv/
 policies/checkpoint.pt
 policies/*.log
 train.log
+runs/
 
 # Node / Vite
 node_modules/
