@@ -12,6 +12,13 @@
         <h1>cart double pendulum</h1>
         <div id="status">loading policy</div>
       </header>
+      <div class="goal-bar" role="group" aria-label="Equilibrium goal">
+        <span class="goal-label">goal</span>
+        <button type="button" class="goal-btn is-active" data-goal="UU" title="both upright">UU</button>
+        <button type="button" class="goal-btn" data-goal="UD" title="lower up, upper hanging">UD</button>
+        <button type="button" class="goal-btn" data-goal="DU" title="lower hanging, upper up">DU</button>
+        <button type="button" class="goal-btn" data-goal="DD" title="both hanging">DD</button>
+      </div>
       <div class="stage-wrap">
         <canvas id="stage"></canvas>
       </div>

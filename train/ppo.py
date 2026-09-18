@@ -6,10 +6,13 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 
+from goals import GOAL_IDS, NUM_GOALS, OBS_DIM, OBS_LAYOUT
+
 
 class ActorCritic(nn.Module):
-    def __init__(self, obs_dim=8, hidden=128, act_dim=1):
+    def __init__(self, obs_dim=OBS_DIM, hidden=128, act_dim=1):
         super().__init__()
+        self.obs_dim = obs_dim
         self.actor = nn.Sequential(
             nn.Linear(obs_dim, hidden),
             nn.Tanh(),
@@ -73,11 +76,19 @@ def export_actor(model: ActorCritic, constants: dict) -> dict:
             )
         elif isinstance(module, nn.Tanh):
             layers.append({"type": "tanh"})
+    obs_dim = getattr(model, "obs_dim", OBS_DIM)
     return {
-        "obs_dim": 8,
+        "obs_dim": obs_dim,
+        "obs_layout": OBS_LAYOUT,
+        "goals": list(GOAL_IDS),
+        "num_goals": NUM_GOALS,
         "hidden": constants["hidden"],
         "act_dim": 1,
         "force_limit": constants["forceLimit"],
         "physics": constants,
         "layers": layers,
+        "note": (
+            "Goal-conditioned UVFA policy. Browser inference is plain JS MLP "
+            "(no ONNX / TF.js). Obs = 8 state features + 4 one-hot goal + 4 target sin/cos."
+        ),
     }

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import torch
 
+from goals import OBS_DIM
 from physics import load_constants
 from ppo import ActorCritic, export_actor
 from train import POLICY_PATH, WEB_POLICY_PATH
@@ -20,8 +21,9 @@ def main():
     parser.add_argument("--out", type=Path, default=POLICY_PATH)
     args = parser.parse_args()
     constants = load_constants()
-    model = ActorCritic(hidden=constants["hidden"])
-    payload = torch.load(args.checkpoint, map_location="cpu")
+    payload = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
+    obs_dim = payload.get("obs_dim", OBS_DIM) if isinstance(payload, dict) else OBS_DIM
+    model = ActorCritic(obs_dim=obs_dim, hidden=constants["hidden"])
     model.load_state_dict(payload["model"] if "model" in payload else payload)
     spec = export_actor(model, constants)
     args.out.parent.mkdir(parents=True, exist_ok=True)

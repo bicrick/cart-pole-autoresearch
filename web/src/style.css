@@ -51,6 +51,46 @@ h1 {
   font-size: 0.9rem;
 }
 
+.goal-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.goal-label {
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  margin-right: 0.25rem;
+}
+
+.goal-btn {
+  appearance: none;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 0.35rem 0.7rem;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.goal-btn:hover {
+  border-color: var(--ink-muted);
+}
+
+.goal-btn.is-active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
 .stage-wrap {
   flex: 1 1 auto;
   min-height: 420px;
