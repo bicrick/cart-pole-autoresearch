@@ -153,7 +153,29 @@ def parse_args():
     parser.add_argument("--checkpoint", type=Path, default=ROOT / "policies" / "checkpoint.pt")
     parser.add_argument("--out", type=Path, default=POLICY_PATH)
     parser.add_argument("--logdir", type=Path, default=ROOT / "runs")
+    parser.add_argument(
+        "--run-name",
+        default=None,
+        help="Human slug for the TensorBoard folder (after the timestamp)",
+    )
     return parser.parse_args()
+
+
+def default_run_name(args) -> str:
+    """Descriptive TensorBoard run slug from key knobs."""
+    parts = []
+    ckpt = getattr(args, "checkpoint", None)
+    parts.append("ft" if ckpt and Path(ckpt).is_file() else "cold")
+    parts.append(f"e{args.num_envs}")
+    parts.append(f"r{args.rollout}")
+    parts.append("hardwalls")
+    if getattr(args, "center_hold_w", 0) and args.center_hold_w > 0:
+        parts.append("center")
+    if getattr(args, "uu_bias", 0):
+        parts.append(f"uub{args.uu_bias:g}".replace(".", "p"))
+    if getattr(args, "warmup_updates", 0):
+        parts.append(f"wu{args.warmup_updates}{args.warmup_goal}")
+    return "-".join(parts)
 
 
 def reward_kwargs(args):
@@ -387,7 +409,9 @@ def main():
     else:
         device_name = "cpu"
     device = torch.device(device_name)
-    logdir = args.logdir / time.strftime("%Y%m%d-%H%M%S")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    slug = (args.run_name or default_run_name(args)).strip().replace(" ", "-")
+    logdir = args.logdir / f"{stamp}_{slug}"
     logdir.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(str(logdir))
     rkw = reward_kwargs(args)
