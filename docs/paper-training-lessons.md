@@ -455,3 +455,11 @@ Hard endstops let policies prop UU / pump against the rail. Demo goal: leave the
 ## (aj) Catastrophic void-death (2026-09-18 ~12:14 CT)
 
 Without walls the policy ran off-track cheaply under a −2 OOB hitch (clipped away by `reward_clip=8`). Fix: `--oob-penalty` default **20**, applied **after** reward clip so terminal void-death stays ~−20, plus episode end. Log `train/oob_rate`. Restart nowalls FT with this.
+
+## (ak) Edge+hot finish → restart on oob20 nowalls (2026-09-18 ~12:40 CT)
+
+Edge stretch finished **u400**: reward~**1077**, align~**0.750**, `at_goal` UU/UD/DU/DD ~**0.70/0.78/0.76/0.77** (best min_at_goal ~**0.74** @u90 — keeper). Hot stretch2 also finished **u400**: reward~**1073**, align~**0.769**, `at_goal` ~**0.71/0.80/0.78/0.79** (best min ~**0.75** @u10). Swing left dead (do not revive).
+
+**Nowalls** FT `…nowalls-oob20-edge` @**u70**: reward~**977**, align~**0.638**, `at_goal` ~**0.55/0.60/0.67/0.73** (min **UU**) — climbing from cold transfer; leave alone.
+
+**Action:** promoted finished edge → `checkpoint.pt` / demo `policy.json`. Synced `scripts/next-train.sh` (oob20). Restarted **edge + hot** from their ckpts with `--oob-penalty 20` on the nowalls plant (u1 transfer dip reward~627–700 / align~0.44–0.49 — expected; same recovery curve as nowalls). Triple alive (GPU ~99%/6GB). Prefer promote from nowalls once its min_at_goal beats edge.
