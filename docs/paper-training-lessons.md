@@ -394,3 +394,12 @@ Prior L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her
 **Spong 1995 visit≠hold × Xin 2008:** align~0.74 vs min `at_goal`~0.55 is still a capture-enter/leave gap, not a near-Phase-A miss. Low HER let the mean climb (v–x) but did not alone buy sustained hold.
 
 **Action taken (natural restart):** started `20260918-134605_ft-e32768-r256-hardwalls-center-ch030-uub055-her01` from the u400 ckpt with `center_hold_w` **0.18→0.30**, keep `her_ratio=0.1`, `uu_bias=0.55`, NUM_ENVS=32768. Leave knobs alone mid-run; judge on whether UD crash floors trend up and whether min `at_goal` closes on 0.7. Throughput bump only if this FT finishes still short with VRAM headroom.
+
+
+## (ad) Early ch030 hold FT: UD floor recovers faster post-warmup (2026-09-18 ~09:11 CT)
+
+Live L4 FT `20260918-134605_ft-e32768-r256-hardwalls-center-ch030-uub055-her01` (`center_hold_w=0.30`, `her_ratio=0.1`) at **u60**: reward~**873**, align~**0.696** (early peak **u50** ~943 / ~0.737); `at_goal` UU/UD/DU/DD **~0.557/0.487/0.551/0.552**. Warmup trough @u20 (reward~398 / align~0.41 / UD~0.21) then rebound; **UD min-gate ~0.487** already above parent her01's early multi-goal UD (~0.40 @u40) and near that run's mid-band floor (~0.46–0.55). Mean still below parent u400 finish (1015 / 0.744). Phase A open; **leave knobs alone** mid-run.
+
+**Spong 1995 × Xin 2008 (extends v/ac):** raising align-ramped `center_hold_w` 0.18→0.30 is a **capture-stay** lever (keep cart near mid-track once aligned), orthogonal to discrete-eq HER. Early signal: after UU warmup, the UD intermediate recovers its hold floor faster without thrashing mean reward/align transfer from the ckpt. That matches Spong's local capture region needing *stay* pressure, not more hindsight relabel. Xin potential ordering still makes UD the nearest wrong sink — judge the bump on whether successive UD crash floors trend up toward 0.7 over the rest of this 400-u FT, not on the u50 reward spike (aa).
+
+**Do not redesign mid-run.** GPU ~15% / ~4.3 GB — throughput bump only after this FT finishes still short. Keep `her_ratio≤0.1`, `uu_bias≥0.55`; optional shorter `episode_len` only if min-gate still stalls after this hold-pressure stretch.
