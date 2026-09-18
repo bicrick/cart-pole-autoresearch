@@ -355,3 +355,14 @@ Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_
 **Also (Turcato saturated cost):** their `1−exp(−‖q−q_G‖²_Σ)` (ℓ_c=3) has **no velocity term** yet still encourages zero-velocity arrival — our spin_w is already tiny (0.0003); next-restart hold pressure should come from `sparse_bonus` / `center_hold_w` (or optional shorter `episode_len`), not from re-raising spin.
 
 **Next restart only (unchanged from v/w/x + optional horizon):** raise hold pressure before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`; consider shorter `episode_len` only if min-gate still stalls after hold-pressure bump. GPU ~16% / ~4.3 GB — no throughput bump mid-run (~190 updates left @ ~22 s/u).
+
+
+## (z) Low HER raises the interference-crash floor, not the crash rate (2026-09-18 ~07:25 CT)
+
+Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1`) at **u260**: reward~**900**, align~**0.676**, `at_goal` UU/UD/DU/DD **~0.560/0.515/0.540/0.523**. Soft post-peak band continues (u200/u230 near high-water ~961–962 / ~0.72; u240–u250 UD crash to ~0.46 then recover). Run high-water still **u170** (reward~962 / align~0.725). **UD min-gate ~0.515** (best this stretch **0.528 @u230**). Phase A open; **leave knobs alone** mid-run.
+
+**Xin 2008 × UVFA (Schaul 2015) × Andrychowicz 2017 (extends w/x/y):** dropping HER to 0.1 did not erase ~20-update DU↔UD interference crashes (u240–u250 UD 0.53→0.46 while DU/UU held). What changed vs parent `her_ratio=0.3` is the **crash floor**: UD bottoms ~0.46 and recovers within ~10 updates instead of freezing at ~0.34–0.39 for the rest of the FT (s/t). Low discrete-eq HER therefore raises the *floor of interference crashes*, not their occurrence — judge Phase A on whether successive crash troughs trend up, not on whether troughs vanish.
+
+**Spong 1995 visit≠hold still binds:** align~0.676 vs min `at_goal`~0.515; full-episode `at_goal` averages capture-enter/leave cycles over `episode_len=800` (complements Turcato short-horizon lever in y).
+
+**Next restart only (unchanged from v–y):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`; optional shorter `episode_len` only if min-gate stall persists after hold bump. GPU ~24% / ~4.3 GB — no throughput bump mid-run (~140 updates left @ ~22 s/u).
