@@ -209,3 +209,9 @@ Run `20260918-061318` still live at **u300–u320/400** (8192×256, soft `uu_bia
 
 User: elastic rail bounce was letting UU prop itself at the wall (demo x≈+2.4 at goal). Walls must **not** act like a pole brace. Change: `wallRestitution=0` — clamp cart `x`, kill cart `ẋ`, leave pole states untouched (no pole–wall collision exists; bounce coupling was the cheat). Stronger center reward still pulls back to mid.
 
+
+## (j) Finished walls soft-UU FT u400 → Phase A still open (2026-09-18 ~02:25 CT)
+
+Run `20260918-061318` completed at **u400**: `eval/reward≈890`, `align≈0.575`, `at_goal` UU/UD/DU/DD **0.45 / 0.30 / 0.48 / 0.47**. All four nonzero; **UD remains the gate**. Still short of Phase A bars (align ≳0.85, at_goal ≳0.7 all four + mid-track return).
+
+**Next:** keep Phase A — FT from this checkpoint with hard endstops + `center_w=0.06` / `center_hold_w=0.18` at **16384×256** (run `20260918-072313` after spot restart). No Phase B mid-episode switches yet. GPU ~35% / ~2.3 GB — bump `NUM_ENVS` further only on a later restart if util stays soft after warmup.
