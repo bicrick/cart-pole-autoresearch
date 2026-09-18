@@ -14,6 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from goals import (
     GOAL_IDS,
+    GOAL_INDEX,
     NUM_GOALS,
     OBS_DIM,
     angle_align,
@@ -45,13 +46,41 @@ def parse_args():
     parser.add_argument("--gae", type=float, default=0.95)
     parser.add_argument("--clip", type=float, default=0.2)
     parser.add_argument("--ent", type=float, default=0.01)
-    parser.add_argument("--episode-len", type=int, default=1200)
-    parser.add_argument("--impulse-p", type=float, default=0.01)
+    parser.add_argument("--episode-len", type=int, default=800)
+    parser.add_argument("--impulse-p", type=float, default=0.005)
     parser.add_argument(
         "--her-ratio",
         type=float,
-        default=0.8,
+        default=0.3,
         help="Fraction of failed episodes to relabel with nearest achieved equilibrium",
+    )
+    parser.add_argument(
+        "--track-limit",
+        type=float,
+        default=4.0,
+        help="|x| beyond this ends the episode (Duan/Gustafsson-style track fail)",
+    )
+    parser.add_argument("--reward-clip", type=float, default=8.0)
+    parser.add_argument("--align-w", type=float, default=1.5)
+    parser.add_argument("--energy-w", type=float, default=0.15)
+    parser.add_argument("--spin-w", type=float, default=0.0003)
+    parser.add_argument(
+        "--warmup-updates",
+        type=int,
+        default=80,
+        help="First N updates train only --warmup-goal (0 disables)",
+    )
+    parser.add_argument(
+        "--warmup-goal",
+        default="UU",
+        choices=list(GOAL_IDS),
+        help="Single goal during warmup curriculum",
+    )
+    parser.add_argument(
+        "--near-goal-p",
+        type=float,
+        default=0.5,
+        help="Probability a reset spawns angles near the assigned goal",
     )
     parser.add_argument("--device", default=None)
     parser.add_argument("--checkpoint", type=Path, default=ROOT / "policies" / "checkpoint.pt")
@@ -60,7 +89,17 @@ def parse_args():
     return parser.parse_args()
 
 
-def random_states(n, device, constants, mild=False):
+def reward_kwargs(args):
+    return dict(
+        align_w=args.align_w,
+        energy_w=args.energy_w,
+        spin_w=args.spin_w,
+        track_limit=args.track_limit,
+        reward_clip=args.reward_clip,
+    )
+
+
+def random_states(n, device, constants, mild=False, goals=None, near_goal_p=0.0):
     x = torch.empty(n, device=device).uniform_(-2.0, 2.0)
     xd = torch.empty(n, device=device).uniform_(-3.0, 3.0)
     th1 = torch.empty(n, device=device).uniform_(-math.pi, math.pi)
@@ -75,6 +114,18 @@ def random_states(n, device, constants, mild=False):
         th2[:k] = torch.empty(k, device=device).uniform_(-0.25, 0.25)
         th1d[:k] = torch.empty(k, device=device).uniform_(-0.5, 0.5)
         th2d[:k] = torch.empty(k, device=device).uniform_(-0.5, 0.5)
+    # Goal-conditioned local capture: spawn near the requested equilibrium.
+    if goals is not None and near_goal_p > 0:
+        hit = torch.rand(n, device=device) < near_goal_p
+        if hit.any():
+            angles = goal_angles(goals, device=device, dtype=torch.float32)
+            n_hit = int(hit.sum())
+            x[hit] = torch.empty(n_hit, device=device).uniform_(-0.5, 0.5)
+            xd[hit] = torch.empty(n_hit, device=device).uniform_(-0.5, 0.5)
+            th1[hit] = angles[hit, 0] + torch.empty(n_hit, device=device).uniform_(-0.3, 0.3)
+            th2[hit] = angles[hit, 1] + torch.empty(n_hit, device=device).uniform_(-0.3, 0.3)
+            th1d[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
+            th2d[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
     return torch.stack((x, xd, th1, th1d, th2, th2d), dim=-1)
 
 
@@ -124,7 +175,7 @@ def final_states_for_her(state_t, done_t):
 
 @torch.no_grad()
 def her_relabel_inplace(
-    obs_t, rew_t, val_t, state_t, force_t, goal_t, done_t, model, constants, her_ratio
+    obs_t, rew_t, val_t, state_t, force_t, goal_t, done_t, model, constants, her_ratio, rkw
 ):
     """
     For a random subset of failed envs, replace the goal with the nearest
@@ -162,6 +213,7 @@ def her_relabel_inplace(
         rel_forces.reshape(-1),
         rel_goals.reshape(-1),
         constants,
+        **rkw,
     ).reshape(t_h, n_h)
     flat_val = model.critic(flat_obs.reshape(-1, OBS_DIM)).squeeze(-1).reshape(t_h, n_h)
 
@@ -175,7 +227,7 @@ def her_relabel_inplace(
 
 
 @torch.no_grad()
-def rollout_eval(model, constants, device, n=64, steps=400):
+def rollout_eval(model, constants, device, rkw, n=64, steps=400, track_limit=4.0):
     """Evaluate each discrete goal separately; return overall + per-goal metrics."""
     model.eval()
     per_goal = {}
@@ -187,17 +239,21 @@ def rollout_eval(model, constants, device, n=64, steps=400):
         total = torch.zeros(n, device=device)
         align_sum = torch.zeros(n, device=device)
         hits = torch.zeros(n, device=device)
+        alive = torch.ones(n, dtype=torch.bool, device=device)
         for _ in range(steps):
             obs = make_obs(state, goals, constants)
             force = tanh_action(model.deterministic(obs), constants["forceLimit"]).squeeze(-1)
             state = step(state, force, constants=constants)
-            total += goal_reward(state, force, goals, constants)
+            rew = goal_reward(state, force, goals, constants, **rkw)
+            # Stop accruing after track fail so eval reward stays interpretable.
+            total += torch.where(alive, rew, torch.zeros_like(rew))
             angles = goal_angles(goals, device=device, dtype=state.dtype)
             align = 0.5 * (
                 angle_align(state[:, 2], angles[:, 0]) + angle_align(state[:, 4], angles[:, 1])
             )
-            align_sum += align
-            hits += at_goal(state, goals).float()
+            align_sum += torch.where(alive, align, torch.zeros_like(align))
+            hits += torch.where(alive, at_goal(state, goals).float(), torch.zeros(n, device=device))
+            alive = alive & (state[:, 0].abs() <= track_limit)
         mean_rew = float(total.mean())
         mean_align = float(align_sum.mean() / steps)
         mean_hit = float(hits.mean() / steps)
@@ -206,6 +262,12 @@ def rollout_eval(model, constants, device, n=64, steps=400):
         all_align.append(mean_align)
     model.train()
     return sum(all_rew) / NUM_GOALS, sum(all_align) / NUM_GOALS, per_goal
+
+
+def allowed_goals_for_update(args, update: int):
+    if args.warmup_updates > 0 and update <= args.warmup_updates:
+        return [GOAL_INDEX[args.warmup_goal]]
+    return None
 
 
 def main():
@@ -217,6 +279,7 @@ def main():
         args.updates = 2
         args.minibatch = 64
         args.episode_len = 64
+        args.warmup_updates = 0
     if args.device:
         device_name = args.device
     elif torch.cuda.is_available():
@@ -229,21 +292,37 @@ def main():
     logdir = args.logdir / time.strftime("%Y%m%d-%H%M%S")
     logdir.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(str(logdir))
+    rkw = reward_kwargs(args)
     print(
         f"device={device} envs={args.num_envs} rollout={args.rollout} "
         f"updates={args.updates} obs_dim={OBS_DIM} goals={GOAL_IDS} logdir={logdir}"
+    )
+    print(
+        f"reward: align_w={args.align_w} energy_w={args.energy_w} spin_w={args.spin_w} "
+        f"track_limit={args.track_limit} reward_clip={args.reward_clip} "
+        f"warmup={args.warmup_updates}x{args.warmup_goal} near_goal_p={args.near_goal_p} "
+        f"her_ratio={args.her_ratio}",
+        flush=True,
     )
     print(f"tensorboard --logdir {args.logdir}", flush=True)
 
     model = ActorCritic(obs_dim=OBS_DIM, hidden=constants["hidden"]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
-    state = random_states(args.num_envs, device, constants, mild=True)
-    goals = sample_goals(args.num_envs, device)
+    goals = sample_goals(args.num_envs, device, allowed=allowed_goals_for_update(args, 1))
+    state = random_states(
+        args.num_envs,
+        device,
+        constants,
+        mild=True,
+        goals=goals,
+        near_goal_p=args.near_goal_p,
+    )
     steps_left = torch.randint(1, args.episode_len + 1, (args.num_envs,), device=device)
 
     best_align = -1e9
     t0 = time.time()
     for update in range(1, args.updates + 1):
+        allowed = allowed_goals_for_update(args, update)
         obs_buf = []
         raw_buf = []
         log_buf = []
@@ -261,18 +340,27 @@ def main():
             force = tanh_action(raw, constants["forceLimit"]).squeeze(-1)
             state = apply_impulses(state, args.impulse_p)
             next_state = step(state, force, constants=constants)
-            rew = goal_reward(next_state, force, goals, constants)
+            rew = goal_reward(next_state, force, goals, constants, **rkw)
             steps_left -= 1
-            done = steps_left <= 0
+            oob = next_state[:, 0].abs() > args.track_limit
+            done = (steps_left <= 0) | oob
             # Buffer transition under the goal that produced the reward (pre-reset).
             goal_buf.append(goals.detach().clone())
             state_buf.append(next_state.detach())
             force_buf.append(force.detach())
             if done.any():
-                reset = random_states(args.num_envs, device, constants, mild=True)
+                new_goals = sample_goals(args.num_envs, device, allowed=allowed)
+                reset_goals = torch.where(done, new_goals, goals)
+                reset = random_states(
+                    args.num_envs,
+                    device,
+                    constants,
+                    mild=True,
+                    goals=reset_goals,
+                    near_goal_p=args.near_goal_p,
+                )
                 next_state = torch.where(done.unsqueeze(-1), reset, next_state)
-                new_goals = sample_goals(args.num_envs, device)
-                goals = torch.where(done, new_goals, goals)
+                goals = reset_goals
                 steps_left = torch.where(
                     done,
                     torch.full_like(steps_left, args.episode_len),
@@ -307,6 +395,7 @@ def main():
             model,
             constants,
             args.her_ratio,
+            rkw,
         )
 
         with torch.no_grad():
@@ -363,6 +452,7 @@ def main():
         writer.add_scalar("train/value_loss", last_value, update)
         writer.add_scalar("train/entropy", last_ent, update)
         writer.add_scalar("train/loss", last_loss, update)
+        writer.add_scalar("train/warmup_active", float(allowed is not None), update)
         for gid, name in enumerate(GOAL_IDS):
             frac = float((goal_t[-1] == gid).float().mean())
             writer.add_scalar(f"train/goal_frac/{name}", frac, update)
@@ -372,8 +462,10 @@ def main():
                 model,
                 constants,
                 device,
+                rkw,
                 n=32 if args.smoke else 64,
                 steps=200 if args.smoke else 400,
+                track_limit=args.track_limit,
             )
             elapsed = time.time() - t0
             parts = " ".join(f"{name}={per_goal[name]['align']:.2f}" for name in GOAL_IDS)

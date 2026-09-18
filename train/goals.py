@@ -68,8 +68,16 @@ def goal_encoding(goal_ids: torch.Tensor, device=None, dtype=None) -> torch.Tens
     return torch.cat((onehot, sincos), dim=-1)
 
 
-def sample_goals(n: int, device, dtype=torch.long) -> torch.Tensor:
-    return torch.randint(0, NUM_GOALS, (n,), device=device, dtype=dtype)
+def sample_goals(n: int, device, dtype=torch.long, allowed=None) -> torch.Tensor:
+    """Uniform over all goals, or over an explicit list/tensor of allowed ids."""
+    if allowed is None:
+        return torch.randint(0, NUM_GOALS, (n,), device=device, dtype=dtype)
+    if not torch.is_tensor(allowed):
+        allowed = torch.tensor(list(allowed), device=device, dtype=torch.long)
+    else:
+        allowed = allowed.to(device=device, dtype=torch.long)
+    idx = torch.randint(0, allowed.numel(), (n,), device=device)
+    return allowed[idx].to(dtype=dtype)
 
 
 def angle_align(th: torch.Tensor, th_star: torch.Tensor) -> torch.Tensor:
@@ -96,8 +104,27 @@ def at_goal(state: torch.Tensor, goal_ids: torch.Tensor, cos_thresh: float = 0.9
     return (a1 > cos_thresh) & (a2 > cos_thresh)
 
 
-def goal_reward(state, force, goal_ids, constants, sparse_bonus: float = 1.0):
-    """Dense cos-alignment to goal + soft cart centering + action cost + sparse hit."""
+def goal_reward(
+    state,
+    force,
+    goal_ids,
+    constants,
+    sparse_bonus: float = 1.0,
+    align_w: float = 1.5,
+    energy_w: float = 0.15,
+    spin_w: float = 0.0003,
+    track_limit: float = 4.0,
+    reward_clip: float = 8.0,
+):
+    """Dense goal reward with bounded penalties (see docs/paper-training-lessons.md).
+
+    - align_w * (cosΔθ1 + cosΔθ2): denser tracking of the requested equilibrium.
+    - energy_w * (align − soft kinetic): Xin/Spong-style push toward goal potential
+      at rest; kinetic is soft-capped so swing-up pumping is not crushed.
+    - Cart / spin penalties use soft-capped magnitudes so a drifting cart cannot
+      produce −10k episode returns (root cause of the collapsed GCP eval curve).
+    - Optional flat OOB hitch when |x| > track_limit (train also marks done).
+    """
     x = state[..., 0]
     xd = state[..., 1]
     th1 = state[..., 2]
@@ -105,12 +132,31 @@ def goal_reward(state, force, goal_ids, constants, sparse_bonus: float = 1.0):
     th2 = state[..., 4]
     th2d = state[..., 5]
     angles = goal_angles(goal_ids, device=state.device, dtype=state.dtype)
-    align = angle_align(th1, angles[..., 0]) + angle_align(th2, angles[..., 1])
-    center = 0.02 * (x * x + 0.1 * xd * xd)
-    spin = 0.002 * (th1d * th1d + th2d * th2d)
+    a1 = angle_align(th1, angles[..., 0])
+    a2 = angle_align(th2, angles[..., 1])
+    align = a1 + a2
+
+    # Soft-bound cart penalty to the track (obs / termination scale).
+    x_eff = x.clamp(-track_limit, track_limit)
+    xd_eff = xd.clamp(-20.0, 20.0)
+    center = 0.02 * (x_eff * x_eff + 0.1 * xd_eff * xd_eff)
+    oob = (x.abs() > track_limit).to(state.dtype)
+
+    # Soft-cap spin so energy pumping (Spong) is not dominated by ω².
+    spin_raw = th1d * th1d + th2d * th2d
+    spin = spin_w * spin_raw.clamp(max=200.0)
+
     effort = 0.001 * (force / constants["forceLimit"]) ** 2
     sparse = sparse_bonus * at_goal(state, goal_ids).to(state.dtype)
-    return align - center - spin - effort + sparse
+
+    # Energy-to-goal: favor alignment and modest kinetic near the target.
+    kin_soft = (0.05 * xd_eff * xd_eff + 0.02 * spin_raw).clamp(max=40.0)
+    energy = energy_w * (align - 0.25 * kin_soft)
+
+    rew = align_w * align + energy - center - spin - effort + sparse - 2.0 * oob
+    if reward_clip is not None and reward_clip > 0:
+        rew = rew.clamp(-reward_clip, reward_clip)
+    return rew
 
 
 def conditioned_obs(state_obs: torch.Tensor, goal_ids: torch.Tensor) -> torch.Tensor:
