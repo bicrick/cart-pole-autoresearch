@@ -366,3 +366,13 @@ Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_
 **Spong 1995 visit≠hold still binds:** align~0.676 vs min `at_goal`~0.515; full-episode `at_goal` averages capture-enter/leave cycles over `episode_len=800` (complements Turcato short-horizon lever in y).
 
 **Next restart only (unchanged from v–y):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`; optional shorter `episode_len` only if min-gate stall persists after hold bump. GPU ~24% / ~4.3 GB — no throughput bump mid-run (~140 updates left @ ~22 s/u).
+
+
+## (aa) Reward high-water can lead min-gate by a full interference cycle (2026-09-18 ~07:44 CT)
+
+Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1`) at **u310**: reward~**973**, align~**0.719**, `at_goal` UU/UD/DU/DD **~0.591/0.523/0.619/0.551**. **New run high-water on reward** (prior ~962 @u170/u200); align nearly ties the prior peak (~0.725). UD min-gate just recovered from the u290 trough (~0.458) to **~0.523** — same crash-floor band as lesson (z), not a Phase A clear. Phase A open; **leave knobs alone** mid-run.
+
+**Spong 1995 × Turcato 2024 × Xin/UVFA (extends x/y/z):** under low discrete-eq HER, mean **reward can set a new high-water while `min(at_goal)` is still only climbing out of an interference trough**. Episode return is dominated by dense `align_w` (and center terms) over `episode_len=800`, so a policy that visits neighborhoods more often / with better late-episode align prints a bigger reward before hold fractions catch up. Treat reward/align HWs as **leading** signals; Phase A still judges on **`min(at_goal/{UU,UD,DU,DD})`** and whether successive UD crash floors trend up (z), not on reward alone.
+
+**Practical:** do not interpret a mid-run reward spike as reason to raise HER or kill the FT — and do not declare Phase A progress from reward HW if the min-gate has not moved. **Next restart only (unchanged from v–z):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`; optional shorter `episode_len` only if min-gate stalls after hold bump. GPU ~15% / ~4.3 GB — no throughput bump mid-run (~90 updates left @ ~22 s/u).
+
