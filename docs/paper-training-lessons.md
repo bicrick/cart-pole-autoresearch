@@ -327,3 +327,11 @@ Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_
 **Next restart only (if Phase A still open at/after u400):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER again; keep `her_ratio≤0.1` and `uu_bias≥0.55`. GPU ~16% / ~4.3 GB — throughput bump only after this FT finishes.
 
 
+## (w) Post-peak trough: low HER still allows DU↔UD interference (2026-09-18 ~06:30 CT)
+
+Live L4 FT `20260918-104353_ft-e32768-r256-hardwalls-center-uub055-her01` (`her_ratio=0.1`) at **u120**: reward~**885**, align~**0.682**, `at_goal` UU/UD/DU/DD **~0.578/0.418/0.606/0.487**. Vs prior fire @u100 (908 / 0.693 / 0.545/0.477/0.593/0.507): soft multi-goal dip (also u110 trough reward~852 / align~0.664). Run high-water still **u70–u80** (reward~926–928 / align~0.71). **UD min-gate** 0.51@u90 → 0.42@u120 while **DU hit run-high `at_goal`~0.61**. Phase A open; **leave knobs alone** mid-run.
+
+**Xin 2008 × UVFA (extends r/v):** dropping HER to 0.1 fixed the *systematic* min-gate freeze (v) but does **not** erase adjacent-intermediate capacity fights. The first post-peak trough under low HER re-shows lesson (r)'s DU↔UD steal — mean reward/align stay in the mid-880 / ~0.68 band while `min(at_goal)` slides. Treat this as **interference noise on a rising band**, not HER failure and not collapse (q).
+
+**Spong visit≠hold (o) still binds:** align~0.68 vs min `at_goal`~0.42. **Next restart only (unchanged from v):** raise hold pressure (`sparse_bonus` / `center_hold_w`) before raising HER; keep `her_ratio≤0.1` and `uu_bias≥0.55`. GPU ~16% / ~4.3 GB — no throughput bump mid-run.
+
