@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~15:32 CT.
+Last updated: 2026-09-19 ~15:42 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -642,3 +642,69 @@ Unchanged since mid-2026: no soft-landing numbers, no energy Plan-B coeffs, last
 35. Still: after v5 cook, **split swing vs hold + ~0.1 rad handoff** remains highest-ROI unimplemented architecture change.
 
 **No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
+
+### Research pass (2026-09-19 ~15:42 CT) — progress PBRS + entropy floor + handoff hysteresis
+
+Digged Ng PBRS (progress gaming), AE-PPO adaptive entropy (Symmetry 2026), arXiv:2608.24488 (latent vs executed entropy under tanh), and arXiv:2606.22145 end-to-end (handoff + LPF discrete form + hysteresis). Re-fetched fawraw `sim/handoff.py` + `m4_findings.md` (still mid-2026; no new M4 soft-landing). **Direction unchanged.** P0 progress + P1 flip still live on v5; top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (refines existing P0/P1/P2; no new #1).
+
+Live context (overnight ~15:32): A entropy already **negative (~−0.12 @u100)** under fixed `--ent=0.01` — same collapse class as prior B hot-lr; cooler-lr alone may not be enough next stretch.
+
+#### Progress shaping: raw Δ vs potential-based (PBRS)
+
+Our live term is:
+
+```text
+rew += progress_w * (align_now − align_prev)   # γ missing
+```
+
+Ng/Harada/Russell **potential-based reward shaping** preserves optimal policies only for \(F=\gamma\Phi(s')-\Phi(s)\). Raw undamped Δ can be farmed by oscillating align (pump progress without net swing-up). With γ=0.99 and Φ = mean cos-align:
+
+| Form | Formula | Status |
+|---|---|---|
+| Live (fawraw-style Δ) | `progress_w * (Φ_now − Φ_prev)` | Shipping on v5 |
+| **PBRS-correct** | `progress_w * (γ·Φ_now − Φ_prev)` | **Not coded** — one-line fix when green-lit |
+| Optional Φ | mean cos-align **or** −‖θ−θ*‖ / −\|E−E_UUU\| | Prefer align first (matches current meter) |
+
+Does **not** displace two-policy handoff; it de-risks the progress signal already in A/B/C.
+
+#### Entropy collapse under product+progress (addresses A @u100)
+
+Our actor: unbounded `Normal(mean, std)` on **raw** → `tanh(raw)*forceLimit` executed. Entropy bonus uses **latent** `dist.entropy()` (`train/ppo.py`). Fixed `--ent` default **0.01**.
+
+| Lever | Recipe | Why |
+|---|---|---|
+| **AE-PPO adaptive β** (Symmetry 2026) | Linear β **0.05→0.005** + raise β when measured H below target, cut when above | Direct anti-collapse; MuJoCo continuous control, not pendulum-specific but matches our symptom |
+| **Executed-action entropy H(a)** (arXiv:2608.24488) | Entropy on post-tanh action, not latent u | Latent H has **zero mean gradient** + constant variance push → bound saturation; H(a) Jacobian pulls means inward |
+| Fixed floor (cheap A/B) | `--ent` **0.02–0.05** on swing slot A until near_target at_goal moves | Retune-at-u400 candidate if A stays ≤−0.1 |
+
+Prefer adaptive β or H(a) over cranking force. Do **not** mid-run kill; fold into next cool retune / handoff stretch.
+
+#### Two-policy handoff cookbook fills (arXiv:2606.22145 + fawraw)
+
+Already had: catch basin ~0.1 rad / ~0 ω; fawraw latch; LPF τ≈0.3. Newly locked for when we code split nets:
+
+| Knob | Value | Source |
+|---|---|---|
+| Swing algo (paper) | **TD3** + action LPF in-env | 2606.22145 (we can keep PPO swing) |
+| Hold algo (paper) | REINFORCE / any stabilizer | Separate from swing |
+| Discrete LPF | `y_{t+1}=y_t+(h/τ)(x_t-y_t)`, **τ=0.3**, h=dt | Prevents bang-bang that broke their hardware |
+| Switch hysteresis | **Slower exit than enter**; larger exit bounds (dwell without hard min-time) | Beyond fawraw latch — stops chatter at basin edge |
+| Reach / handoff region (single-pole paper) | `|α|<π/12` (~15°), `|α̇|<5π/6`, `|x|<0.4`, `|ẋ|<3` | Scale to triple: use measured basin, not these numbers blindly |
+| fawraw API | `HandoffController(swing, stab, target, capture_tol_rad=0.3, capture_vel_rad_s=None, latch=True)` | **Ship tol≤0.1** (measured), not code default 0.3 |
+| DR | Sensitivity-guided **small** param set ≫ blanket 10% | Only matters at sim2real; skip for sim-only UUU |
+
+#### Still empty / unchanged
+
+- Serial cart-triple **classical energy coeffs**: still none (Xin=double/parallel; Glück=feedforward). Keep P2 mech \|E−E_UUU\| from 15:14 pass.
+- fawraw M4 soft-landing coefs: still unspecified; last code **2026-06-25**.
+- Force 80–100: still demoted.
+
+#### Amend recommended redesign (additions only)
+
+36. When touching progress: switch to **PBRS** `γ·Φ_now − Φ_prev` (Φ=mean cos-align); keep `progress_w≈1`.
+37. On A entropy ≤−0.1 past ~u150: next stretch try **`--ent` 0.02–0.05** or AE-PPO β schedule; optional entropy on **tanh action**.
+38. Handoff impl: copy fawraw latch + **hysteresis exit**; LPF τ=0.3 on swing actions; capture_tol from **measured** basin (≤0.1), never 0.3 default.
+39. Rank unchanged: after v5 cook, **split swing vs hold** still highest-ROI unimplemented; PBRS + ent floor are cheap co-travelers.
+
+**No code this fire** (overnight owns train). NEED_USER_PING no.
+
