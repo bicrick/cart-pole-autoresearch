@@ -1,17 +1,34 @@
 #!/usr/bin/env bash
+# Keep hot training alive: wait → restart → loop (never exit while armed).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+mkdir -p logs
 find_pid() { ps -eo pid=,args= | awk '/^[ ]*[0-9]+[ ]+python3 train\/train\.py .*ft-e16384-r128-hot-lr1e3-clip03-edge/{print $1; exit}'; }
-PID=$(find_pid || true)
-if [[ -n "${PID}" ]]; then
-  echo "$(date -u +%FT%TZ) waiting for hot python pid=$PID" >> logs/continue-hot.log
-  while kill -0 "$PID" 2>/dev/null; do sleep 30; done
-  echo "$(date -u +%FT%TZ) hot exited; restarting" >> logs/continue-hot.log
+start_train() {
+  nohup python3 train/train.py \
+    --num-envs 16384 --updates 400 --rollout 128 --episode-len 1200 \
+    --track-limit 2.4 --reward-clip 8.0 --oob-penalty 20 \
+    --align-w 1.5 --energy-w 0.35 --spin-w 0.0003 --center-w 0.06 --center-hold-w 0.30 \
+    --warmup-updates 0 --uu-bias 0.55 --near-goal-p 0.15 --hang-start-p 0.45 \
+    --wrong-eq-p 0.25 --goal-switch-p 0.004 --fold-pair-p 0.55 --her-ratio 0.1 --impulse-p 0.01 \
+    --lr 1e-3 --clip 0.3 \
+    --logdir runs --run-name ft-e16384-r128-hot-lr1e3-clip03-edge \
+    --checkpoint policies/checkpoint-hot.pt --out policies/policy-hot.json \
+    >> logs/train-hot.log 2>&1 &
+  echo "$(date -u +%FT%TZ) STARTED hot pid=$!" >> logs/continue-hot.log
+}
+while true; do
+  PID=$(find_pid || true)
+  if [[ -n "${PID}" ]]; then
+    echo "$(date -u +%FT%TZ) waiting for hot python pid=$PID" >> logs/continue-hot.log
+    while kill -0 "$PID" 2>/dev/null; do sleep 30; done
+    echo "$(date -u +%FT%TZ) hot exited; restarting" >> logs/continue-hot.log
+    sleep 5
+  fi
+  if [[ -n "$(find_pid || true)" ]]; then
+    echo "$(date -u +%FT%TZ) hot already running; continue wait" >> logs/continue-hot.log
+    continue
+  fi
+  start_train
   sleep 5
-fi
-if [[ -n "$(find_pid || true)" ]]; then
-  echo "$(date -u +%FT%TZ) hot already running; exit" >> logs/continue-hot.log
-  exit 0
-fi
-nohup python3 train/train.py --num-envs 16384 --updates 400 --rollout 128 --episode-len 1200 --track-limit 2.4 --reward-clip 8.0 --oob-penalty 20 --align-w 1.5 --energy-w 0.35 --spin-w 0.0003 --center-w 0.06 --center-hold-w 0.30 --warmup-updates 0 --uu-bias 0.55 --near-goal-p 0.15 --hang-start-p 0.45 --wrong-eq-p 0.25 --goal-switch-p 0.004 --fold-pair-p 0.55 --her-ratio 0.1 --impulse-p 0.01 --lr 1e-3 --clip 0.3 --logdir runs --run-name ft-e16384-r128-hot-lr1e3-clip03-edge --checkpoint policies/checkpoint-hot.pt --out policies/policy-hot.json >> logs/train-hot.log 2>&1 &
-echo "$(date -u +%FT%TZ) STARTED hot pid=$!" >> logs/continue-hot.log
+done
