@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~11:06 CT.
+Last updated: 2026-09-19 ~11:33 CT.
 
 
 ## Implementation status (2026-09-19 ~11:30 CT)
@@ -324,3 +324,72 @@ Already had T=3.5 s, |ÿ|≤22 m/s², |s|≤0.7 m, |ṡ|≤3 m/s. Post-print add
 25. Size track / soft-landing with Glück’s **~0.6 m** classical overshoot sensitivity in mind.
 
 **Green-lit 2026-09-19:** product/UUU-first/grace/barrier landed on main; still do not kill double xonly.
+
+
+### Research pass (2026-09-19 ~11:33 CT) — new actionable diffs
+
+Re-checked fawraw main (commits through **2026-07-02**, last *code* **2026-06-25**), `sim/handoff.py` + `docs/m4_findings.md` + M3b-v6/v7 yamls, and adjacent 2025–2026 papers (arXiv:2606.22145 single cart-pole handoff; Cambridge Robotica 2026 already noted; no new cart-triple/56 paper beyond Lim). **Direction unchanged** (UUU-first → product/abs → hard-EP → later 56). Fills for the post-UUU UVFA hard-EP stage + catch-basin/56 plumbing; still no energy coeffs and no PPO+product cookbook.
+
+#### Hard-EP oversample for a *shared* multi-EP policy (UVFA-shaped; fills gap 1)
+
+fawraw's M3 breakthrough is **one** conditional TQC (not Lim's 8 specialists) with `target_mode=weighted`. Exact sampler (`triple_pendulum_env.py`):
+
+```text
+w = ones(8); w[4] = w[6] = hard_ep_weight; p = w / w.sum()
+# EP4=DDU (tip-up), EP6=DUU only — never blanket-boost all non-UUU
+```
+
+| `hard_ep_weight` | P(EP4)=P(EP6) | P(each other EP) | Role |
+|---|---|---|---|
+| **10** | ≈38.5% | ≈3.8% | Prefer first if UUU regresses (v7 intent) |
+| **20** | ≈43.5% | ≈2.2% | Cloud winner phase1 (~46% in their writeup) |
+| **2.5** | ≈25% | ≈8.3% | **Required consolidation** after focus |
+
+**UVFA PPO schedule to steal after UUU holds ≳0.80** (our `train_triple` still has no `hard_ep_weight` — next code lever, not overnight):
+
+1. Warm-start the UUU/multi-eq product ckpt.
+2. Phase1 focus: `hard_ep_weight=10` (escalate to 20 only if tip-up EPs stay ~0), `init_mode=near_target`, `init_noise=0.05`, lr≈1e-4 (or our PPO equivalent), ~600K-env-steps worth of updates.
+3. Phase2 consolidate: **`hard_ep_weight→2.5`**, lr≈5e-5, ~500K — without this, UUU/easy EPs regress (v6: EP7 80%→40% under weight=20 alone).
+4. Watch per-EP hold; do not open 56 until overall ≳0.75.
+
+This is the closest published **shared-policy** hard-EP recipe to our UVFA; Lim's 8×TQC remains the fallback if UVFA+weight still starves tip-up.
+
+#### Soft-landing / catch-basin — concrete next knobs, still no reward coefs (fills gap 2)
+
+fawraw has **not** shipped soft-landing coefficients (plan only). What *is* newly lockable from `m4_findings.md` + `handoff.py`:
+
+| Knob | Value | Why |
+|---|---|---|
+| Wider-basin catcher init (do this *before* inventing soft-landing coefs) | Raise `init_noise` ≫0.05; add **non-zero link velocities**; **off-centre cart** | M3@UDD catches only ≤0.1 rad / ~0 vel; swing-up delivers ~0.2 rad mid-swing |
+| Handoff capture gate | Set `capture_tol_rad` ≤ **measured** basin (~**0.1**), **not** the code default **0.3** | Default 0.3 fires hand-off then stabilizer drops the delivery |
+| Velocity gate | Optional `capture_vel_rad_s` (near 0) | Basin grid: any |ω|≳2 → catch rate 0 |
+| Latch | `latch=True` | Prevents flip-flop back to swing-up on a near-miss |
+| Transition success (56 eval) | **0.2 rad** tol × **200** consecutive steps; sparse `transition_bonus=200` | fawraw M4 env defaults — hold, not touch-and-go |
+| Soft-landing reward | Still unspecified ("arrive slow + cart-centred") | No numbers yet; prefer wider catcher + progress/barrier first |
+
+#### 8 specialists vs one UVFA (gap 3) — still no PPO head-to-head
+
+- Lim: **8×TQC** → all 56 on hardware.
+- fawraw: **1 shared** conditional TQC + hard-EP → 72.5% on 8 holds (not 56).
+- No new 2025–2026 evidence that 8 PPO specialists beat one UVFA (or vice versa) on cart-triple. Keep UVFA+hard-EP as default; specialists if tip-up stays dead after weight=20 + consolidate.
+
+#### Gaps that remain empty
+
+- **Energy-based swing-up coeffs for cart-triple:** still none (fawraw lists it as Plan-B if probes fail; H-EARS / Xin–Spong are wrong plant or abstract-only).
+- **PPO+product hypers** (n_envs / rollout / clip / lr schedule): nothing published on underactuated multi-link with product reward — keep our double PPO defaults until A/B.
+- **fawraw since mid-2026:** last *code* **2026-06-25** (handoff + barrier + catch-basin tool); **2026-07-02** docs-only. No M4 soft-landing implementation, no new configs, M4 still gated.
+
+#### Adjacent paper (later 56 / sim2real only)
+
+arXiv:2606.22145 (2026) — *single* cart-pole swing-up↔stabilize zero-shot: separate policies + handoff; discrete action LPF **τ=0.3**; sensitivity-guided DR + linear CL. Steal the **LPF / bumpless switch** idea for a future 56 hand-off, not for the current UUU/product stage.
+
+#### Amend recommended redesign (additions only)
+
+26. After UUU holds: implement **weighted EP sampling** (boost **EP4+EP6 only**) with the exact `w/sum(w)` formula; run **focus (w=10→20) then consolidate (w=2.5, lower lr)** — do not stay at weight=20.
+27. Before soft-landing coef hunting: **widen the catcher** (larger `init_noise`, nonzero ω, off-centre x) and measure basin again.
+28. Handoff gate ≤ measured basin (~0.1 rad) + optional vel gate + **latch**; never ship the 0.3 default against a 0.1 basin.
+29. 56 success metric: **0.2 rad × 200 steps** (+ optional bonus 200); require hold after arrival.
+30. Optional later: action LPF **τ≈0.3** on swing-up (arXiv:2606.22145) for smoother hand-off.
+
+**Still do not kill double xonly.** Product/UUU-first/grace/barrier already on main; next code lever after UUU holds is hard-EP weighting + consolidate, not a redesign.
+
