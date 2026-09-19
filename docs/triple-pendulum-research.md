@@ -91,6 +91,7 @@ Naïve "pad and continue" does **not** just work: weights for θ3 / new goal bit
 ## Sources
 
 - Glück, Eder, Kugi — Swing-up of a triple pendulum on a cart (Automatica 2013) — DDD→UUU
+- Baek, Lee, Lee, Jeon, Han — TIP swing-up RL + VER (EAAI 128:107518, 2024); product-reward lineage for Lim
 - Graichen, Treuer, Zeitz — Fast side-stepping of the triple inverted pendulum (CDC 2005)
 - Lim, Ju, Lee — 56 transition control via sim-to-real RL / TQC (KIEE 2025); PDF + YouTube above
 - MDPI Machines 13(3):186 (2025) — double inverted pendulum Sim2Real, 4 EPs / 12 transitions
