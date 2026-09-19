@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~16:02 CT.
+Last updated: 2026-09-19 ~16:10 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -741,4 +741,56 @@ Already had: catch basin ~0.1 rad / ~0 ω; fawraw latch; LPF τ≈0.3. Newly loc
 39. Rank unchanged: after v5 cook, **split swing vs hold** still highest-ROI unimplemented; PBRS + ent floor are cheap co-travelers.
 
 **No code this fire** (overnight owns train). NEED_USER_PING no.
+
+
+### Research pass (2026-09-19 ~16:10 CT) — AR-EAPO / random truncation + adjacent out-of-scope
+
+Digged AR-EAPO (arXiv:2409.08938 IROS'24 AI Olympics; arXiv:2505.07516 / ICRA 2025 global-policy update), axPPO (arXiv:2405.04664 return-scaled ent), Li RA-L 2024 CoM UTPR, re-checked fawraw README/CHANGELOG (still last code **2026-06-25**). Live context: cool-ent **v6** already staged for u400 (ENT 0.05/0.03/0.04); P0 progress + P1 flip live on v5. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (new cookbook fills under existing P1/P2 entropy/explore family; does not displace handoff as #1).
+
+#### AR-EAPO — single-policy swing+hold that worked on acrobot/pendubot
+
+IROS/ICRA AI Olympics solutions hit **swing-up + stabilize with one policy** and *light* reward engineering via average-reward MaxEnt PPO (not our discounted product+progress). Plant is **2-DOF underactuated** (joint torque), not cart-triple — transfer is algorithmic, not plant numbers.
+
+| Knob | IROS'24 | ICRA'25 global | Steal for us? |
+|---|---|---|---|
+| Objective | Average-reward MaxEnt | same | Full port = P2 rewrite of `ppo.py` advantage |
+| Reward GAE λ / entropy GAE λₑ | **0.8 / 0.6** | same | Separate entropy advantage (beyond fixed `--ent`) |
+| Temperature τ | 2.0 | **1.5** | MaxEnt scale; related to our β |
+| PPO clip ε | **0.05** | same | Tighter than typical 0.2 — consider on cool retune |
+| Gain step η | 0.01 | same | Average-reward specific |
+| **p_trunc** (per-step random truncate) | **1e-3** | **5e-3** | **Cheap MDP steal** — biases *faster* swing-up (horizon ≈1/p; stops amortizing swing cost over long holds) |
+| Reset noise variance | (smaller) | **4.0** | Wide ICs for global policy; we already have Lim-wide / hang mixes |
+| Reward shape | light quadratic; **omit torque penalty** when speed matters | same | Don't over-penalize |u| during swing phase |
+
+**Why it matters now:** overnight entropy collapse under fixed `--ent=0.01` is exactly the explore failure AR-EAPO's separate entropy advantage + MaxEnt temp target. cool-ent v6 (raise ENT floor) is the right *cheap* first fix already staged. If v6 still leaves near_target at_goal/UUU flat, next options in order:
+
+1. Keep PPO; add **`p_trunc≈0.001–0.005`** random episode truncate on swing slots (A/C) — one-line MDP change, no algo rewrite.
+2. AE-PPO / H(a) from 15:42 pass (adaptive β / executed-action entropy).
+3. Optional full AR-EAPO or SAC/TQC slot (P2) if single-policy path is kept vs split nets.
+
+**Does not demote handoff:** AR-EAPO shows single-policy *can* work on 2-DOF with MaxEnt+avg-reward; cart-triple papers that hit hardware (Baek/Lim) still used SAC/TQC + (often) specialists or VER. Two-policy remains highest-ROI *architecture* change if UUU hold stays ~0 after v6.
+
+#### axPPO (arXiv:2405.04664) — note only
+
+Scales entropy coef by recent return. Weaker evidence than AE-PPO / AR-EAPO for continuous swing-up; prefer AE-PPO schedule or AR-EAPO λₑ split if coding adaptive explore.
+
+#### Li RA-L 2024 CoM UTPR — out of scope
+
+Operational-space QP balancing for **passive-first-joint** vertical UTPR (active joints 2–3). Balance/tracking only — not cart-actuated, not swing-up, not 56. Same adjacent bucket as Cambridge Robotica 2026 CSAC-QI. No recipe steal.
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing coefs: still unspecified; last code **2026-06-25**.
+- Serial cart-triple classical energy coeffs: still none.
+- Force 80–100: still demoted (Glück+Baek).
+- Rank: after v5→v6 cook, **split swing vs hold** still #1 unimplemented; **p_trunc** joins PBRS + ent floor as cheap co-travelers.
+
+#### Amend recommended redesign (additions only)
+
+40. If cool-ent v6 still flat on near_target at_goal/UUU: try **`p_trunc∈[1e-3,5e-3]`** on swing slots before more Newtons or full algo rewrite.
+41. Optional P2 single-policy path: AR-EAPO cookbook (λ=0.8, λₑ=0.6, τ≈1.5–2, clip ε=0.05, η=0.01) **or** Baek/Lim SAC·TQC — prefer handoff if coding budget allows only one architecture change.
+42. Ignore Li CoM / UTPR QP for cart-triple UUU.
+
+**No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
+
 
