@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~15:50 CT.
+Last updated: 2026-09-19 ~16:02 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -31,6 +31,23 @@ NUM_ENVS=8192 FORCE_LIMIT=40 PROGRESS_W=1.0 FLIP_AUGMENT=1 bash scripts/next-tra
 # A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
+
+## Overnight fire — status (2026-09-19 ~16:02 CT)
+
+**VM:** `cartpole-train-od` RUNNING us-east1-b L4 ~99%/15.7GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~37.1h ≈ **~$26** @~$0.70/hr (≤$30; ~2h headroom to u400 ≈$27.5). continue-triple-a/b/c armed with **cool-ent v6** (live still v5). GPU healthy. No NaNs.
+
+**Jobs (alive, progress+flip v5 — do not mid-run kill):**
+| Slot | Recipe | ~u | rollout_r | entropy | goal_frac/UUU | near_target at_goal/UUU | near_target align/UUU | hang align/UUU |
+|---|---|---|---|---|---|---|---|---|
+| A | swing hang+near f50 bar10 e0.5 prog1+flip | ~160 | ~0.52 | **~−0.54** ↓↓ | ~0.93 | ~0.036 flat | ~+0.173 | ~−0.076↑ |
+| B | hold near_target f40 bar10 e0.15 prog1+flip | ~157 | ~0.54 | **~−0.33** ↓ | ~0.92 | ~0.046 flat | ~+0.127↑ | ~−0.29↑ |
+| C | combo hang0.3 f40 bar10 e0.35 prog1+flip | ~150 | ~0.52 | **~−0.26** ↓ | ~0.93 | ~0.040 flat | ~+0.154↑ | ~−0.20 |
+
+**Diagnosis:** Entropy collapse deepened since 15:50 (A −0.34→**−0.54**; B/C more negative). near_target at_goal/UUU still ~0.04 (no hold). B/C near_target UUU *align* still climbing slowly; A hang UUU align inching toward 0. oob≈0. Force 40–50 + barrier10 still OK vs Glück/Lim — **not a plant/force issue**; explore/β under fixed `--ent=0.01`.
+
+**Action:** None mid-run. cool-ent **v6** already staged (ENT 0.05/0.03/0.04, LR 1e-4, cold markers on next start). u400 ETA ~18:15 CT (~$27.5). **Budget watch:** overnight v6 past ~21:00 CT pushes past ~$30 — next fire should gate continue vs stop if cap binds.
+
+**Watch next:** v5 finish → auto cold v6; entropy floor; near_target at_goal/UUU. Stage-gate still UUU hold ≳0.80 before multi-eq. NEED_USER_PING no (same story as 15:50; path already staged).
 
 ## Overnight fire — status (2026-09-19 ~15:50 CT)
 
