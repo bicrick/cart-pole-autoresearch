@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~14:00 CT.
+Last updated: 2026-09-19 ~14:20 CT.
 
 
 ## Implementation status (2026-09-19 ~12:55 CT)
@@ -17,7 +17,7 @@ Last updated: 2026-09-19 ~14:00 CT.
 | Smoke | `train/test_physics_triple.py` | Inverted unstable, hang restoring, nowalls |
 | Launch | `scripts/next-train-triple.sh` | Product + UUU-first; default `FORCE_LIMIT=40` |
 | UUU stage | `scripts/next-train-triple-uuu.sh` / `next-train-triple-c.sh` | Hold / pure UUU specialist wrappers |
-| Watchers | `scripts/continue-triple-{a,b,c}.sh` | **A:** UUU-only bottom-swing f40 bar10 e05 hang1.0 (marker `.triple-a-uuu-bottom-v3`); **B:** UUU-only wide f60 bar10 e035 hang0.3 near0.25 lr5e-4 (marker `.triple-b-uuu-wide-f60-v3`); **C:** UUU swing near_target+hang=0.3 bar10 e035 (leave alone) |
+| Watchers | `scripts/continue-triple-{a,b,c}.sh` | **A:** UUU-only bottom-swing f40 bar10 e05 hang1.0 (marker `.triple-a-uuu-bottom-v3`); **B:** UUU-only wide f60 bar10 e035 hang0.3 near0.25 **lr3e-4** (marker `.triple-b-uuu-wide-f60-lr3e4-v4`; was lr5e-4/v3); **C:** UUU swing near_target+hang=0.3 bar10 e035 (leave alone) |
 
 **OBS_DIM = 25** = 11 state + one-hot(8) + target sin/cos(6).
 
@@ -36,6 +36,23 @@ NUM_ENVS=8192 FORCE_LIMIT=40 bash scripts/next-train-triple.sh
 # A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
+
+## Overnight fire — status (2026-09-19 ~14:20 CT)
+
+**VM:** `cartpole-train-od` RUNNING L4 ~99%/5.4GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~35.4h ≈ **~$25–26.5** @~$0.70–0.75/hr (≤$30; ~5–6h headroom). continue-triple-a/b/c alive.
+
+**Jobs (alive):**
+| Slot | Recipe | ~u | reward | align/UUU | at_goal/UUU | entropy | rollout_r |
+|---|---|---|---|---|---|---|---|
+| A | UUU-only bottom f40 bar10 e05 hang1.0 | ~329 | ~211 | **~+0.021** | ~0.004 | ~0.21 | ~0.48 |
+| B | UUU-only wide f60 bar10 e035 lr5e-4 | ~324 | ~221 | ~−0.019 | ~0.002 | **~−0.41** | ~0.52 |
+| C | UUU swing near_target hang0.3 f40 | ~370 | ~218 | ~−0.062 | ~0.002 | ~0.14 | ~0.52 |
+
+**Diagnosis:** Near stretch end. **A** still healthiest (UUU align positive, entropy stable). **B** entropy still dead (~−0.41) — **cooler-lr retune decided**: rewrite continue-b to `LR=3e-4`, cold wipe via `.triple-b-uuu-wide-f60-lr3e4-v4`, restart watcher so auto-continue after u400 does not stack another hot-lr stretch. **C** UUU align dipped (−0.03→−0.06) near finish; leave recipe alone (auto-continue). No NaNs / no plant patch. Stage-gate still UUU hold ≳0.80 before multi-eq. ETA C ~14:27 CT, A/B ~14:34 CT.
+
+**Paper skim (stuck UUU):** Existing notes already cover it — fawraw stage-gate ≥0.80, energy swing-up as Plan-B if probes fail, Glück ~22 m/s² vs our f40/f60. No new paper action this fire; force+barrier already addressed; B was lr pathology not plant.
+
+**Watch next:** B finish → cold cooler-lr restart; A/C auto-continue; promote if any UUU hold appears.
 
 ## Overnight fire — status (2026-09-19 ~14:00 CT)
 
