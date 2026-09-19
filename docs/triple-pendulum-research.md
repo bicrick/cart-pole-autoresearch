@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~10:31 CT.
+Last updated: 2026-09-19 ~11:06 CT.
 
 
 ## Implementation status (2026-09-19)
@@ -258,5 +258,69 @@ Confirmed post-print numbers (already roughly noted): swing-up **T = 3.5 s** und
 17. Before any hand-off / transition-only phase: **measure catch basin** (offset×vel grid) on the hold policy; train wider-basin catcher and/or soft-landing until delivery lands inside it.
 18. When porting Lim product+TQC (or PPO surrogate): copy **γ=0.99, τ=0.005**; judge EP specialists by ~700–800/1000 return plateau + hold metrics, not max return.
 19. Prefer **Lim triple product** (cumulative abs angles) over MDPI-double coeffs if we A/B product forms.
+
+Still **do not** redesign code or kill double xonly until user green-lights.
+
+
+### Research pass (2026-09-19 ~11:06 CT) — new actionable diffs
+
+Re-read fawraw `triple_pendulum_env.py` + CHANGELOG / M3b-v4–v7 configs, Glück post-print overshoot note, and BC→RL dead-ends. **Direction unchanged** (UUU-first → product/abs → hard-EP → later 56). Five env/process knobs we had not locked, plus one classical sensitivity fill.
+
+#### fawraw per-link fall thresholds (CRITICAL for tip-up EPs)
+
+Global angle-fall of **0.6 rad on every link** made EP4 (DDU) / EP6 (DUU) untrainable: cart recovery shakes hanging links past 0.6 → −100 FALL every attempt → 0% on tip-up EPs. Fix (audit 2026-05-10):
+
+| Link target | Threshold | Why |
+|---|---|---|
+| UP (θ*≈0) | **`FALL_THRESHOLD_UP_RAD = 0.6`** (~34°) | Must stay near vertical |
+| DOWN (θ*≈π) | **`FALL_THRESHOLD_DOWN_RAD = 1.5`** (~86°) | Hang links may swing during recovery |
+
+`_fall_thresholds()` picks per link from current `target_ep`. Our overnight plant only oob-terminates on `|x|>track` (no angle-fall) — so this matters the moment we add hold-style fall checks for tip-up / multi-eq stages. Do **not** copy a global 0.6.
+
+#### `vel_cost_coef`: default 0.05 over-damps UUU / tip-up
+
+| Value | Where used | Effect |
+|---|---|---|
+| **0.05** | env default (and early bump from 0.01) | Suspected **EP7 (UUU) regression** — over-penalizes aggressive corrections upright configs need |
+| **0.01** | v4H velfix; v5 phase1 hard-EP focus | EP7-friendly; tip-up needs cart motion |
+| **0.02** | M3b-v6 cloud winner + v7 + most M4 probes | Compromise that shipped with 72.5% |
+
+**Steal 0.01–0.02** for any additive ang²+vel² stage; never leave the env default 0.05 if UUU / tip-up are soft.
+
+#### `start_grace_steps` ≠ `fall_grace_steps`
+
+Already locked `fall_grace≈20` (consecutive-over-threshold before −100). Newly locked sibling:
+
+- **`start_grace_steps`**: first N steps **immune** to angle-fall so the policy can orient (configs: **100** ≈2 s @50 Hz in v4C/F/H; 0 in strict eval).
+- Eval always keeps both graces at 0 for fair scoring; train may use grace, eval must not inherit it.
+
+#### `w_down` tradeoffs (refine item 9)
+
+UP×5 is locked. DOWN weight is not free:
+
+| `w_down` | Observed |
+|---|---|
+| 1.0 | Adaptive “correct gradient”; can **regress EP2 (UDD)** (lost base-stability prior) |
+| 2.0 | Helps EP2; **regresses EP7** in A/B |
+| **1.5** | v5 compromise between those two |
+
+Prefer **1.0 first** with hard-EP oversample; bump to 1.5 only if base-down EPs collapse; avoid 2.0 unless UUU is already solid and EP2 is dead.
+
+#### BC → multi-EP RL is a dead end (reinforces Lim specialists)
+
+fawraw Plan B / Stage3A: BC-only [1024,1024] **12.5%**; BC-then-RL pollutes shared weights (covariate shift off LQR demos). EP4 **specialist** alone caused catastrophic forgetting of other EPs. **Dedicated tip-up probe** (EP4-fixed) did reach **~60% @200K** before mixing. Implication for us: do **not** BC-pretrain a shared UVFA from double/LQR demos; prefer Lim-style **8 heads / 8 runs**, or UUU-only → tip-up probe → weighted multi-eq. Matches recommended redesign items 1/5/12.
+
+#### Glück Automatica 2013 — sensitivity fill
+
+Already had T=3.5 s, |ÿ|≤22 m/s², |s|≤0.7 m, |ṡ|≤3 m/s. Post-print adds: even **tiny** angle/rate tracking errors → cart **~0.6 m overshoot**. Classical DDD→UUU is hypersensitive to residual error — another argument for **soft-landing + catch-basin** before 56 hand-off, and for sizing track / center cost so RL swing-ups have headroom comparable to that overshoot.
+
+#### Amend recommended redesign (additions only)
+
+20. If/when adding angle-fall termination: **per-link UP=0.6 / DOWN=1.5** — never a global 0.6 (kills tip-up EPs).
+21. Additive vel penalty: **`vel_cost_coef≈0.01–0.02`** (not 0.05).
+22. Pair `fall_grace≈20` with **`start_grace_steps≈100`** in train; keep eval strict (both 0).
+23. `w_down`: start at **1.0**; try **1.5** only if EP2-class eqs die; avoid 2.0 early.
+24. Skip BC-pretrain of a shared triple UVFA; use **fixed-EP tip-up probes** (~200K) before hard-EP mix; keep Lim-style specialists as the safe multi-eq structure.
+25. Size track / soft-landing with Glück’s **~0.6 m** classical overshoot sensitivity in mind.
 
 Still **do not** redesign code or kill double xonly until user green-lights.
