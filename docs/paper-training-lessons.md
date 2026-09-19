@@ -467,3 +467,7 @@ Edge stretch finished **u400**: reward~**1077**, align~**0.750**, `at_goal` UU/U
 ## (al) DU↔DD fold bias (2026-09-18 ~21:00 CT)
 
 Demo failure: settled in **DU** (`th1=π, th2=0`) and never folds outer link into **DD**. Align stays decent; sparse hold on the new goal fails. Fix: `--fold-pair-p` (default recipe **0.55**) biases wrong-eq starts and mid-episode goal flips toward outer-link partners **DU↔DD** and **UU↔UD**. Also bump `--goal-switch-p` 0.002→0.004 so interactive toggles show up more often.
+
+## (am) Transition-only curriculum (2026-09-18 ~23:50 CT)
+
+Plateau on mixed edge/fold FT: align~0.70 / min_at_goal stuck ~0.45–0.65. Demo money is **eq→eq switches** (esp. DU→DD). New mode `--transition-only`: every reset spawns near discrete A with goal B≠A (uniform over 12 directed pairs); mid-episode flips always change goal (`goal_switch_p≈0.01`). No hang/near-goal/fold mix. Script: `scripts/next-train-transitions.sh` + `continue-xonly.sh`.

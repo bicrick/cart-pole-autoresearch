@@ -171,6 +171,14 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--transition-only",
+        action="store_true",
+        help=(
+            "Every reset: spawn near discrete eq A with goal B≠A (uniform over directed "
+            "pairs). Mid-episode flips always change goal. Ignores hang/near-goal/wrong-eq mixes."
+        ),
+    )
+    parser.add_argument(
         "--uu-bias",
         type=float,
         default=0.0,
@@ -219,6 +227,8 @@ def default_run_name(args) -> str:
         parts.append(f"gsw{args.goal_switch_p:g}".replace(".", "p"))
     if getattr(args, "fold_pair_p", 0):
         parts.append(f"fold{args.fold_pair_p:g}".replace(".", ""))
+    if getattr(args, "transition_only", False):
+        parts.append("xonly")
     if getattr(args, "warmup_updates", 0):
         parts.append(f"wu{args.warmup_updates}{args.warmup_goal}")
     return "-".join(parts)
@@ -252,11 +262,13 @@ def random_states(
     hang_start_p=0.0,
     wrong_eq_p=0.0,
     fold_pair_p=0.0,
+    transition_only=False,
 ):
     """Reset distribution.
 
-    Priority on each env (exclusive): near-goal capture → hang (DD-ish swing-up)
-    → wrong discrete equilibrium (anywhere↔anywhere edge) → uniform / mild.
+    If transition_only and goals are set: every env spawns near a discrete eq
+    different from its goal (uniform directed A→B, A≠B). Otherwise priority is
+    near-goal → hang → wrong-eq → uniform / mild.
     """
     x = torch.empty(n, device=device).uniform_(-2.0, 2.0)
     xd = torch.empty(n, device=device).uniform_(-3.0, 3.0)
@@ -274,6 +286,25 @@ def random_states(
         th2d[:k] = torch.empty(k, device=device).uniform_(-0.5, 0.5)
 
     claimed = torch.zeros(n, dtype=torch.bool, device=device)
+
+    # Transition-only: always start at discrete eq A with goal B≠A.
+    if transition_only and goals is not None:
+        start = torch.randint(0, 4, (n,), device=device)
+        same = start == goals
+        if same.any():
+            start = torch.where(
+                same,
+                (start + 1 + torch.randint(0, 3, (n,), device=device)) % 4,
+                start,
+            )
+        angles = goal_angles(start, device=device, dtype=torch.float32)
+        x = torch.empty(n, device=device).uniform_(-0.6, 0.6)
+        xd = torch.empty(n, device=device).uniform_(-0.8, 0.8)
+        th1 = angles[:, 0] + torch.empty(n, device=device).uniform_(-0.3, 0.3)
+        th2 = angles[:, 1] + torch.empty(n, device=device).uniform_(-0.3, 0.3)
+        th1d = torch.empty(n, device=device).uniform_(-1.2, 1.2)
+        th2d = torch.empty(n, device=device).uniform_(-1.2, 1.2)
+        return torch.stack((x, xd, th1, th1d, th2, th2d), dim=-1)
 
     # Local capture near the requested goal.
     if goals is not None and near_goal_p > 0:
@@ -534,6 +565,7 @@ def main():
         f"anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
         f"hang_start_p={args.hang_start_p} wrong_eq_p={args.wrong_eq_p} "
         f"goal_switch_p={args.goal_switch_p} fold_pair_p={args.fold_pair_p} "
+        f"transition_only={args.transition_only} "
         f"her_ratio={args.her_ratio}",
         flush=True,
     )
@@ -565,6 +597,7 @@ def main():
         hang_start_p=args.hang_start_p,
         wrong_eq_p=args.wrong_eq_p,
             fold_pair_p=args.fold_pair_p,
+            transition_only=args.transition_only,
     )
     steps_left = torch.randint(1, args.episode_len + 1, (args.num_envs,), device=device)
 
@@ -594,21 +627,29 @@ def main():
             if args.goal_switch_p > 0:
                 flip = torch.rand(args.num_envs, device=device) < args.goal_switch_p
                 if flip.any():
-                    new_g = sample_goals(
-                        args.num_envs, device, allowed=allowed, probs=goal_probs
-                    )
-                    # Avoid no-op flips when possible.
-                    same = new_g == goals
-                    if same.any():
-                        new_g = torch.where(
-                            same,
-                            (new_g + 1 + torch.randint(0, 3, (args.num_envs,), device=device)) % 4,
-                            new_g,
+                    if args.transition_only:
+                        # Always change goal: uniform over the other three eqs.
+                        new_g = (
+                            goals
+                            + 1
+                            + torch.randint(0, 3, (args.num_envs,), device=device)
+                        ) % 4
+                    else:
+                        new_g = sample_goals(
+                            args.num_envs, device, allowed=allowed, probs=goal_probs
                         )
-                    # Bias flips toward outer-link fold (DU↔DD / UU↔UD).
-                    if args.fold_pair_p > 0:
-                        use_fold = torch.rand(args.num_envs, device=device) < args.fold_pair_p
-                        new_g = torch.where(use_fold, fold_partner(goals), new_g)
+                        # Avoid no-op flips when possible.
+                        same = new_g == goals
+                        if same.any():
+                            new_g = torch.where(
+                                same,
+                                (new_g + 1 + torch.randint(0, 3, (args.num_envs,), device=device)) % 4,
+                                new_g,
+                            )
+                        # Bias flips toward outer-link fold (DU↔DD / UU↔UD).
+                        if args.fold_pair_p > 0:
+                            use_fold = torch.rand(args.num_envs, device=device) < args.fold_pair_p
+                            new_g = torch.where(use_fold, fold_partner(goals), new_g)
                     goals = torch.where(flip, new_g, goals)
             next_state = step(state, force, constants=constants)
             rew = goal_reward(next_state, force, goals, constants, **rkw)
@@ -635,6 +676,7 @@ def main():
                     hang_start_p=args.hang_start_p,
                     wrong_eq_p=args.wrong_eq_p,
             fold_pair_p=args.fold_pair_p,
+            transition_only=args.transition_only,
                 )
                 next_state = torch.where(done.unsqueeze(-1), reset, next_state)
                 goals = reset_goals
