@@ -1,6 +1,34 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~00:00 CT (research only — no triple training yet).
+Last updated: 2026-09-19 ~00:10 CT.
+
+
+## Implementation status (2026-09-19)
+
+**Built on `main`:** cart-triple plant parallel to the double, same UVFA+PPO recipe (not Lim 8× TQC).
+
+| Piece | Path | Notes |
+|---|---|---|
+| Physics | `train/physics_triple.py` | Batched torch, 4×4 mass solve, θ=0 upright, no track walls |
+| Constants | `shared/constants-triple.json` | 3 equal links; `obsDim=25` |
+| Goals | `train/goals_triple.py` | **8 eqs:** DDD, DDU, DUD, DUU, UDD, UDU, UUD, UUU; `OBS_DIM=25` |
+| Train | `train/train_triple.py` | Reuses PPO; align/energy/center/oob; HER optional; `--transition-only` available but **not** the default |
+| Smoke | `train/test_physics_triple.py` | Inverted unstable, hang restoring, nowalls |
+| Launch | `scripts/next-train-triple.sh` | **Normal multi-eq curriculum** (hang / near-goal / UUU bias / energy) like early double |
+| Watcher | `scripts/continue-triple.sh` | Loop forever like `continue-xonly.sh` |
+
+**OBS_DIM = 25** = 11 state (`x,ẋ,sin/cos×3,ω×3`) + one-hot(8) + target sin/cos(6).
+
+**Curriculum default:** hang_start / near-goal / wrong-eq / soft UUU bias — reach and hold the 8 equilibria first. Do **not** default to `--transition-only` (that remains the double xonly experiment). Transition-only over 56 pairs is a later phase once local capture works.
+
+**Launch (cold):**
+```bash
+NUM_ENVS=8192 bash scripts/next-train-triple.sh
+# A/B tip: HANG_START_P=0.55 LR=1e-3 RUN_NAME=... CHECKPOINT=policies/checkpoint-triple-b.pt OUT=policies/policy-triple-b.json
+```
+
+Double **xonly** on GCP stays untouched.
+
 
 ## What "56" means
 
@@ -53,11 +81,9 @@ Naïve "pad and continue" does **not** just work: weights for θ3 / new goal bit
 
 ## Implication for our stack
 
-- Keep double **xonly** grinding 12 directed transitions. Do **not** start triple training or spin extra GPUs.
-- Triple is a **new plant** (physics + 8 goals), not a drop-in.
-- When we *do* build it, two credible recipes:
-  1. **Copy our loop:** 8-way UVFA + `--transition-only` over A→B≠A; evaluate all 56 pairs (closer to our double).
-  2. **Copy Lim:** TQC (or SAC) × 8 EP policies; product reward with cumulative angles; wide IC randomization; no explicit 56-pair sampler.
+- Keep double **xonly** grinding 12 directed transitions on the shared L4; share headroom with triple multi-eq jobs (do not kill xonly).
+- Triple plant is live (see Implementation status). Default recipe: **normal multi-eq PPO** (hang/near-goal/UUU bias) to reach/hold 8 eqs — same path as early double, **not** transition-only first.
+- Later: optional `--transition-only` over 56 pairs, or Lim-style 8× TQC as A/B — not the overnight default.
 - Optional: adapter/progressive init from double ckpt as a side experiment, not a requirement.
 
 ## Sources

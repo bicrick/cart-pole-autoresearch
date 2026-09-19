@@ -1,0 +1,191 @@
+"""Discrete triple-pendulum equilibria and UVFA-style goal encodings.
+
+Convention (matches physics_triple): theta = 0 is upright.
+Eight equilibria (each link Up=0 or Down=π), ordered DDD … UUU with
+MSB = link1 (same letter order as double UU/UD/DU/DD):
+
+  DDD DDU DUD DUU UDD UDU UUD UUU
+"""
+
+from __future__ import annotations
+
+import math
+
+import torch
+
+GOAL_IDS = ("DDD", "DDU", "DUD", "DUU", "UDD", "UDU", "UUD", "UUU")
+GOAL_INDEX = {name: i for i, name in enumerate(GOAL_IDS)}
+NUM_GOALS = len(GOAL_IDS)  # 8
+NUM_TRANSITIONS = NUM_GOALS * (NUM_GOALS - 1)  # 56
+
+# Target angles (th1*, th2*, th3*). U=0, D=π; bits th1|th2|th3 with D=0 U=1
+# in the GOAL_IDS order above (DDD=000 … UUU=111 under that bit map).
+_PI = math.pi
+GOAL_ANGLES = torch.tensor(
+    [
+        [_PI, _PI, _PI],  # DDD
+        [_PI, _PI, 0.0],  # DDU
+        [_PI, 0.0, _PI],  # DUD
+        [_PI, 0.0, 0.0],  # DUU
+        [0.0, _PI, _PI],  # UDD
+        [0.0, _PI, 0.0],  # UDU
+        [0.0, 0.0, _PI],  # UUD
+        [0.0, 0.0, 0.0],  # UUU
+    ],
+    dtype=torch.float32,
+)
+
+# State features (11) + one-hot(8) + target sin/cos(6).
+STATE_OBS_DIM = 11
+GOAL_ONEHOT_DIM = NUM_GOALS
+GOAL_SINCCOS_DIM = 6
+OBS_DIM = STATE_OBS_DIM + GOAL_ONEHOT_DIM + GOAL_SINCCOS_DIM  # 25
+
+OBS_LAYOUT = (
+    "x, xd, sinθ1, cosθ1, sinθ2, cosθ2, sinθ3, cosθ3, θ1d, θ2d, θ3d, "
+    "onehot_DDD, onehot_DDU, onehot_DUD, onehot_DUU, "
+    "onehot_UDD, onehot_UDU, onehot_UUD, onehot_UUU, "
+    "sinθ1*, cosθ1*, sinθ2*, cosθ2*, sinθ3*, cosθ3*"
+)
+
+GOAL_OBS_LOW = [0.0] * NUM_GOALS + [-1.0] * GOAL_SINCCOS_DIM
+GOAL_OBS_HIGH = [1.0] * NUM_GOALS + [1.0] * GOAL_SINCCOS_DIM
+
+
+def goal_angles(goal_ids: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
+    """Map integer goal ids [...,] -> target angles [..., 3]."""
+    table = GOAL_ANGLES.to(device=device or goal_ids.device, dtype=dtype or torch.float32)
+    return table[goal_ids.long()]
+
+
+def goal_encoding(goal_ids: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
+    """One-hot + target sin/cos. goal_ids: [...] -> [..., 14]."""
+    device = device or goal_ids.device
+    dtype = dtype or torch.float32
+    ids = goal_ids.long()
+    onehot = torch.nn.functional.one_hot(ids, NUM_GOALS).to(dtype=dtype)
+    angles = goal_angles(ids, device=device, dtype=dtype)
+    th1 = angles[..., 0]
+    th2 = angles[..., 1]
+    th3 = angles[..., 2]
+    sincos = torch.stack(
+        (
+            torch.sin(th1),
+            torch.cos(th1),
+            torch.sin(th2),
+            torch.cos(th2),
+            torch.sin(th3),
+            torch.cos(th3),
+        ),
+        dim=-1,
+    )
+    return torch.cat((onehot, sincos), dim=-1)
+
+
+def sample_goals(n: int, device, dtype=torch.long, allowed=None, probs=None) -> torch.Tensor:
+    """Sample goal ids (same API as goals.py)."""
+    if probs is not None:
+        p = probs if torch.is_tensor(probs) else torch.tensor(probs, dtype=torch.float32)
+        p = p.to(device=device, dtype=torch.float32).clamp_min(0)
+        s = p.sum()
+        if s <= 0:
+            p = torch.ones(NUM_GOALS, device=device, dtype=torch.float32) / NUM_GOALS
+        else:
+            p = p / s
+        return torch.multinomial(p, n, replacement=True).to(dtype=dtype)
+    if allowed is None:
+        return torch.randint(0, NUM_GOALS, (n,), device=device, dtype=dtype)
+    if not torch.is_tensor(allowed):
+        allowed = torch.tensor(list(allowed), device=device, dtype=torch.long)
+    else:
+        allowed = allowed.to(device=device, dtype=torch.long)
+    idx = torch.randint(0, allowed.numel(), (n,), device=device)
+    return allowed[idx].to(dtype=dtype)
+
+
+def angle_align(th: torch.Tensor, th_star: torch.Tensor) -> torch.Tensor:
+    """cos(th - th*) via wrap-friendly trig identity."""
+    return torch.cos(th) * torch.cos(th_star) + torch.sin(th) * torch.sin(th_star)
+
+
+def nearest_goal(state: torch.Tensor) -> torch.Tensor:
+    """Integer goal id of the equilibrium nearest to current angles."""
+    th1 = state[..., 2]
+    th2 = state[..., 4]
+    th3 = state[..., 6]
+    table = GOAL_ANGLES.to(device=state.device, dtype=state.dtype)
+    a1 = angle_align(th1.unsqueeze(-1), table[:, 0])
+    a2 = angle_align(th2.unsqueeze(-1), table[:, 1])
+    a3 = angle_align(th3.unsqueeze(-1), table[:, 2])
+    return (a1 + a2 + a3).argmax(dim=-1)
+
+
+def at_goal(state: torch.Tensor, goal_ids: torch.Tensor, cos_thresh: float = 0.95) -> torch.Tensor:
+    """Sparse success: all three links aligned with the requested equilibrium."""
+    angles = goal_angles(goal_ids, device=state.device, dtype=state.dtype)
+    a1 = angle_align(state[..., 2], angles[..., 0])
+    a2 = angle_align(state[..., 4], angles[..., 1])
+    a3 = angle_align(state[..., 6], angles[..., 2])
+    return (a1 > cos_thresh) & (a2 > cos_thresh) & (a3 > cos_thresh)
+
+
+def goal_reward(
+    state,
+    force,
+    goal_ids,
+    constants,
+    sparse_bonus: float = 1.0,
+    align_w: float = 1.5,
+    energy_w: float = 0.15,
+    spin_w: float = 0.0003,
+    center_w: float = 0.06,
+    center_hold_w: float = 0.18,
+    track_limit: float = 4.0,
+    reward_clip: float = 8.0,
+    oob_penalty: float = 20.0,
+):
+    """Dense goal reward (same shape as double; align over 3 links)."""
+    x = state[..., 0]
+    xd = state[..., 1]
+    th1 = state[..., 2]
+    th1d = state[..., 3]
+    th2 = state[..., 4]
+    th2d = state[..., 5]
+    th3 = state[..., 6]
+    th3d = state[..., 7]
+    angles = goal_angles(goal_ids, device=state.device, dtype=state.dtype)
+    a1 = angle_align(th1, angles[..., 0])
+    a2 = angle_align(th2, angles[..., 1])
+    a3 = angle_align(th3, angles[..., 2])
+    align = a1 + a2 + a3
+
+    x_eff = x.clamp(-track_limit, track_limit)
+    xd_eff = xd.clamp(-20.0, 20.0)
+    hold = (a1.clamp(min=0.0) + a2.clamp(min=0.0) + a3.clamp(min=0.0)) / 3.0
+    hold = hold.clamp(0.0, 1.0)
+    center_coef = center_w + center_hold_w * hold
+    center = center_coef * (x_eff * x_eff + 0.2 * xd_eff * xd_eff)
+    oob = (x.abs() > track_limit).to(state.dtype)
+
+    spin_raw = th1d * th1d + th2d * th2d + th3d * th3d
+    spin = spin_w * spin_raw.clamp(max=300.0)
+
+    effort = 0.001 * (force / constants["forceLimit"]) ** 2
+    sparse = sparse_bonus * at_goal(state, goal_ids).to(state.dtype)
+
+    kin_soft = (0.05 * xd_eff * xd_eff + 0.02 * spin_raw).clamp(max=60.0)
+    energy = energy_w * (align - 0.25 * kin_soft)
+
+    rew = align_w * align + energy - center - spin - effort + sparse
+    if reward_clip is not None and reward_clip > 0:
+        rew = rew.clamp(-reward_clip, reward_clip)
+    rew = rew - float(oob_penalty) * oob
+    return rew
+
+
+def conditioned_obs(state_obs: torch.Tensor, goal_ids: torch.Tensor) -> torch.Tensor:
+    """Concatenate state features with goal encoding -> [..., 25]."""
+    return torch.cat(
+        (state_obs, goal_encoding(goal_ids, device=state_obs.device, dtype=state_obs.dtype)),
+        dim=-1,
+    )

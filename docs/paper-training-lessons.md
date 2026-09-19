@@ -471,3 +471,8 @@ Demo failure: settled in **DU** (`th1=π, th2=0`) and never folds outer link int
 ## (am) Transition-only curriculum (2026-09-18 ~23:50 CT)
 
 Plateau on mixed edge/fold FT: align~0.70 / min_at_goal stuck ~0.45–0.65. Demo money is **eq→eq switches** (esp. DU→DD). New mode `--transition-only`: every reset spawns near discrete A with goal B≠A (uniform over 12 directed pairs); mid-episode flips always change goal (`goal_switch_p≈0.01`). No hang/near-goal/fold mix. Script: `scripts/next-train-transitions.sh` + `continue-xonly.sh`.
+
+
+## (an) Triple plant: multi-eq first, not transition-only (2026-09-19 ~00:10 CT)
+
+Cart-**triple** is a new plant (`physics_triple` / `goals_triple` / `train_triple`, `OBS_DIM=25`, 8 goals DDD…UUU). Overnight plan: share the L4 with double **xonly** (leave xonly alone) and run **normal** multi-eq PPO on triple — hang starts, energy, near-goal, soft UUU bias — the same curriculum that taught the double its 4 equilibria **before** xonly. Do **not** default triple to `--transition-only` (56 pairs); that is a later phase after local capture. Scripts: `next-train-triple.sh` / `continue-triple.sh`. Two parallel triple jobs (vary `lr` or `hang_start_p`) OK if `nvidia-smi` shows headroom alongside xonly.
