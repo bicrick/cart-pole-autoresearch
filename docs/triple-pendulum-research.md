@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~12:55 CT.
+Last updated: 2026-09-19 ~13:48 CT.
 
 
 ## Implementation status (2026-09-19 ~12:55 CT)
@@ -36,6 +36,21 @@ NUM_ENVS=8192 FORCE_LIMIT=40 bash scripts/next-train-triple.sh
 # A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
+
+## Overnight fire — status (2026-09-19 ~13:48 CT)
+
+**VM:** `cartpole-train-od` RUNNING L4 ~99%/5.4GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~35h ≈ **~$24–28** @~$0.70–0.75/hr (≤$30; ~3–5h headroom). All three continue-a/b/c watchers alive.
+
+**Jobs (alive):**
+| Slot | Recipe | ~u | reward | align/UUU | at_goal/UUU | entropy |
+|---|---|---|---|---|---|---|
+| A | UUU-only bottom f40 bar10 e05 hang1.0 | ~210 | ~216 | ~+0.015 | ~0.004 | ~0.25 |
+| B | UUU-only wide f60 bar10 e035 lr5e-4 | ~210 | ~223 | ~−0.041 | ~0.001 | **~−0.39** |
+| C | UUU swing near_target hang0.3 f40 | ~260 | ~220 | ~−0.045 | ~0.003 | ~0.14 |
+
+**Diagnosis:** Still mid UUU-only stretch. `train/goal_frac/UUU`≈0.93; `train/rollout_reward` climbing (A~0.46 B/C~0.51). Eval `at_goal/UUU` still flat (expected — harsh `random_states`). **A** remains healthiest (align/UUU non-negative). **B** entropy collapsed negative (hot lr 5e-4) + UUU align slightly worse — watch at u400 finish; no mid-run kill. **C** entropy low but stable; UUU align noisy/negative. No NaNs. **No restart/patch this fire** — ETA ~u400 A/B ~14:40 CT, C ~14:25 CT. Stage-gate still UUU hold ≳0.80 before multi-eq.
+
+**Watch next:** B finish → decide keep vs cooler-lr retune; budget before stacking more stretches; promote best of A/C if any hold appears.
 
 ## Overnight fire — status (2026-09-19 ~13:36 CT)
 
