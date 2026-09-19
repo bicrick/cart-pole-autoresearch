@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# One-shot UUU swing-up specialist (same knobs as continue-triple-c).
+# One-shot UUU swing+hold combo (same knobs as continue-triple-c).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 export FORCE_LIMIT="${FORCE_LIMIT:-40}"
 export REWARD_MODE="${REWARD_MODE:-product}"
+export PROGRESS_W="${PROGRESS_W:-1.0}"
+export FLIP_AUGMENT="${FLIP_AUGMENT:-1}"
 export WARMUP_UPDATES="${WARMUP_UPDATES:-100000}"
 export WARMUP_HANG_START_P="${WARMUP_HANG_START_P:-0.3}"
 export HANG_START_P="${HANG_START_P:-0.3}"
@@ -24,6 +26,6 @@ export START_GRACE_STEPS="${START_GRACE_STEPS:-40}"
 export LR="${LR:-3e-4}"
 export CHECKPOINT="${CHECKPOINT:-policies/checkpoint-triple-c.pt}"
 export OUT="${OUT:-policies/policy-triple-c.json}"
-export RUN_NAME="${RUN_NAME:-ft-triple-c-e${NUM_ENVS:-8192}-r${ROLLOUT:-256}-uuu-swing-f${FORCE_LIMIT}}"
+export RUN_NAME="${RUN_NAME:-ft-triple-c-e${NUM_ENVS:-8192}-r${ROLLOUT:-256}-uuu-combo-f${FORCE_LIMIT}-prog-flip}"
 
 exec bash scripts/next-train-triple.sh "$@"

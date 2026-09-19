@@ -1,43 +1,39 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~14:20 CT.
+Last updated: 2026-09-19 ~14:35 CT.
 
 
-## Implementation status (2026-09-19 ~12:55 CT)
+## Implementation status (2026-09-19 ~14:35 CT)
 
-**Built on `main`:** cart-triple plant + **Lim/fawraw redesign** (still PPO UVFA, not 8× TQC) + **forceLimit=40** A/B.
+**Built on `main`:** cart-triple plant + Lim/fawraw product + **P0/P1 progress + flip-augment + curriculum eval**.
 
 | Piece | Path | Notes |
 |---|---|---|
 | Physics | `train/physics_triple.py` | Batched torch, 4×4 mass solve, θ=0 upright, no track walls |
-| Constants | `shared/constants-triple.json` | 3 equal links; `obsDim=25`; **`forceLimit=40.0`** (was 20) |
-| Force override | `--force-limit` / `FORCE_LIMIT` | CLI/env override of hard `tanh(forceLimit)` action cap; also `shared/constants-triple-force40.json` |
-| Goals | `train/goals_triple.py` | 8 eqs; **`product_reward`** (Lim coeffs on world θ/ω) + Baek α floors + UP×5/DOWN×1; legacy `goal_reward` additive kept |
-| Train | `train/train_triple.py` | `--reward-mode product|additive`; `--cart-barrier-coef`; `--force-limit`; `--fall-grace-steps` / `--start-grace-steps`; `--init-mode`; `--warmup-hang-start-p`; optional `--angle-fall` |
-| Smoke | `train/test_physics_triple.py` | Inverted unstable, hang restoring, nowalls |
-| Launch | `scripts/next-train-triple.sh` | Product + UUU-first; default `FORCE_LIMIT=40` |
-| UUU stage | `scripts/next-train-triple-uuu.sh` / `next-train-triple-c.sh` | Hold / pure UUU specialist wrappers |
-| Watchers | `scripts/continue-triple-{a,b,c}.sh` | **A:** UUU-only bottom-swing f40 bar10 e05 hang1.0 (marker `.triple-a-uuu-bottom-v3`); **B:** UUU-only wide f60 bar10 e035 hang0.3 near0.25 **lr3e-4** (marker `.triple-b-uuu-wide-f60-lr3e4-v4`; was lr5e-4/v3); **C:** UUU swing near_target+hang=0.3 bar10 e035 (leave alone) |
+| Constants | `shared/constants-triple.json` | 3 equal links; `obsDim=25`; **`forceLimit=40.0`** |
+| Goals | `train/goals_triple.py` | 8 eqs; product reward + **`progress_w` Δ cos-align**; Baek α floors; UP×5/DOWN×1 |
+| Train | `train/train_triple.py` | `--progress-w` (default 1.0 product); `--flip-augment` (Baek VER, default on); `--eval-curriculum` → `eval/near_target/*` + `eval/hang/*` |
+| Launch | `scripts/next-train-triple.sh` | Passes `PROGRESS_W` / `FLIP_AUGMENT` |
+| Slots | `scripts/continue-triple-{a,b,c}.sh` | **A** swing (hang+near, f50, progress+flip); **B** hold (near_target, f40); **C** combo (near+hang0.3, progress+flip). Markers `.triple-*-progress-flip-v5` / hold / combo |
 
-**OBS_DIM = 25** = 11 state + one-hot(8) + target sin/cos(6).
+**Symmetry (Baek VER / `--flip-augment`):** planar reflect across the vertical midline maps `(x,ẋ,θᵢ,θ̇ᵢ,F)→(−x,−ẋ,−θᵢ,−θ̇ᵢ,−F)`. Dynamics + product reward are equivariant; θ*∈{0,π} goal encodings invariant. After GAE, PPO batch is duplicated with flipped obs/raw and recomputed logπ.
 
-**Curriculum default (redesign):** UUU-only `warmup_updates` with `warmup_hang_start_p=0` → multi-eq with **low** `hang_start_p≈0.10` (was 0.45–0.60 DDD sink), product reward, cart barrier, fall grace. Do **not** default to `--transition-only`.
+**Eval meters:** keep harsh `eval/*` (random ICs). Also log `eval/near_target/at_goal/UUU`, `eval/near_target/align/UUU`, `eval/hang/*` — diagnose hold vs swing with the right meter.
 
-**Force diagnosis (2026-09-19):** At `forceLimit=20` + `cartMass=1.0` the hard action cap is **~20 m/s²** cart accel (`tanh` saturates at ±forceLimit). Glück swing-up used ~**22 m/s²**; multi-arm cart-triple benchmarks often size ~**110 N continuous / ~20 m/s²** on heavier carts — with our **3×0.5 m** poles + **cartFriction=0.08**, 20 N is likely **underpowered for UUU swing-up**. Product reward `R_u=exp(-k u²)` is only a soft preference; the **HARD** ceiling is `tanh(forceLimit)`. Barrier=50 also fights aggressive rail use — keep on job A, lower on B. **Default bumped to 40 N** (~40 m/s² peak); cold-start markers `policies/.triple-{a,b,c}-force40-v1`.
+**Slot policy:** **Kill double/xonly.** All 3 L4 slots on `cartpole-train-od` are triple-a/b/c only.
 
-**Slot policy (2026-09-19 ~11:45 CT):** **Kill double xonly / continue-xonly.** All 3 L4 training slots on `cartpole-train-od` are triple-a/b/c.
-
-**Cold start note:** forceLimit 20→40 changes action scale; continue-a/b/c wipe old ckpts once via `.triple-*-force40-v1` markers.
+**Cold start:** new progress reward → wipe once via `.triple-a-progress-flip-v5`, `.triple-b-hold-progress-flip-v5`, `.triple-c-combo-progress-flip-v5`.
 
 **Launch:**
 ```bash
-NUM_ENVS=8192 FORCE_LIMIT=40 bash scripts/next-train-triple.sh
-# UUU specialist: bash scripts/next-train-triple-c.sh
+NUM_ENVS=8192 FORCE_LIMIT=40 PROGRESS_W=1.0 FLIP_AUGMENT=1 bash scripts/next-train-triple.sh
+# Specialists: bash scripts/next-train-triple-{a,b,c}.sh
 # A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
 
 ## Overnight fire — status (2026-09-19 ~14:20 CT)
+
 
 **VM:** `cartpole-train-od` RUNNING L4 ~99%/5.4GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~35.4h ≈ **~$25–26.5** @~$0.70–0.75/hr (≤$30; ~5–6h headroom). continue-triple-a/b/c alive.
 

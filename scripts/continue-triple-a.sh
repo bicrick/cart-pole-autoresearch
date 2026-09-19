@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Loop forever: triple-A = UUU-only forever, swing-from-bottom (INIT_MODE=bottom, hang=1.0).
-# forceLimit=40, soft barrier=10, energy_w=0.5, start_grace=40. Cold wipe once via v3 marker.
+# Loop forever: triple-A = UUU swing-up specialist (hang+near mix, progress+energy).
+# forceLimit=50, soft barrier=10, progress_w=1, flip-augment on. Cold wipe via v5 marker.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RUN_MATCH='ft-triple-a'
@@ -19,24 +19,23 @@ while true; do
     sleep 30
     continue
   fi
-  # UUU-bottom-v3 cold-start once (stage-gate: prior f40 multi-eq left warmup with zero UUU hold).
-  if [[ "${TRIPLE_A_COLD:-1}" == "1" && ! -f policies/.triple-a-uuu-bottom-v3 ]]; then
+  # Progress+flip v5 cold-start once (new reward → wipe old ckpt).
+  if [[ "${TRIPLE_A_COLD:-1}" == "1" && ! -f policies/.triple-a-progress-flip-v5 ]]; then
     rm -f policies/checkpoint-triple-a.pt
-    touch policies/.triple-a-uuu-bottom-v3
-    echo "$(date -u +%FT%TZ) cold-start triple-a (UUU bottom-swing / forceLimit=40 / bar10 e05 hang1); marker set" >> logs/continue-triple-a.log
+    touch policies/.triple-a-progress-flip-v5
+    echo "$(date -u +%FT%TZ) cold-start triple-a (UUU swing hang+near / f50 / progress+flip); marker set" >> logs/continue-triple-a.log
   fi
-  # WARMUP_UPDATES huge => hard UUU-only for entire run.
-  # init bottom + hang 1.0 => always hang/swing-from-bottom; no goal switch/fold.
-  nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
-    REWARD_MODE=product \
+  # Slot A: UUU swing-up specialist — hang+near mix, progress+energy, force 40–60, soft barrier.
+  nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=50 \
+    REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
     WARMUP_UPDATES=100000 WARMUP_GOAL=UUU \
-    WARMUP_HANG_START_P=1.0 HANG_START_P=1.0 \
-    NEAR_GOAL_P=0.0 WRONG_EQ_P=0.0 UU_BIAS=1.0 ANNEAL_UPDATES=0 \
+    WARMUP_HANG_START_P=0.7 HANG_START_P=0.7 \
+    NEAR_GOAL_P=0.25 WRONG_EQ_P=0.0 UU_BIAS=1.0 ANNEAL_UPDATES=0 \
     GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
     INIT_MODE=bottom ENERGY_W=0.5 LR=3e-4 \
-    RUN_NAME=ft-triple-a-e8192-r256-uuu-bottom-f40-bar10-e05 \
+    RUN_NAME=ft-triple-a-e8192-r256-uuu-swing-f50-bar10-prog1-flip \
     CHECKPOINT=policies/checkpoint-triple-a.pt \
     OUT=policies/policy-triple-a.json \
     bash scripts/next-train-triple.sh \

@@ -34,11 +34,22 @@ FALL_GRACE_STEPS="${FALL_GRACE_STEPS:-20}"
 START_GRACE_STEPS="${START_GRACE_STEPS:-0}"
 INIT_MODE="${INIT_MODE:-mixed}"
 FORCE_LIMIT="${FORCE_LIMIT:-40}"
+PROGRESS_W="${PROGRESS_W:-}"
+FLIP_AUGMENT="${FLIP_AUGMENT:-1}"
 RUN_NAME="${RUN_NAME:-ft-triple-e${NUM_ENVS}-r${ROLLOUT}-prod-uuu-f${FORCE_LIMIT}}"
 
 FORCE_ARGS=()
 if [[ -n "${FORCE_LIMIT}" ]]; then
   FORCE_ARGS+=(--force-limit "${FORCE_LIMIT}")
+fi
+if [[ -n "${PROGRESS_W}" ]]; then
+  FORCE_ARGS+=(--progress-w "${PROGRESS_W}")
+fi
+# flip-augment default on in train_triple; allow FLIP_AUGMENT=0 to disable
+if [[ "${FLIP_AUGMENT}" == "0" || "${FLIP_AUGMENT}" == "false" || "${FLIP_AUGMENT}" == "off" ]]; then
+  FORCE_ARGS+=(--no-flip-augment)
+else
+  FORCE_ARGS+=(--flip-augment)
 fi
 
 exec python3 train/train_triple.py \

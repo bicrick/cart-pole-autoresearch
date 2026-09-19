@@ -483,3 +483,17 @@ Overnight UVFA+hang (`hang_start_p≈0.45–0.60`) parked at mean align~0.2 with
 
 **Shipped:** `--reward-mode product` (Lim soft coeffs + Baek α_th=0.5 floors + UP×5/DOWN×1 geo weights), `--cart-barrier-coef 50`, `--fall-grace-steps 20`, `--init-mode`, `--warmup-hang-start-p 0`, post-warmup `hang_start_p≈0.10`. Scripts `next-train-triple.sh` / `next-train-triple-uuu.sh` / continue-a (defaults) / continue-b (W_UP=8, lr=5e-4). **Cold-start** triple A/B — product scale ≠ additive ckpt. Leave double **xonly** alone.
 
+---
+
+## Triple P0/P1 (2026-09-19 ~14:35 CT) — progress + VER + right meter
+
+**Stuck symptom:** UUU-only + force40/60 still `at_goal/UUU≈0` on harsh random-IC eval; train may be pumping but we were reading the wrong meter.
+
+**Shipped (keep PPO):**
+1. **`--progress-w`** (default 1.0 in product): dense `Δ mean cos-align` toward goal inside `product_reward` (fawraw M4 / Baek dense swing signal).
+2. **`--flip-augment`** (default on): Baek VER left–right duplicate of PPO batch after GAE; flip `x,ẋ,θ,θ̇,F`; recompute logπ. Documented planar symmetry.
+3. **`--eval-curriculum`**: TensorBoard `eval/near_target/at_goal/UUU` + `eval/hang/...` separate from random-IC `eval/*`.
+4. **Slot recipes:** A=swing (hang+near, f50), B=hold (near_target), C=combo — all progress+flip; cold markers `*-progress-flip-v5`.
+
+**Watch:** `eval/near_target/at_goal/UUU` for hold progress; `eval/hang/align/UUU` for swing. Stage-gate still UUU hold ≳0.80 before multi-eq.
+

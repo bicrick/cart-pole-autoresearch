@@ -108,6 +108,15 @@ def angle_align(th: torch.Tensor, th_star: torch.Tensor) -> torch.Tensor:
     return torch.cos(th) * torch.cos(th_star) + torch.sin(th) * torch.sin(th_star)
 
 
+def mean_cos_align(state: torch.Tensor, goal_ids: torch.Tensor) -> torch.Tensor:
+    """Mean cos-align of three links vs goal ∈ [-1, 1]."""
+    angles = goal_angles(goal_ids, device=state.device, dtype=state.dtype)
+    a1 = angle_align(state[..., 2], angles[..., 0])
+    a2 = angle_align(state[..., 4], angles[..., 1])
+    a3 = angle_align(state[..., 6], angles[..., 2])
+    return (a1 + a2 + a3) / 3.0
+
+
 def nearest_goal(state: torch.Tensor) -> torch.Tensor:
     """Integer goal id of the equilibrium nearest to current angles."""
     th1 = state[..., 2]
@@ -163,6 +172,9 @@ def product_reward(
     sparse_bonus: float = 0.0,
     # Optional additive height shaping (product otherwise ignores energy_w)
     energy_w: float = 0.0,
+    # fawraw/Baek progress: dense bonus for Δ mean cos-align toward goal
+    progress_w: float = 0.0,
+    prev_state=None,
     **_ignored,
 ):
     """Lim-style product of [0,1] terms on absolute/world angles + rates.
@@ -170,6 +182,7 @@ def product_reward(
     R = R_u * R_y * R_θ1 * R_θ2 * R_θ3 * R_ω1 * R_ω2 * R_ω3
     with optional Baek α floors and UP/DOWN geometric angle weights.
     Cart barrier subtracted after the product (anti rail-slide).
+    Optional progress_w * (align_now − align_prev) when prev_state is given.
     """
     x = state[..., 0]
     th1 = state[..., 2]
@@ -242,6 +255,12 @@ def product_reward(
         height = (a1 + a2 + a3) / 3.0
         rew = rew + float(energy_w) * height
 
+    # Progress shaping (fawraw): dense Δ cos-align toward goal.
+    if progress_w and float(progress_w) > 0 and prev_state is not None:
+        align_now = mean_cos_align(state, goal_ids)
+        align_prev = mean_cos_align(prev_state, goal_ids)
+        rew = rew + float(progress_w) * (align_now - align_prev)
+
     # Cart barrier (fawraw): strong near-rail penalty
     if cart_barrier_coef and cart_barrier_coef > 0 and track_limit > 0:
         frac = (x.abs() / float(track_limit)).clamp(max=1.0)
@@ -273,6 +292,8 @@ def goal_reward(
     w_down: float = 1.0,
     cart_barrier_coef: float = 0.0,
     vel_cost_coef: float = 0.0,
+    progress_w: float = 0.0,
+    prev_state=None,
     **_ignored,
 ):
     """Dense additive goal reward (legacy double-style; align over 3 links).
@@ -321,6 +342,10 @@ def goal_reward(
     energy = energy_w * (align - 0.25 * kin_soft)
 
     rew = align_w * align + energy - center - spin - effort + sparse
+    if progress_w and float(progress_w) > 0 and prev_state is not None:
+        align_now = mean_cos_align(state, goal_ids)
+        align_prev = mean_cos_align(prev_state, goal_ids)
+        rew = rew + float(progress_w) * (align_now - align_prev)
     if cart_barrier_coef and cart_barrier_coef > 0 and track_limit > 0:
         frac = (x.abs() / float(track_limit)).clamp(max=1.0)
         rew = rew - float(cart_barrier_coef) * frac.pow(8)

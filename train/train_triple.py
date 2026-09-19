@@ -27,6 +27,7 @@ from goals_triple import (
     conditioned_obs,
     goal_angles,
     goal_reward,
+    mean_cos_align,
     nearest_goal,
     sample_goals,
 )
@@ -276,6 +277,35 @@ def parse_args():
         default=None,
         help="Override constants forceLimit (N); also env FORCE_LIMIT. Hard tanh action cap.",
     )
+    parser.add_argument(
+        "--progress-w",
+        type=float,
+        default=None,
+        help=(
+            "Dense progress bonus weight on Δ mean cos-align toward goal (fawraw). "
+            "Default 1.0 when --reward-mode product, else 0. Set 0 to disable."
+        ),
+    )
+    parser.add_argument(
+        "--flip-augment",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Baek VER left–right mirror augment: after GAE, duplicate PPO batch with "
+            "cart x/xd, angles/rates, and force/raw flipped (default on for triple). "
+            "Symmetry: planar reflect across vertical midline; θ*=0/π goals invariant."
+        ),
+    )
+    parser.add_argument(
+        "--eval-curriculum",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Also eval from near_target and hang (bottom) starts; log "
+            "eval/near_target/* and eval/hang/* separately from random-IC eval "
+            "(default on)."
+        ),
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument("--checkpoint", type=Path, default=ROOT / "policies" / "checkpoint-triple.pt")
     parser.add_argument("--out", type=Path, default=POLICY_PATH)
@@ -330,6 +360,10 @@ def default_run_name(args) -> str:
 
 
 def reward_kwargs(args):
+    pw = args.progress_w
+    if pw is None:
+        pw = 1.0 if (args.reward_mode or "product").lower() == "product" else 0.0
+    args.progress_w = float(pw)
     return dict(
         reward_mode=args.reward_mode,
         align_w=args.align_w,
@@ -348,6 +382,7 @@ def reward_kwargs(args):
         alpha_th=args.alpha_th,
         alpha_w=args.alpha_w,
         vel_cost_coef=args.vel_cost_coef,
+        progress_w=float(pw),
     )
 
 
@@ -583,6 +618,37 @@ def make_obs(state, goal_ids, constants):
     return normalize_obs(conditioned_obs(observe(state), goal_ids), constants)
 
 
+# Normalized obs channels that are odd under left–right planar reflection.
+# Layout: x, xd, sinθ1, cosθ1, sinθ2, cosθ2, sinθ3, cosθ3, θ1d, θ2d, θ3d, + goal (even).
+_FLIP_OBS_IDX = (0, 1, 2, 4, 6, 8, 9, 10)
+
+
+def flip_lr_state(state: torch.Tensor) -> torch.Tensor:
+    """Left–right reflect plant state: (x, xd, θ_i, θd_i) → (−x, −xd, −θ_i, −θd_i).
+
+    Symmetry assumption (Baek VER / planar cart-pendulum): reflecting across the
+    vertical midline leaves the Lagrangian invariant when force also flips.
+    Equilibria with θ* ∈ {0, π} are invariant (goal sin/cos unchanged).
+    """
+    out = state.clone()
+    out[..., 0] = -state[..., 0]
+    out[..., 1] = -state[..., 1]
+    out[..., 2] = -state[..., 2]
+    out[..., 3] = -state[..., 3]
+    out[..., 4] = -state[..., 4]
+    out[..., 5] = -state[..., 5]
+    out[..., 6] = -state[..., 6]
+    out[..., 7] = -state[..., 7]
+    return out
+
+
+def flip_lr_obs(obs: torch.Tensor) -> torch.Tensor:
+    """Flip odd channels of a normalized conditioned obs (goal channels unchanged)."""
+    out = obs.clone()
+    out[..., list(_FLIP_OBS_IDX)] = -out[..., list(_FLIP_OBS_IDX)]
+    return out
+
+
 def export_actor_triple(model, constants):
     """Local export so we do not pull double GOAL_IDS from ppo.export_actor."""
     actor = model.actor
@@ -693,32 +759,70 @@ def her_relabel_inplace(
 
 
 @torch.no_grad()
-def rollout_eval(model, constants, device, rkw, n=64, steps=400, track_limit=4.0):
-    """Evaluate each discrete goal separately; return overall + per-goal metrics."""
+def rollout_eval(
+    model,
+    constants,
+    device,
+    rkw,
+    n=64,
+    steps=400,
+    track_limit=4.0,
+    init_mode="random",
+    hang_start_p=0.0,
+    near_goal_p=0.0,
+):
+    """Evaluate each discrete goal; optional init_mode for curriculum meters.
+
+    init_mode:
+      random      — harsh wide random ICs (legacy eval/* meter)
+      near_target — spawn near assigned goal (hold / catch basin)
+      hang        — spawn near hanging DDD (swing-up from bottom)
+    """
     model.eval()
     per_goal = {}
     all_rew = []
     all_align = []
+    mode = (init_mode or "random").lower()
     for gid, name in enumerate(GOAL_IDS):
-        state = random_states(n, device, constants, mild=False)
         goals = torch.full((n,), gid, device=device, dtype=torch.long)
+        if mode == "near_target":
+            state = random_states(
+                n,
+                device,
+                constants,
+                mild=False,
+                goals=goals,
+                near_goal_p=1.0 if near_goal_p <= 0 else near_goal_p,
+                hang_start_p=0.0,
+                init_mode="near_target",
+            )
+        elif mode in ("hang", "bottom"):
+            state = random_states(
+                n,
+                device,
+                constants,
+                mild=False,
+                goals=goals,
+                hang_start_p=1.0 if hang_start_p <= 0 else hang_start_p,
+                near_goal_p=0.0,
+                init_mode="bottom",
+            )
+        else:
+            state = random_states(n, device, constants, mild=False)
         total = torch.zeros(n, device=device)
         align_sum = torch.zeros(n, device=device)
         hits = torch.zeros(n, device=device)
         alive = torch.ones(n, dtype=torch.bool, device=device)
+        # Eval: no progress term (no prev); strip progress_w for clean scores.
+        eval_rkw = {**rkw, "progress_w": 0.0, "prev_state": None}
         for _ in range(steps):
             obs = make_obs(state, goals, constants)
             force = tanh_action(model.deterministic(obs), constants["forceLimit"]).squeeze(-1)
             state = step(state, force, constants=constants)
-            rew = compute_reward(state, force, goals, constants, **rkw)
+            rew = compute_reward(state, force, goals, constants, **eval_rkw)
             # Stop accruing after track fail so eval reward stays interpretable.
             total += torch.where(alive, rew, torch.zeros_like(rew))
-            angles = goal_angles(goals, device=device, dtype=state.dtype)
-            align = (
-                angle_align(state[:, 2], angles[:, 0])
-                + angle_align(state[:, 4], angles[:, 1])
-                + angle_align(state[:, 6], angles[:, 2])
-            ) / 3.0
+            align = mean_cos_align(state, goals)
             align_sum += torch.where(alive, align, torch.zeros_like(align))
             hits += torch.where(alive, at_goal(state, goals).float(), torch.zeros(n, device=device))
             alive = alive & (state[:, 0].abs() <= track_limit)
@@ -811,6 +915,8 @@ def main():
         f"center_w={args.center_w} center_hold_w={args.center_hold_w} "
         f"barrier={args.cart_barrier_coef} w_up={args.w_up} w_down={args.w_down} "
         f"forceLimit={constants['forceLimit']} "
+        f"progress_w={args.progress_w} flip_augment={args.flip_augment} "
+        f"eval_curriculum={args.eval_curriculum} "
         f"alpha_th={args.alpha_th} track_limit={args.track_limit} reward_clip={args.reward_clip} "
         f"oob_penalty={args.oob_penalty} "
         f"warmup={args.warmup_updates}x{args.warmup_goal}(hang={args.warmup_hang_start_p}) "
@@ -908,7 +1014,9 @@ def main():
                             new_g = torch.where(use_fold, fold_partner(goals), new_g)
                     goals = torch.where(flip, new_g, goals)
             next_state = step(state, force, constants=constants)
-            rew = compute_reward(next_state, force, goals, constants, **rkw)
+            rew = compute_reward(
+                next_state, force, goals, constants, prev_state=state, **rkw
+            )
             steps_left -= 1
             ep_age = ep_age + 1
             grace_n = int(args.fall_grace_steps) + int(args.start_grace_steps)
@@ -1001,6 +1109,23 @@ def main():
         ret = adv + val_t
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
 
+        # Baek VER / left–right flip augment (on-policy): duplicate PPO batch.
+        # Rewards/advantages unchanged under planar symmetry; recompute logπ(-a|s').
+        if args.flip_augment:
+            obs_f = flip_lr_obs(obs_t)
+            raw_f = -raw_t
+            with torch.no_grad():
+                t_len, n_envs = obs_f.shape[0], obs_f.shape[1]
+                log_f, _, _ = model.evaluate(
+                    obs_f.reshape(-1, OBS_DIM), raw_f.reshape(-1, 1)
+                )
+                log_f = log_f.reshape(t_len, n_envs)
+            obs_t = torch.cat((obs_t, obs_f), dim=1)
+            raw_t = torch.cat((raw_t, raw_f), dim=1)
+            log_t = torch.cat((log_t, log_f), dim=1)
+            adv = torch.cat((adv, adv), dim=1)
+            ret = torch.cat((ret, ret), dim=1)
+
         obs_flat = obs_t.reshape(-1, OBS_DIM)
         raw_flat = raw_t.reshape(-1, 1)
         log_flat = log_t.reshape(-1)
@@ -1084,14 +1209,17 @@ def main():
             writer.add_scalar(f"train/goal_frac/{name}", frac, update)
 
         if update == 1 or update % 10 == 0 or args.smoke:
+            n_eval = 16 if args.smoke else 64
+            n_steps = 80 if args.smoke else 400
             mean_rew, mean_align, per_goal = rollout_eval(
                 model,
                 constants,
                 device,
                 rkw,
-                n=32 if args.smoke else 64,
-                steps=200 if args.smoke else 400,
+                n=n_eval,
+                steps=n_steps,
                 track_limit=args.track_limit,
+                init_mode="random",
             )
             elapsed = time.time() - t0
             parts = " ".join(f"{name}={per_goal[name]['align']:.2f}" for name in GOAL_IDS)
@@ -1107,6 +1235,68 @@ def main():
                 writer.add_scalar(f"eval/reward/{name}", metrics["reward"], update)
                 writer.add_scalar(f"eval/align/{name}", metrics["align"], update)
                 writer.add_scalar(f"eval/at_goal/{name}", metrics["at_goal"], update)
+
+            if args.eval_curriculum:
+                # Hold-basin meter (diagnoses capture; random-IC understates this).
+                _, _, nt = rollout_eval(
+                    model,
+                    constants,
+                    device,
+                    rkw,
+                    n=n_eval,
+                    steps=n_steps,
+                    track_limit=args.track_limit,
+                    init_mode="near_target",
+                )
+                for name, metrics in nt.items():
+                    writer.add_scalar(
+                        f"eval/near_target/reward/{name}", metrics["reward"], update
+                    )
+                    writer.add_scalar(
+                        f"eval/near_target/align/{name}", metrics["align"], update
+                    )
+                    writer.add_scalar(
+                        f"eval/near_target/at_goal/{name}", metrics["at_goal"], update
+                    )
+                writer.add_scalar(
+                    "eval/near_target/align",
+                    sum(nt[g]["align"] for g in GOAL_IDS) / NUM_GOALS,
+                    update,
+                )
+                # Swing-from-hang meter.
+                _, _, hg = rollout_eval(
+                    model,
+                    constants,
+                    device,
+                    rkw,
+                    n=n_eval,
+                    steps=n_steps,
+                    track_limit=args.track_limit,
+                    init_mode="hang",
+                )
+                for name, metrics in hg.items():
+                    writer.add_scalar(
+                        f"eval/hang/reward/{name}", metrics["reward"], update
+                    )
+                    writer.add_scalar(
+                        f"eval/hang/align/{name}", metrics["align"], update
+                    )
+                    writer.add_scalar(
+                        f"eval/hang/at_goal/{name}", metrics["at_goal"], update
+                    )
+                writer.add_scalar(
+                    "eval/hang/align",
+                    sum(hg[g]["align"] for g in GOAL_IDS) / NUM_GOALS,
+                    update,
+                )
+                print(
+                    f"  eval/near_target/at_goal/UUU={nt['UUU']['at_goal']:.4f} "
+                    f"align/UUU={nt['UUU']['align']:.3f} | "
+                    f"eval/hang/at_goal/UUU={hg['UUU']['at_goal']:.4f} "
+                    f"align/UUU={hg['UUU']['align']:.3f}",
+                    flush=True,
+                )
+
             args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
             torch.save(
                 {"model": model.state_dict(), "update": update, "obs_dim": OBS_DIM},
