@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~16:10 CT.
+Last updated: 2026-09-19 ~16:40 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -793,4 +793,61 @@ Operational-space QP balancing for **passive-first-joint** vertical UTPR (active
 
 **No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
 
+
+### Research pass (2026-09-19 ~16:40 CT) — on-policy flip fix + hybrid classical catcher
+
+Digged Mittal et al. ICRA 2024 (arXiv:2403.04359) + Su/Huang IROS 2024 symmetry RL (PDF), Aström–Furuta energy bang-bang thresholds, Machines 2025 hybrid PPO–SMC (Mon), re-checked fawraw commits (still last *code* **2026-06-25** / docs **2026-07-02**). Live v5 still cooking (~u220; A entropy **~−1.0**, B/C ~−0.7…−0.75; near_target at_goal/UUU still ~0.04). cool-ent **v6** already staged — do not mid-kill. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (refines shipping P1 flip + handoff hold options; does not displace handoff as #1).
+
+#### Live `--flip-augment` ≠ Baek VER and ≠ literature PPOaug
+
+Baek VER is **off-policy SAC replay** doubling (mirror transitions into buffer). Our shipping code (`train_triple.py` after GAE) is an on-policy port:
+
+```text
+obs/raw/log ← concat(real, flipped);  log_f = π_θ(−a | s_flip)  # recomputed at update start
+adv/ret ← concat(adv, adv)           # reused, not re-GAE'd on flipped values
+```
+
+| Source | Recipe | Vs ours |
+|---|---|---|
+| Baek EAAI 2024 | SAC + VER in **replay** | Off-policy-native; not our PPO path |
+| Mittal ICRA'24 / rsl_rl | Augment **after minibatch sample**; keep original π_old denominator; repeat adv/ret | Prefer per-minibatch, not full-rollout concat |
+| Su IROS'24 PPOaug | Same: augment inside update loop so orig+mirror share each grad step; init near-symmetric | Warns rollout-storage mirror creates off-policy samples |
+| Su IROS'24 PPOeqic | Hard equivariant actor + invariant critic (EMLP) | Strict; best sample-eff in their tasks; overkill for cart C₂ |
+
+**Pitfalls of our shipping shape:** (1) flipped actions were never sampled by the rollout policy — recomputed `log_f` is a behavior proxy, not true π_old; (2) full-batch concat before epochs weights every update on 50% synthetic samples; (3) reused adv assumes perfect reward/dynamics equivariance (true for our planar plant+product) but does not recompute V(s_flip). This may **dilute** on-policy signal under product+progress and is a plausible co-factor with entropy collapse (not proven causal).
+
+**Implementable probes (next cold / green-light — not mid-run):**
+
+1. **A/B one slot `FLIP_AUGMENT=0`** while others stay on — if near_target/entropy improve with flip off, shipping VER-port is net-negative.
+2. **Fix to Mittal/Su PPOaug:** move mirror inside the minibatch loop; for C₂ cart, `log_old(g▷a|g▷s) ≈ log_old(a|s)` when π≈equivariant — can **repeat** stored `log_t` instead of recomputing under θ_update.
+3. Optional later: equivariant actor head (PPOeqic) — only if soft augment stays weak.
+
+Does **not** demote handoff; cheap co-traveler beside PBRS / cool-ent / `p_trunc`.
+
+#### Hybrid classical catcher fills handoff hold half
+
+Machines **2025** (Mon): **PPO swing-up → SMC stabilize** on cart-pole + Acrobot (not cart-triple). Same Astrom-style split as fawraw M4 / arXiv:2606.22145, but hold is **classical** not RL. Steal for our P1 when coding split nets:
+
+| Hold option | When |
+|---|---|
+| RL stabilize (fawraw M3 / our hold slot B) | Prefer if we already have a near_target specialist |
+| **LQR / TV-LQR** (Glück local) | Best model-based RoA once near upright |
+| **SMC** (Machines 2025) | Robust to model error; no train hold policy |
+
+Aström–Furuta (single pole, reference): energy bang-bang ∝ sign(θ̇ cos θ)·Ẽ; catch when near upright (~±30° classically). Triple still lacks published energy coeffs (Glück=feedforward) — use measured basin ≤0.1 rad for the switch, not 30°.
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing coefs: still unspecified; last code **2026-06-25**.
+- Serial cart-triple classical energy coeffs: still none.
+- Force 80–100: still demoted.
+- Rank: after v5→v6 cook, **split swing vs hold** still #1 unimplemented; **flip A/B or minibatch PPOaug fix** joins PBRS + ent floor + `p_trunc` as cheap co-travelers.
+
+#### Amend recommended redesign (additions only)
+
+43. Treat shipping `--flip-augment` as **approximate** Baek port — next cold: A/B flip-off on one slot **or** rewrite to **minibatch-time** PPOaug (Mittal/Su); do not assume VER sample-efficiency until that probe.
+44. Handoff hold half may be **LQR/SMC** instead of a second PPO — Machines 2025 + Glück local; still switch on measured basin ≤0.1 rad + latch/hysteresis.
+45. Ignore Aström ±30° as a triple gate; keep energy bang-bang only as optional classical *swing teacher*, not the switch threshold.
+
+**No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
 
