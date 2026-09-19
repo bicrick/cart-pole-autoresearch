@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~17:33 CT.
+Last updated: 2026-09-19 ~18:08 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -1000,5 +1000,79 @@ fawraw M4 soft-landing coeffs still unspecified. ASAP gives a **trainable** smoo
 52. Handoff switch set must be **strict subset of measured hold RoA** (2606.28627); angle∩energy∩low-\(\omega\) gates are the practical proxy — run catch-basin measure before trusting latch.
 53. Soft-delivery: prefer **LPF τ≈0.3** first; if chatter remains, add **ASAP** \(\lambda_T\) (and light \(\lambda_S\)) on swing PPO rather than inventing fawraw soft-landing weights.
 54. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented after v6.
+
+**No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
+
+
+### Research pass (2026-09-19 ~18:08 CT) — Raffin massive-parallel SAC + EvolSAC height-gate + PBRS bias
+
+Digged Raffin Jul 2025 / ICLR Blogposts 2026 SAC-on-Isaac (massive parallel), EvolSAC (arXiv:2507.10030 IROS'24 AI Olympics underactuated), Müller/Kudenko PBRS effectiveness (arXiv:2502.01307), Xin coupling-energy limited-track swing-up (JVC 2025 — single-pole + barrier), IEEE Access 2025 DIPC hybrid energy→SMC (architecture only; no open numeric switch), re-checked fawraw commits (last *code* still **2026-06-25**, last *docs* **2026-07-02** — no soft-landing coefs), Baek VER (no new on-policy / multi-link paper). Live: cool-ent **v6** cooking; do not mid-kill. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (fills SAC/TQC + PBRS cookbooks under existing P1/P2; does not displace handoff as #1).
+
+#### Raffin massive-parallel SAC — copy-paste hypers for *our* env count
+
+Prior passes locked Baek/Lim SAC·TQC as the off-policy alternative and AR-EAPO/`p_trunc` as PPO explore fixes. Missing: **wall-clock** hypers when you already run thousands of envs (we use 8192). Raffin's Optuna-for-speed recipe on Isaac (1024 envs) is the first concrete steal:
+
+| Knob | Default SAC (sample-eff) | Raffin speed-tuned | Steal for optional P2 SAC/TQC slot |
+|---|---|---|---|
+| Replay ratio \(g/(N_{\mathrm{env}}·f_{\mathrm{train}})\) | ≳1 | **≈0.03** | Cheap data → few grads per env-step |
+| `batch_size` | 256 | **512** | |
+| `gamma` | 0.99 | **≈0.983** | Slightly shorter horizon |
+| `learning_rate` | 3e-4 | **≈4.5e-4** | |
+| `tau` | 0.005 | **≈0.0023** | |
+| `policy_delay` | 1–2 | **8** | Critic-heavy like TD3 |
+| `net_arch` | [256,256] | **[512,256,128]** + LN + AdamW | Match PPO-scale nets |
+| `ent_coef` | auto | auto with init **~0.01** | Same order as our cool-ent floor |
+| Hard-task add-ons | — | `train_freq=10`, `gradient_steps=320` (keep RR), **`use_sde=True`**, **`n_steps=3`** | gSDE for consistent explore; FastTD3-style n-step closes PPO gap |
+| Action bounds | full plant limit | **PPO 2.5–97.5% percentiles** of a trained policy | Do **not** jump force 80–100; shrink/reshape effective \(u\) first |
+| TQC vs SAC | — | TQC easier to tune; SAC faster once tuned; TQC wins on hardest env | Prefer **TQC** if one hard UUU slot; else SAC+n-step |
+
+**Implication:** overnight PPO entropy collapse is *not* an argument to crank force. If we ever leave PPO for a single-net path, use **low RR + n-step + gSDE**, not textbook SAC. Still prefer **two-policy handoff** if coding budget allows only one architecture change (Baek/Lim hardware path used SAC/TQC *and* often specialists).
+
+#### EvolSAC (arXiv:2507.10030) — height-gated surrogate + SNES polish
+
+SAC (then SNES) on cart-pole + RealAIGym acrobot/pendubot. Does **not** replace handoff; fills reward/finetune cookbook under the SAC path:
+
+| Piece | Recipe |
+|---|---|
+| Surrogate (cart-pole) | \(R=-\|p_{\mathrm{tip}}-p_{\mathrm{up}}\|\) (dense tip distance) |
+| "Held" definition | tip within **0.1** of upright for rest of episode (matches fawraw basin scale) |
+| \(u_{\max}\) cart-pole | **2.5 N** (toy plant — scale, don't copy) |
+| Double-pend height gate | high-reward regime if \(y>y_{\mathrm{th}}\): **0.375 m** acrobot / **0.35 m** pendubot (\(y_{\max}=0.5\)) |
+| Weights (Table 1) | \(\tau_{\max}=3\), \(\alpha=2\), \(\beta=1\), \(\rho_1=0.1\), \(\rho_2=0.02\), \(\phi_1=\phi_2=0.15\), \(\eta=0.02\) |
+| High regime | \(V+\alpha[1+\cos\theta_2]^2-\beta T-\rho_1 a^2-\phi_1\Delta a\) |
+| Low regime | \(V-\rho_2 a^2-\phi_2\Delta a-\eta\|\dot q\|^2\) |
+| SNES polish | pop **40**, \(\sigma=0.02\) (cart) / **0.01** (double); optimize sparse score from SAC warm-start |
+| Torque note | \(\tau_{\max}=1.5\) too weak (stuck mid configs); **5.0** too thrashy; **3.0** sweet spot |
+
+**Steal:** optional **height/align gate** that switches from velocity-penalized pump → energy/align-rich hold terms (same spirit as our hang→near_target curriculum). SNES is P3 polish after a working UUU policy — not overnight.
+
+#### PBRS effectiveness (arXiv:2502.01307) — bias + exponential Φ
+
+15:42 locked PBRS form \(F=\gamma\Phi(s')-\Phi(s)\) vs raw Δ. Müller/Kudenko add the missing scale/offset cookbook:
+
+| Knob | Recipe | Steal |
+|---|---|---|
+| Shifted potential | \(\Phi_b(s)=\Phi(s)+\frac{b}{\gamma-1}\) (non-terminal) | Set \(b=(1-\gamma)Q_{\mathrm{init}}-r_\infty\) so first TD steps actually follow Φ |
+| Terminal | \(\Phi(\mathrm{terminal})=0\) (required for policy invariance) | Truncation / goal / oob death → Φ=0 |
+| Continuous Φ bug | small \(\delta\Phi\) can get the **wrong sign** of \(F\) | Prefer **exponential** \(\mathrm{e}^{\Phi}\) with base **\(e\approx 32\)** (their default) so small upright steps still incentivize |
+| Scale bound (goal-directed) | \(r_\infty-(1-\gamma)Q_{\mathrm{init}}<\Phi<r_g-(1-\gamma)Q_{\mathrm{init}}\) | Don't crank `progress_w` alone — mismatch Φ vs reward/init breaks guidance |
+
+Our shipping progress is still raw Δ (`progress_w*(align_now−align_prev)`). Next green-lit progress touch: **PBRS γ-diff + optional constant bias + exp Φ** (align or −‖θ−θ*‖), not a bigger `progress_w`.
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing **numeric** coefs: still unspecified; last code **2026-06-25** (docs-only **2026-07-02**).
+- Serial **cart-triple** classical energy bang-bang coeffs: still none (Xin JVC 2025 = **single-pole** coupling-energy + track barrier; Xin TIE 2025 n-link = **antiswing at downward** EP, not swing-up; Glück = feedforward BVP).
+- Force 80–100: still demoted (Glück ~22 m/s²; Raffin says reshape action bounds before raising plant limit).
+- Baek VER: no new on-policy / multi-link paper this pass (shipping flip A/B fix from 16:40 still the on-policy lever).
+- Rank: after v6 cook, **split swing vs hold** still #1; Raffin SAC hypers + EvolSAC height-gate + PBRS bias/exp join prior co-travelers.
+
+#### Amend recommended redesign (additions only)
+
+55. If coding optional P2 SAC/TQC slot at our env count: start from **Raffin speed hypers** (RR≈0.03, batch 512, γ≈0.983, policy_delay 8, net [512,256,128], then `n_steps=3` + gSDE on hard UUU) — not SB3 defaults.
+56. Prefer **TQC** for the single hardest UUU specialist; SAC+n-step otherwise. Cap effective actions via **percentile bounds** before raising `forceLimit`.
+57. Progress retune: after γ-PBRS, add **Φ bias** \(b/(γ-1)\) matched to typical return scale + try **exp Φ** (base ~32) if small align steps farm wrong sign.
+58. Optional curriculum: EvolSAC-style **height/align gate** switching pump vs hold reward terms (numbers in table above — retune to our \(U_{\mathrm{UUU}}\)).
+59. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented after v6.
 
 **No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
