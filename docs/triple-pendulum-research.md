@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~10:10 CT.
+Last updated: 2026-09-19 ~10:31 CT.
 
 
 ## Implementation status (2026-09-19)
@@ -214,3 +214,49 @@ fawraw reward itself is still **additive** (−weighted ang² − vel − cart �
 
 Still **do not** redesign code or kill double xonly until user green-lights.
 
+
+### Research pass (2026-09-19 ~10:31 CT) — new actionable diffs
+
+Re-read Lim PDF end-to-end, fawraw README/CHANGELOG/`docs/m4_findings.md`, Glück post-print, and the rotary/double product-reward cousins. **Direction unchanged** (UUU-first → product/abs → hard-EP → later 56). Four new levers + cookbook fills to fold in when coding.
+
+#### fawraw process knobs we had only half-locked
+
+| Knob | Value | Why it matters |
+|---|---|---|
+| Soft fall grace | `fall_grace_steps≈20` | Swing-up with `start≠target` used to die at step 0/1 on the angle-fall check (−100). Grace lets the cart inject energy before fall-terminate. |
+| Stage gates | M2 UUU success **≥0.80** before multi-eq; M3 overall **≥0.75** before 56 | Concrete stop rules so we do not open the next stage on a weak attractor. |
+| Catch-basin measure | Sweep offset×vel on the stabilizer *before* hand-off | M3@UDD grid (fawraw): reliable only at **0.1 rad / 0 vel** (1.0); 0.2 rad @0 vel ≈0.6; **any vel ≥2 → 0**. Soft-landing must hit that basin. |
+| Init for swing-up | `init_mode=bottom` (not `near_target`) when start≠target | Pairs with grace; near_target + wrong start is the step-1 death bug. |
+
+#### Lim TQC cookbook fills (Table 1 + §4.2–4.3)
+
+Already had product coeffs / ICs / 8 specialists. Newly locked:
+
+- Optimizer ADAM; **γ=0.99**; target-smooth **β/τ=0.005**; target update every step; 1 grad step / 1 env step; ReLU.
+- Specialist “done” diagnostic: ep return plateaus ~**700–800 / 1000** (not 1000) under wide random ICs — expect residual exploration noise.
+- Wide random ICs can spawn **physically impossible** state combos → early-term noise; filter or clamp if adopting Lim ranges.
+- Early-stop already locked: `|y|>0.48` m or `|a|>2.5` m/s²; ODE 1 ms / agent 10 ms / ep 10 s.
+
+#### Product-reward lineage (double / rotary cousins → prefer Lim triple form)
+
+| Source | \(R_u\) | Cart / vel notes |
+|---|---|---|
+| MDPI Machines 2025 (cart double, same Inha lab) | \(\exp(-0.015\|u\|)\) | \(R_y=\exp(-0.5\|y\|)\); per-link \(R_{\dot\theta}=\exp(-0.02\|\omega\|)\); 4 specialists → 12 transitions |
+| em0sh/rdip (rotary double TQC reimpl) | \(\exp(-0.005\|u\|)\) | Same 10 s / 10 ms skeleton; product of angle+rate terms |
+| Lim KIEE 2025 (cart triple) | \(\exp(-0.001 u^2)\) | Softer input; \(R_y=\exp(-0.3\|y\|)\); **cumulative** world angles + cumulative rates |
+
+**Steal Lim’s triple form**, not the double’s harsher \(R_u\)/`R_y`. Confirms product + specialists transfer down the lab lineage; cumulative abs angles are the triple-specific upgrade.
+
+#### Glück Automatica 2013 (classical — time/accel budget only)
+
+Confirmed post-print numbers (already roughly noted): swing-up **T = 3.5 s** under box constraints \(|s|\le 0.7\) m, \(|\dot s|\le 3\) m/s, \(|\ddot s|\le 22\) m/s². Useful as a **horizon / actuator budget** check for our RL episodes, not a feedforward path. (fawraw’s README table attributing “Graichen Automatica 2013 / 56 trajectories” is a mis-cite — Glück is DDD→UUU only; Graichen CDC 2005 is side-step.)
+
+#### Amend recommended redesign (additions only)
+
+15. On any swing-up / transition episode: **`fall_grace_steps≈20`** + `init_mode=bottom` when start≠target.
+16. **Stage gates:** do not leave UUU-only until hold success ≳0.80; do not open 56 until multi-eq overall ≳0.75.
+17. Before any hand-off / transition-only phase: **measure catch basin** (offset×vel grid) on the hold policy; train wider-basin catcher and/or soft-landing until delivery lands inside it.
+18. When porting Lim product+TQC (or PPO surrogate): copy **γ=0.99, τ=0.005**; judge EP specialists by ~700–800/1000 return plateau + hold metrics, not max return.
+19. Prefer **Lim triple product** (cumulative abs angles) over MDPI-double coeffs if we A/B product forms.
+
+Still **do not** redesign code or kill double xonly until user green-lights.
