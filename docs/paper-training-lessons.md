@@ -463,3 +463,7 @@ Edge stretch finished **u400**: reward~**1077**, align~**0.750**, `at_goal` UU/U
 **Nowalls** FT `…nowalls-oob20-edge` @**u70**: reward~**977**, align~**0.638**, `at_goal` ~**0.55/0.60/0.67/0.73** (min **UU**) — climbing from cold transfer; leave alone.
 
 **Action:** promoted finished edge → `checkpoint.pt` / demo `policy.json`. Synced `scripts/next-train.sh` (oob20). Restarted **edge + hot** from their ckpts with `--oob-penalty 20` on the nowalls plant (u1 transfer dip reward~627–700 / align~0.44–0.49 — expected; same recovery curve as nowalls). Triple alive (GPU ~99%/6GB). Prefer promote from nowalls once its min_at_goal beats edge.
+
+## (al) DU↔DD fold bias (2026-09-18 ~21:00 CT)
+
+Demo failure: settled in **DU** (`th1=π, th2=0`) and never folds outer link into **DD**. Align stays decent; sparse hold on the new goal fails. Fix: `--fold-pair-p` (default recipe **0.55**) biases wrong-eq starts and mid-episode goal flips toward outer-link partners **DU↔DD** and **UU↔UD**. Also bump `--goal-switch-p` 0.002→0.004 so interactive toggles show up more often.

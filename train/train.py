@@ -162,6 +162,15 @@ def parse_args():
         help="Per-step P(change goal mid-episode without reset) — interactive toggle edge",
     )
     parser.add_argument(
+        "--fold-pair-p",
+        type=float,
+        default=0.0,
+        help=(
+            "Bias wrong-eq starts and mid-episode flips toward outer-link fold pairs "
+            "UU↔UD and DU↔DD (demo failure: parked in DU, won't fold to DD)"
+        ),
+    )
+    parser.add_argument(
         "--uu-bias",
         type=float,
         default=0.0,
@@ -208,6 +217,8 @@ def default_run_name(args) -> str:
         parts.append(f"xeq{args.wrong_eq_p:g}".replace(".", ""))
     if getattr(args, "goal_switch_p", 0):
         parts.append(f"gsw{args.goal_switch_p:g}".replace(".", "p"))
+    if getattr(args, "fold_pair_p", 0):
+        parts.append(f"fold{args.fold_pair_p:g}".replace(".", ""))
     if getattr(args, "warmup_updates", 0):
         parts.append(f"wu{args.warmup_updates}{args.warmup_goal}")
     return "-".join(parts)
@@ -226,6 +237,11 @@ def reward_kwargs(args):
     )
 
 
+def fold_partner(goal_ids: torch.Tensor) -> torch.Tensor:
+    """Outer-link fold: UU↔UD (0↔1), DU↔DD (2↔3)."""
+    return goal_ids ^ 1
+
+
 def random_states(
     n,
     device,
@@ -235,6 +251,7 @@ def random_states(
     near_goal_p=0.0,
     hang_start_p=0.0,
     wrong_eq_p=0.0,
+    fold_pair_p=0.0,
 ):
     """Reset distribution.
 
@@ -296,6 +313,10 @@ def random_states(
             same = other == goals
             if same.any():
                 other = torch.where(same, (other + 1 + torch.randint(0, 3, (n,), device=device)) % 4, other)
+            # Bias toward outer-link fold pairs (DU↔DD, UU↔UD) — demo failure mode.
+            if fold_pair_p > 0:
+                use_fold = torch.rand(n, device=device) < fold_pair_p
+                other = torch.where(use_fold, fold_partner(goals), other)
             angles = goal_angles(other, device=device, dtype=torch.float32)
             x[hit] = torch.empty(n_hit, device=device).uniform_(-0.6, 0.6)
             xd[hit] = torch.empty(n_hit, device=device).uniform_(-0.6, 0.6)
@@ -512,7 +533,7 @@ def main():
         f"warmup={args.warmup_updates}x{args.warmup_goal} uu_bias={args.uu_bias} "
         f"anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
         f"hang_start_p={args.hang_start_p} wrong_eq_p={args.wrong_eq_p} "
-        f"goal_switch_p={args.goal_switch_p} "
+        f"goal_switch_p={args.goal_switch_p} fold_pair_p={args.fold_pair_p} "
         f"her_ratio={args.her_ratio}",
         flush=True,
     )
@@ -543,6 +564,7 @@ def main():
         near_goal_p=args.near_goal_p,
         hang_start_p=args.hang_start_p,
         wrong_eq_p=args.wrong_eq_p,
+            fold_pair_p=args.fold_pair_p,
     )
     steps_left = torch.randint(1, args.episode_len + 1, (args.num_envs,), device=device)
 
@@ -583,6 +605,10 @@ def main():
                             (new_g + 1 + torch.randint(0, 3, (args.num_envs,), device=device)) % 4,
                             new_g,
                         )
+                    # Bias flips toward outer-link fold (DU↔DD / UU↔UD).
+                    if args.fold_pair_p > 0:
+                        use_fold = torch.rand(args.num_envs, device=device) < args.fold_pair_p
+                        new_g = torch.where(use_fold, fold_partner(goals), new_g)
                     goals = torch.where(flip, new_g, goals)
             next_state = step(state, force, constants=constants)
             rew = goal_reward(next_state, force, goals, constants, **rkw)
@@ -608,6 +634,7 @@ def main():
                     near_goal_p=args.near_goal_p,
                     hang_start_p=args.hang_start_p,
                     wrong_eq_p=args.wrong_eq_p,
+            fold_pair_p=args.fold_pair_p,
                 )
                 next_state = torch.where(done.unsqueeze(-1), reset, next_state)
                 goals = reset_goals

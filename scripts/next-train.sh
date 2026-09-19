@@ -17,7 +17,8 @@ HER_RATIO="${HER_RATIO:-0.1}"
 NEAR_GOAL_P="${NEAR_GOAL_P:-0.15}"
 HANG_START_P="${HANG_START_P:-0.45}"
 WRONG_EQ_P="${WRONG_EQ_P:-0.25}"
-GOAL_SWITCH_P="${GOAL_SWITCH_P:-0.002}"
+GOAL_SWITCH_P="${GOAL_SWITCH_P:-0.004}"
+FOLD_PAIR_P="${FOLD_PAIR_P:-0.55}"
 ENERGY_W="${ENERGY_W:-0.35}"
 EPISODE_LEN="${EPISODE_LEN:-1200}"
 IMPULSE_P="${IMPULSE_P:-0.01}"
@@ -44,6 +45,7 @@ exec python3 train/train.py \
   --hang-start-p "${HANG_START_P}" \
   --wrong-eq-p "${WRONG_EQ_P}" \
   --goal-switch-p "${GOAL_SWITCH_P}" \
+  --fold-pair-p "${FOLD_PAIR_P}" \
   --her-ratio "${HER_RATIO}" \
   --impulse-p "${IMPULSE_P}" \
   --logdir "${LOGDIR}" \
