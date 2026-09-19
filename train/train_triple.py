@@ -23,6 +23,7 @@ from goals_triple import (
     OBS_LAYOUT,
     angle_align,
     at_goal,
+    compute_reward,
     conditioned_obs,
     goal_angles,
     goal_reward,
@@ -192,6 +193,83 @@ def parse_args():
         default=0,
         help="Post-warmup updates keeping --uu-bias (0 with uu-bias>0 => rest of run)",
     )
+    parser.add_argument(
+        "--reward-mode",
+        default="product",
+        choices=("product", "additive"),
+        help="product=Lim-style [0,1] product on world angles; additive=legacy align/energy",
+    )
+    parser.add_argument(
+        "--cart-barrier-coef",
+        type=float,
+        default=50.0,
+        help="(x/track_limit)^8 penalty (fawraw anti rail-slide); 0 disables",
+    )
+    parser.add_argument(
+        "--w-up",
+        type=float,
+        default=5.0,
+        help="Angle weight for UP-targeted links (adaptive anti-DDD)",
+    )
+    parser.add_argument(
+        "--w-down",
+        type=float,
+        default=1.0,
+        help="Angle weight for DOWN-targeted links",
+    )
+    parser.add_argument(
+        "--alpha-u", type=float, default=0.0, help="Baek floor on R_u (product mode)"
+    )
+    parser.add_argument(
+        "--alpha-y", type=float, default=0.0, help="Baek floor on R_y (product mode)"
+    )
+    parser.add_argument(
+        "--alpha-th", type=float, default=0.5, help="Baek floor on R_θ (product; 0.5=Baek)"
+    )
+    parser.add_argument(
+        "--alpha-w", type=float, default=0.0, help="Baek floor on R_ω (product mode)"
+    )
+    parser.add_argument(
+        "--fall-grace-steps",
+        type=int,
+        default=20,
+        help="First N steps of an episode: no oob/angle-fall terminate",
+    )
+    parser.add_argument(
+        "--start-grace-steps",
+        type=int,
+        default=0,
+        help="Extra immune steps at episode start (stacked with fall-grace for oob)",
+    )
+    parser.add_argument(
+        "--angle-fall",
+        action="store_true",
+        help="Terminate when any link exceeds per-target fall threshold (UP=0.6/DOWN=1.5)",
+    )
+    parser.add_argument(
+        "--fall-thresh-up", type=float, default=0.6, help="Angle-fall rad for UP targets"
+    )
+    parser.add_argument(
+        "--fall-thresh-down", type=float, default=1.5, help="Angle-fall rad for DOWN targets"
+    )
+    parser.add_argument(
+        "--init-mode",
+        default="mixed",
+        choices=("mixed", "bottom", "near_target", "wide"),
+        help="Reset prior: mixed=curriculum mix; bottom=hang; near_target; wide=Lim-ish ICs",
+    )
+    parser.add_argument(
+        "--warmup-hang-start-p",
+        type=float,
+        default=0.0,
+        help="hang_start_p during UUU warmup (default 0 — anti-DDD)",
+    )
+    parser.add_argument(
+        "--vel-cost-coef",
+        type=float,
+        default=0.0,
+        help="Extra additive vel^2 cost (additive mode; prefer 0.01-0.02)",
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument("--checkpoint", type=Path, default=ROOT / "policies" / "checkpoint-triple.pt")
     parser.add_argument("--out", type=Path, default=POLICY_PATH)
@@ -234,19 +312,36 @@ def default_run_name(args) -> str:
         parts.append("txonly")
     if getattr(args, "warmup_updates", 0):
         parts.append(f"wu{args.warmup_updates}{args.warmup_goal}")
+    mode = getattr(args, "reward_mode", "product")
+    if mode:
+        parts.append(mode[:3])
+    if getattr(args, "cart_barrier_coef", 0):
+        parts.append(f"bar{args.cart_barrier_coef:g}".replace(".", ""))
+    init = getattr(args, "init_mode", "mixed")
+    if init and init != "mixed":
+        parts.append(init)
     return "-".join(parts)
 
 
 def reward_kwargs(args):
     return dict(
+        reward_mode=args.reward_mode,
         align_w=args.align_w,
         energy_w=args.energy_w,
         spin_w=args.spin_w,
         center_w=args.center_w,
         center_hold_w=args.center_hold_w,
         track_limit=args.track_limit,
-        reward_clip=args.reward_clip,
+        reward_clip=args.reward_clip if args.reward_mode == "additive" else 0.0,
         oob_penalty=args.oob_penalty,
+        cart_barrier_coef=args.cart_barrier_coef,
+        w_up=args.w_up,
+        w_down=args.w_down,
+        alpha_u=args.alpha_u,
+        alpha_y=args.alpha_y,
+        alpha_th=args.alpha_th,
+        alpha_w=args.alpha_w,
+        vel_cost_coef=args.vel_cost_coef,
     )
 
 
@@ -266,21 +361,66 @@ def random_states(
     wrong_eq_p=0.0,
     fold_pair_p=0.0,
     transition_only=False,
+    init_mode="mixed",
 ):
     """Reset distribution.
 
     If transition_only and goals are set: every env spawns near a discrete eq
     different from its goal (uniform directed A→B, A≠B). Otherwise priority is
     near-goal → hang → wrong-eq → uniform / mild.
+
+    init_mode:
+      mixed       — curriculum mix (default)
+      bottom      — all near hanging DDD (swing-up from bottom)
+      near_target — all near assigned goal (hold stage)
+      wide        — Lim-style wide random ICs (full angle, larger rates)
     """
+    mode = (init_mode or "mixed").lower()
+
+    # Wide / Lim-ish base ranges (anti-DDD: cover full angle space)
+    if mode == "wide":
+        x = torch.empty(n, device=device).uniform_(-0.3, 0.3)
+        xd = torch.empty(n, device=device).uniform_(-1.2, 1.2)
+        th1 = torch.empty(n, device=device).uniform_(-math.pi, math.pi)
+        th2 = torch.empty(n, device=device).uniform_(-math.pi, math.pi)
+        th3 = torch.empty(n, device=device).uniform_(-math.pi, math.pi)
+        th1d = torch.empty(n, device=device).uniform_(-10.0, 10.0)
+        th2d = torch.empty(n, device=device).uniform_(-20.0, 20.0)
+        th3d = torch.empty(n, device=device).uniform_(-30.0, 30.0)
+        return torch.stack((x, xd, th1, th1d, th2, th2d, th3, th3d), dim=-1)
+
+    if mode == "bottom":
+        x = torch.empty(n, device=device).uniform_(-1.0, 1.0)
+        xd = torch.empty(n, device=device).uniform_(-0.8, 0.8)
+        th1 = math.pi + torch.empty(n, device=device).uniform_(-0.35, 0.35)
+        th2 = math.pi + torch.empty(n, device=device).uniform_(-0.35, 0.35)
+        th3 = math.pi + torch.empty(n, device=device).uniform_(-0.35, 0.35)
+        th1d = torch.empty(n, device=device).uniform_(-1.0, 1.0)
+        th2d = torch.empty(n, device=device).uniform_(-1.0, 1.0)
+        th3d = torch.empty(n, device=device).uniform_(-1.0, 1.0)
+        return torch.stack((x, xd, th1, th1d, th2, th2d, th3, th3d), dim=-1)
+
+    if mode == "near_target" and goals is not None:
+        angles = goal_angles(goals, device=device, dtype=torch.float32)
+        x = torch.empty(n, device=device).uniform_(-0.5, 0.5)
+        xd = torch.empty(n, device=device).uniform_(-0.5, 0.5)
+        th1 = angles[:, 0] + torch.empty(n, device=device).uniform_(-0.3, 0.3)
+        th2 = angles[:, 1] + torch.empty(n, device=device).uniform_(-0.3, 0.3)
+        th3 = angles[:, 2] + torch.empty(n, device=device).uniform_(-0.3, 0.3)
+        th1d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
+        th2d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
+        th3d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
+        return torch.stack((x, xd, th1, th1d, th2, th2d, th3, th3d), dim=-1)
+
+    # mixed (default): wider base than old ±8 rad/s — closer to Lim coverage
     x = torch.empty(n, device=device).uniform_(-2.0, 2.0)
     xd = torch.empty(n, device=device).uniform_(-3.0, 3.0)
     th1 = torch.empty(n, device=device).uniform_(-math.pi, math.pi)
     th2 = torch.empty(n, device=device).uniform_(-math.pi, math.pi)
     th3 = torch.empty(n, device=device).uniform_(-math.pi, math.pi)
-    th1d = torch.empty(n, device=device).uniform_(-8.0, 8.0)
-    th2d = torch.empty(n, device=device).uniform_(-8.0, 8.0)
-    th3d = torch.empty(n, device=device).uniform_(-8.0, 8.0)
+    th1d = torch.empty(n, device=device).uniform_(-10.0, 10.0)
+    th2d = torch.empty(n, device=device).uniform_(-12.0, 12.0)
+    th3d = torch.empty(n, device=device).uniform_(-14.0, 14.0)
     if mild:
         k = max(1, n // 5)
         x[:k] = torch.empty(k, device=device).uniform_(-0.4, 0.4)
@@ -396,6 +536,30 @@ def apply_impulses(state, p):
     return torch.where(hit.unsqueeze(-1), kick, state)
 
 
+
+def hang_start_p_for_update(args, update: int) -> float:
+    """Low/zero hang during UUU warmup; then the configured hang_start_p."""
+    warm = int(args.warmup_updates)
+    if warm > 0 and update <= warm:
+        return float(getattr(args, "warmup_hang_start_p", 0.0))
+    return float(args.hang_start_p)
+
+
+def angle_fall_mask(state, goal_ids, thresh_up=0.6, thresh_down=1.5):
+    """Per-link fall: UP targets use tight thresh, DOWN use loose (fawraw)."""
+    angles = goal_angles(goal_ids, device=state.device, dtype=state.dtype)
+    th = torch.stack((state[..., 2], state[..., 4], state[..., 6]), dim=-1)
+    # smallest absolute angle error to target
+    err = torch.atan2(torch.sin(th - angles), torch.cos(th - angles)).abs()
+    up = torch.cos(angles) > 0.0
+    thresh = torch.where(
+        up,
+        torch.full_like(err, float(thresh_up)),
+        torch.full_like(err, float(thresh_down)),
+    )
+    return (err > thresh).any(dim=-1)
+
+
 def make_obs(state, goal_ids, constants):
     return normalize_obs(conditioned_obs(observe(state), goal_ids), constants)
 
@@ -491,7 +655,7 @@ def her_relabel_inplace(
         conditioned_obs(observe(rel_states.reshape(-1, 8)), rel_goals.reshape(-1)),
         constants,
     ).reshape(t_h, n_h, OBS_DIM)
-    flat_rew = goal_reward(
+    flat_rew = compute_reward(
         rel_states.reshape(-1, 8),
         rel_forces.reshape(-1),
         rel_goals.reshape(-1),
@@ -527,7 +691,7 @@ def rollout_eval(model, constants, device, rkw, n=64, steps=400, track_limit=4.0
             obs = make_obs(state, goals, constants)
             force = tanh_action(model.deterministic(obs), constants["forceLimit"]).squeeze(-1)
             state = step(state, force, constants=constants)
-            rew = goal_reward(state, force, goals, constants, **rkw)
+            rew = compute_reward(state, force, goals, constants, **rkw)
             # Stop accruing after track fail so eval reward stays interpretable.
             total += torch.where(alive, rew, torch.zeros_like(rew))
             angles = goal_angles(goals, device=device, dtype=state.dtype)
@@ -614,14 +778,18 @@ def main():
         f"updates={args.updates} obs_dim={OBS_DIM} goals={GOAL_IDS} logdir={logdir}"
     )
     print(
-        f"reward: align_w={args.align_w} energy_w={args.energy_w} spin_w={args.spin_w} center_w={args.center_w} center_hold_w={args.center_hold_w} "
-        f"track_limit={args.track_limit} reward_clip={args.reward_clip} oob_penalty={args.oob_penalty} "
-        f"warmup={args.warmup_updates}x{args.warmup_goal} uu_bias={args.uu_bias} "
-        f"anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
+        f"reward: mode={args.reward_mode} align_w={args.align_w} energy_w={args.energy_w} spin_w={args.spin_w} "
+        f"center_w={args.center_w} center_hold_w={args.center_hold_w} "
+        f"barrier={args.cart_barrier_coef} w_up={args.w_up} w_down={args.w_down} "
+        f"alpha_th={args.alpha_th} track_limit={args.track_limit} reward_clip={args.reward_clip} "
+        f"oob_penalty={args.oob_penalty} "
+        f"warmup={args.warmup_updates}x{args.warmup_goal}(hang={args.warmup_hang_start_p}) "
+        f"uu_bias={args.uu_bias} anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
         f"hang_start_p={args.hang_start_p} wrong_eq_p={args.wrong_eq_p} "
         f"goal_switch_p={args.goal_switch_p} fold_pair_p={args.fold_pair_p} "
-        f"transition_only={args.transition_only} "
-        f"her_ratio={args.her_ratio}",
+        f"init_mode={args.init_mode} fall_grace={args.fall_grace_steps} "
+        f"start_grace={args.start_grace_steps} angle_fall={args.angle_fall} "
+        f"transition_only={args.transition_only} her_ratio={args.her_ratio}",
         flush=True,
     )
     print(f"tensorboard --logdir {args.logdir}", flush=True)
@@ -649,12 +817,15 @@ def main():
         mild=True,
         goals=goals,
         near_goal_p=args.near_goal_p,
-        hang_start_p=args.hang_start_p,
+        hang_start_p=hang_start_p_for_update(args, 1),
         wrong_eq_p=args.wrong_eq_p,
-            fold_pair_p=args.fold_pair_p,
-            transition_only=args.transition_only,
+        fold_pair_p=args.fold_pair_p,
+        transition_only=args.transition_only,
+        init_mode=args.init_mode,
     )
     steps_left = torch.randint(1, args.episode_len + 1, (args.num_envs,), device=device)
+    # Episode age (steps since last reset) for fall/oob grace
+    ep_age = torch.zeros(args.num_envs, device=device, dtype=torch.long)
 
     best_align = -1e9
     t0 = time.time()
@@ -707,10 +878,20 @@ def main():
                             new_g = torch.where(use_fold, fold_partner(goals), new_g)
                     goals = torch.where(flip, new_g, goals)
             next_state = step(state, force, constants=constants)
-            rew = goal_reward(next_state, force, goals, constants, **rkw)
+            rew = compute_reward(next_state, force, goals, constants, **rkw)
             steps_left -= 1
-            oob = next_state[:, 0].abs() > args.track_limit
-            done = (steps_left <= 0) | oob
+            ep_age = ep_age + 1
+            grace_n = int(args.fall_grace_steps) + int(args.start_grace_steps)
+            in_grace = ep_age <= grace_n
+            oob_raw = next_state[:, 0].abs() > args.track_limit
+            oob = oob_raw & (~in_grace)
+            fell = torch.zeros(args.num_envs, dtype=torch.bool, device=device)
+            if args.angle_fall:
+                fell_raw = angle_fall_mask(
+                    next_state, goals, args.fall_thresh_up, args.fall_thresh_down
+                )
+                fell = fell_raw & (~in_grace)
+            done = (steps_left <= 0) | oob | fell
             oob_hits += int(oob.sum().item())
             # Buffer transition under the goal that produced the reward (pre-reset).
             goal_buf.append(goals.detach().clone())
@@ -728,10 +909,11 @@ def main():
                     mild=True,
                     goals=reset_goals,
                     near_goal_p=args.near_goal_p,
-                    hang_start_p=args.hang_start_p,
+                    hang_start_p=hang_start_p_for_update(args, update),
                     wrong_eq_p=args.wrong_eq_p,
-            fold_pair_p=args.fold_pair_p,
-            transition_only=args.transition_only,
+                    fold_pair_p=args.fold_pair_p,
+                    transition_only=args.transition_only,
+                    init_mode=args.init_mode,
                 )
                 next_state = torch.where(done.unsqueeze(-1), reset, next_state)
                 goals = reset_goals
@@ -740,6 +922,7 @@ def main():
                     torch.full_like(steps_left, args.episode_len),
                     steps_left,
                 )
+                ep_age = torch.where(done, torch.zeros_like(ep_age), ep_age)
             obs_buf.append(obs)
             raw_buf.append(raw.detach())
             log_buf.append(log_prob.detach())

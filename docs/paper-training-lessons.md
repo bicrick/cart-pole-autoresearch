@@ -476,3 +476,10 @@ Plateau on mixed edge/fold FT: align~0.70 / min_at_goal stuck ~0.45–0.65. Demo
 ## (an) Triple plant: multi-eq first, not transition-only (2026-09-19 ~00:10 CT)
 
 Cart-**triple** is a new plant (`physics_triple` / `goals_triple` / `train_triple`, `OBS_DIM=25`, 8 goals DDD…UUU). Overnight plan: share the L4 with double **xonly** (leave xonly alone) and run **normal** multi-eq PPO on triple — hang starts, energy, near-goal, soft UUU bias — the same curriculum that taught the double its 4 equilibria **before** xonly. Do **not** default triple to `--transition-only` (56 pairs); that is a later phase after local capture. Scripts: `next-train-triple.sh` / `continue-triple.sh`. Two parallel triple jobs (vary `lr` or `hang_start_p`) OK if `nvidia-smi` shows headroom alongside xonly.
+
+## (ao) Triple redesign: product + UUU-first (2026-09-19 ~11:30 CT)
+
+Overnight UVFA+hang (`hang_start_p≈0.45–0.60`) parked at mean align~0.2 with **DDD~0.5 / UUU~0.01** — hang curriculum taught “stay down.” Papers that work (Lim KIEE 2025 product on world angles; fawraw M2 UUU-first + cart barrier + fall_grace≈20) keep **PPO** but steal reward+curriculum.
+
+**Shipped:** `--reward-mode product` (Lim soft coeffs + Baek α_th=0.5 floors + UP×5/DOWN×1 geo weights), `--cart-barrier-coef 50`, `--fall-grace-steps 20`, `--init-mode`, `--warmup-hang-start-p 0`, post-warmup `hang_start_p≈0.10`. Scripts `next-train-triple.sh` / `next-train-triple-uuu.sh` / continue-a (defaults) / continue-b (W_UP=8, lr=5e-4). **Cold-start** triple A/B — product scale ≠ additive ckpt. Leave double **xonly** alone.
+

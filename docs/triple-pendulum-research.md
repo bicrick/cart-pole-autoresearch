@@ -3,33 +3,33 @@
 Last updated: 2026-09-19 ~11:06 CT.
 
 
-## Implementation status (2026-09-19)
+## Implementation status (2026-09-19 ~11:30 CT)
 
-**Built on `main`:** cart-triple plant parallel to the double, same UVFA+PPO recipe (not Lim 8× TQC).
+**Built on `main`:** cart-triple plant + **Lim/fawraw redesign** (still PPO UVFA, not 8× TQC).
 
 | Piece | Path | Notes |
 |---|---|---|
 | Physics | `train/physics_triple.py` | Batched torch, 4×4 mass solve, θ=0 upright, no track walls |
 | Constants | `shared/constants-triple.json` | 3 equal links; `obsDim=25` |
-| Goals | `train/goals_triple.py` | **8 eqs:** DDD, DDU, DUD, DUU, UDD, UDU, UUD, UUU; `OBS_DIM=25` |
-| Train | `train/train_triple.py` | Reuses PPO; align/energy/center/oob; HER optional; `--transition-only` available but **not** the default |
+| Goals | `train/goals_triple.py` | 8 eqs; **`product_reward`** (Lim coeffs on world θ/ω) + Baek α floors + UP×5/DOWN×1; legacy `goal_reward` additive kept |
+| Train | `train/train_triple.py` | `--reward-mode product|additive`; `--cart-barrier-coef`; `--fall-grace-steps` / `--start-grace-steps`; `--init-mode mixed|bottom|near_target|wide`; `--warmup-hang-start-p`; optional `--angle-fall` |
 | Smoke | `train/test_physics_triple.py` | Inverted unstable, hang restoring, nowalls |
-| Launch | `scripts/next-train-triple.sh` | **Normal multi-eq curriculum** (hang / near-goal / UUU bias / energy) like early double |
-| Watcher | `scripts/continue-triple.sh` | Loop forever like `continue-xonly.sh` |
+| Launch | `scripts/next-train-triple.sh` | **Product + UUU-first** (warmup hang=0, hang_start≈0.10 post-warmup, barrier=50, fall_grace=20) |
+| UUU stage | `scripts/next-train-triple-uuu.sh` | Hold-biased wrapper (`init_mode=near_target`, higher uu-bias) |
+| Watchers | `scripts/continue-triple-a.sh` / `b` | A: product defaults; B: W_UP=8 + lr=5e-4; **cold-start** on first product launch (reward scale changed) |
 
-**OBS_DIM = 25** = 11 state (`x,ẋ,sin/cos×3,ω×3`) + one-hot(8) + target sin/cos(6).
+**OBS_DIM = 25** = 11 state + one-hot(8) + target sin/cos(6).
 
-**Curriculum default:** hang_start / near-goal / wrong-eq / soft UUU bias — reach and hold the 8 equilibria first. Do **not** default to `--transition-only` (that remains the double xonly experiment). Transition-only over 56 pairs is a later phase once local capture works.
+**Curriculum default (redesign):** UUU-only `warmup_updates` with `warmup_hang_start_p=0` → multi-eq with **low** `hang_start_p≈0.10` (was 0.45–0.60 DDD sink), product reward, cart barrier, fall grace. Do **not** default to `--transition-only`.
 
-**L4 launch status:** Plant synced to `cartpole-train-od` for import/physics smoke only. **Do not** start triple GPU trains until the overnight gate / parent says go — leave double xonly alone.
+**Cold start note:** Switching additive→product changes reward scale; continue-a/b wipe old triple ckpts once via `policies/.triple-{a,b}-product-v1` markers. Double **xonly** untouched.
 
-**Launch (cold):**
+**Launch:**
 ```bash
 NUM_ENVS=8192 bash scripts/next-train-triple.sh
-# A/B tip: HANG_START_P=0.55 LR=1e-3 RUN_NAME=... CHECKPOINT=policies/checkpoint-triple-b.pt OUT=policies/policy-triple-b.json
+# UUU-hold stage: bash scripts/next-train-triple-uuu.sh
+# A/B on VM: continue-triple-a.sh / continue-triple-b.sh
 ```
-
-Double **xonly** on GCP stays untouched.
 
 
 ## What "56" means
@@ -212,7 +212,7 @@ fawraw reward itself is still **additive** (−weighted ang² − vel − cart �
 13. Multi-eq hard-EP: start `hard_ep_weight≈10`, escalate to 20 only if tip-up EPs stay at 0; watch UUU regression.
 14. Copy probe barrier pack when swing-up starts: `barrier_coef=50`, `cart_cost≈0.2–0.5`, `progress=1.0`.
 
-Still **do not** redesign code or kill double xonly until user green-lights.
+**Green-lit 2026-09-19:** product/UUU-first/grace/barrier landed on main; still do not kill double xonly.
 
 
 ### Research pass (2026-09-19 ~10:31 CT) — new actionable diffs
@@ -259,7 +259,7 @@ Confirmed post-print numbers (already roughly noted): swing-up **T = 3.5 s** und
 18. When porting Lim product+TQC (or PPO surrogate): copy **γ=0.99, τ=0.005**; judge EP specialists by ~700–800/1000 return plateau + hold metrics, not max return.
 19. Prefer **Lim triple product** (cumulative abs angles) over MDPI-double coeffs if we A/B product forms.
 
-Still **do not** redesign code or kill double xonly until user green-lights.
+**Green-lit 2026-09-19:** product/UUU-first/grace/barrier landed on main; still do not kill double xonly.
 
 
 ### Research pass (2026-09-19 ~11:06 CT) — new actionable diffs
@@ -323,4 +323,4 @@ Already had T=3.5 s, |ÿ|≤22 m/s², |s|≤0.7 m, |ṡ|≤3 m/s. Post-print add
 24. Skip BC-pretrain of a shared triple UVFA; use **fixed-EP tip-up probes** (~200K) before hard-EP mix; keep Lim-style specialists as the safe multi-eq structure.
 25. Size track / soft-landing with Glück’s **~0.6 m** classical overshoot sensitivity in mind.
 
-Still **do not** redesign code or kill double xonly until user green-lights.
+**Green-lit 2026-09-19:** product/UUU-first/grace/barrier landed on main; still do not kill double xonly.

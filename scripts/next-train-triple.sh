@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Cart-triple multi-eq PPO (8 equilibria). Normal hang/near-goal/UUU-bias curriculum
-# like early double training — NOT transition-only (leave that for double xonly).
+# Cart-triple PPO — Lim/fawraw product-reward recipe (UUU-first → multi-eq).
+# Keep PPO; product reward on world angles; low hang; cart barrier; fall grace.
+# NOT transition-only (leave that for double xonly).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -9,20 +10,29 @@ NUM_ENVS="${NUM_ENVS:-8192}"
 UPDATES="${UPDATES:-400}"
 LOGDIR="${LOGDIR:-runs}"
 ROLLOUT="${ROLLOUT:-256}"
-WARMUP_UPDATES="${WARMUP_UPDATES:-40}"
-UU_BIAS="${UU_BIAS:-0.55}"
+WARMUP_UPDATES="${WARMUP_UPDATES:-80}"
+UU_BIAS="${UU_BIAS:-0.40}"
 ANNEAL_UPDATES="${ANNEAL_UPDATES:-0}"
 HER_RATIO="${HER_RATIO:-0.1}"
-NEAR_GOAL_P="${NEAR_GOAL_P:-0.15}"
-HANG_START_P="${HANG_START_P:-0.45}"
-WRONG_EQ_P="${WRONG_EQ_P:-0.25}"
+NEAR_GOAL_P="${NEAR_GOAL_P:-0.25}"
+HANG_START_P="${HANG_START_P:-0.10}"
+WARMUP_HANG_START_P="${WARMUP_HANG_START_P:-0.0}"
+WRONG_EQ_P="${WRONG_EQ_P:-0.20}"
 GOAL_SWITCH_P="${GOAL_SWITCH_P:-0.004}"
-FOLD_PAIR_P="${FOLD_PAIR_P:-0.55}"
-ENERGY_W="${ENERGY_W:-0.35}"
+FOLD_PAIR_P="${FOLD_PAIR_P:-0.40}"
+ENERGY_W="${ENERGY_W:-0.15}"
 EPISODE_LEN="${EPISODE_LEN:-1200}"
 IMPULSE_P="${IMPULSE_P:-0.01}"
 LR="${LR:-3e-4}"
-RUN_NAME="${RUN_NAME:-ft-triple-e${NUM_ENVS}-r${ROLLOUT}-hang-uub055-her01}"
+REWARD_MODE="${REWARD_MODE:-product}"
+CART_BARRIER_COEF="${CART_BARRIER_COEF:-50}"
+W_UP="${W_UP:-5.0}"
+W_DOWN="${W_DOWN:-1.0}"
+ALPHA_TH="${ALPHA_TH:-0.5}"
+FALL_GRACE_STEPS="${FALL_GRACE_STEPS:-20}"
+START_GRACE_STEPS="${START_GRACE_STEPS:-0}"
+INIT_MODE="${INIT_MODE:-mixed}"
+RUN_NAME="${RUN_NAME:-ft-triple-e${NUM_ENVS}-r${ROLLOUT}-prod-uuu-bar50}"
 
 exec python3 train/train_triple.py \
   --num-envs "${NUM_ENVS}" \
@@ -32,7 +42,18 @@ exec python3 train/train_triple.py \
   --lr "${LR}" \
   --track-limit 2.4 \
   --oob-penalty "${OOB_PENALTY:-20}" \
-  --reward-clip 8.0 \
+  --reward-clip "${REWARD_CLIP:-8.0}" \
+  --reward-mode "${REWARD_MODE}" \
+  --cart-barrier-coef "${CART_BARRIER_COEF}" \
+  --w-up "${W_UP}" \
+  --w-down "${W_DOWN}" \
+  --alpha-th "${ALPHA_TH}" \
+  --alpha-u "${ALPHA_U:-0.0}" \
+  --alpha-y "${ALPHA_Y:-0.0}" \
+  --alpha-w "${ALPHA_W:-0.0}" \
+  --fall-grace-steps "${FALL_GRACE_STEPS}" \
+  --start-grace-steps "${START_GRACE_STEPS}" \
+  --init-mode "${INIT_MODE}" \
   --align-w 1.5 \
   --energy-w "${ENERGY_W}" \
   --spin-w 0.0003 \
@@ -40,6 +61,7 @@ exec python3 train/train_triple.py \
   --center-hold-w "${CENTER_HOLD_W:-0.30}" \
   --warmup-updates "${WARMUP_UPDATES}" \
   --warmup-goal UUU \
+  --warmup-hang-start-p "${WARMUP_HANG_START_P}" \
   --uu-bias "${UU_BIAS}" \
   --anneal-updates "${ANNEAL_UPDATES}" \
   --near-goal-p "${NEAR_GOAL_P}" \

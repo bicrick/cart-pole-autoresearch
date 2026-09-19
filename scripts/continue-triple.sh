@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Loop forever: wait for triple train to exit, then restart (normal multi-eq curriculum).
+# Loop forever: generic triple product/UUU-first (see continue-triple-a/b for A/B).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RUN_MATCH='ft-triple-e'
@@ -18,9 +18,7 @@ while true; do
     sleep 30
     continue
   fi
-  nohup bash scripts/next-train-triple.sh \
-    --checkpoint policies/checkpoint-triple.pt \
-    --out policies/policy-triple.json \
+  nohup env NUM_ENVS=8192 bash scripts/next-train-triple.sh \
     >> logs/train-triple.log 2>&1 &
   echo "$(date -u +%FT%TZ) STARTED triple pid=$!" >> logs/continue-triple.log
   sleep 30
