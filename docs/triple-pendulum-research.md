@@ -21,6 +21,8 @@ Last updated: 2026-09-19 ~00:10 CT.
 
 **Curriculum default:** hang_start / near-goal / wrong-eq / soft UUU bias — reach and hold the 8 equilibria first. Do **not** default to `--transition-only` (that remains the double xonly experiment). Transition-only over 56 pairs is a later phase once local capture works.
 
+**L4 launch status:** Plant synced to `cartpole-train-od` for import/physics smoke only. **Do not** start triple GPU trains until the overnight gate / parent says go — leave double xonly alone.
+
 **Launch (cold):**
 ```bash
 NUM_ENVS=8192 bash scripts/next-train-triple.sh
