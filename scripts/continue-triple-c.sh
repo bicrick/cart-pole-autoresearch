@@ -19,12 +19,11 @@ while true; do
     sleep 30
     continue
   fi
-  if [[ "${TRIPLE_C_COLD:-1}" == "1" && -f policies/checkpoint-triple-c.pt ]]; then
-    if [[ ! -f policies/.triple-c-force40-v1 ]]; then
-      rm -f policies/checkpoint-triple-c.pt
-      touch policies/.triple-c-force40-v1
-      echo "$(date -u +%FT%TZ) cold-start triple-c (UUU-only / forceLimit=40)" >> logs/continue-triple-c.log
-    fi
+  # Always touch marker even if no ckpt yet — else first successful ckpt wiped on next restart.
+  if [[ "${TRIPLE_C_COLD:-1}" == "1" && ! -f policies/.triple-c-force40-v1 ]]; then
+    rm -f policies/checkpoint-triple-c.pt
+    touch policies/.triple-c-force40-v1
+    echo "$(date -u +%FT%TZ) cold-start triple-c (UUU-only / forceLimit=40); marker set" >> logs/continue-triple-c.log
   fi
   # WARMUP_UPDATES huge => hard UUU-only for entire run (goal_probs_for_update).
   nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \

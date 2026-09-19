@@ -18,12 +18,11 @@ while true; do
     sleep 30
     continue
   fi
-  if [[ "${TRIPLE_B_COLD:-1}" == "1" && -f policies/checkpoint-triple-b.pt ]]; then
-    if [[ ! -f policies/.triple-b-force40-v1 ]]; then
-      rm -f policies/checkpoint-triple-b.pt
-      touch policies/.triple-b-force40-v1
-      echo "$(date -u +%FT%TZ) cold-start triple-b (forceLimit=40 / barrier=10)" >> logs/continue-triple-b.log
-    fi
+  # Always touch marker even if no ckpt yet — else first successful ckpt wiped on next restart.
+  if [[ "${TRIPLE_B_COLD:-1}" == "1" && ! -f policies/.triple-b-force40-v1 ]]; then
+    rm -f policies/checkpoint-triple-b.pt
+    touch policies/.triple-b-force40-v1
+    echo "$(date -u +%FT%TZ) cold-start triple-b (forceLimit=40 / barrier=10); marker set" >> logs/continue-triple-b.log
   fi
   nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
     REWARD_MODE=product HANG_START_P=0.10 WARMUP_HANG_START_P=0.0 \

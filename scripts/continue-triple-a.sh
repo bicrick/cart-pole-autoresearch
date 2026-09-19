@@ -19,12 +19,11 @@ while true; do
     continue
   fi
   # Cold-start once when forceLimit jumped 20→40 (plant/action scale change).
-  if [[ "${TRIPLE_A_COLD:-1}" == "1" && -f policies/checkpoint-triple-a.pt ]]; then
-    if [[ ! -f policies/.triple-a-force40-v1 ]]; then
-      rm -f policies/checkpoint-triple-a.pt
-      touch policies/.triple-a-force40-v1
-      echo "$(date -u +%FT%TZ) cold-start triple-a (forceLimit=40)" >> logs/continue-triple-a.log
-    fi
+  # Always touch marker even if no ckpt yet — otherwise first successful ckpt gets wiped on next restart.
+  if [[ "${TRIPLE_A_COLD:-1}" == "1" && ! -f policies/.triple-a-force40-v1 ]]; then
+    rm -f policies/checkpoint-triple-a.pt
+    touch policies/.triple-a-force40-v1
+    echo "$(date -u +%FT%TZ) cold-start triple-a (forceLimit=40); marker set" >> logs/continue-triple-a.log
   fi
   nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
     REWARD_MODE=product HANG_START_P=0.10 WARMUP_HANG_START_P=0.0 \
