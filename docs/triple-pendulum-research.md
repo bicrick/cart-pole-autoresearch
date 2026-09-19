@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~15:06 CT.
+Last updated: 2026-09-19 ~15:14 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -11,7 +11,7 @@ Last updated: 2026-09-19 ~15:06 CT.
 |---|---|---|
 | Physics | `train/physics_triple.py` | Batched torch, 4×4 mass solve, θ=0 upright, no track walls |
 | Constants | `shared/constants-triple.json` | 3 equal links; `obsDim=25`; **`forceLimit=40.0`** |
-| Goals | `train/goals_triple.py` | 8 eqs; product reward + **`progress_w` Δ cos-align**; Baek α floors; UP×5/DOWN×1 |
+| Goals | `train/goals_triple.py` | 8 eqs; product reward + **`progress_w` Δ cos-align**; Baek α floors; UP×5/DOWN×1; **`energy_w` = height/align proxy (not E→E_UUU)** |
 | Train | `train/train_triple.py` | `--progress-w` (default 1.0 product); `--flip-augment` (Baek VER, default on); `--eval-curriculum` → `eval/near_target/*` + `eval/hang/*` |
 | Launch | `scripts/next-train-triple.sh` | Passes `PROGRESS_W` / `FLIP_AUGMENT` |
 | Slots | `scripts/continue-triple-{a,b,c}.sh` | **A** swing (hang+near, f50, progress+flip); **B** hold (near_target, f40); **C** combo (near+hang0.3, progress+flip). Markers `.triple-*-progress-flip-v5` / hold / combo |
@@ -554,7 +554,7 @@ Live symptom: even UUU-only + force40/60, `at_goal/UUU≈0` and align/UUU often 
 | P0 | **Progress reward** Δ cos-align toward UUU | Baek/fawraw dense swing signal |
 | P1 | **Left–right VER / flip augment** in PPO rollouts | Baek’s big sample-efficiency win |
 | P1 | **Split swing vs hold** (two nets or two heads) + handoff | Matches every successful hardware story |
-| P2 | Stronger energy-to-E_uuu term; consider **force 80–100 N** probe | Underactuated energy pump + bench-scale force |
+| P2 | **True mechanical E→E_UUU** (not crank height-proxy `energy_w`); SAC/TQC cookbook; demote force 80–100 unless rail-slide | Energy gap filled below; force already ≥ Glück accel |
 | P2 | Off-policy **SAC/TQC** side experiment (one slot) | Papers that hit hardware used SAC/TQC not PPO |
 | P3 | Multi-eq only after UUU hold ≥0.8 | Stage gate |
 
@@ -563,3 +563,67 @@ Live symptom: even UUU-only + force40/60, `at_goal/UUU≈0` and align/UUU often 
 - force 20→40 alone (didn’t unlock UUU)
 - Soft vs hard barrier alone
 - Hang-heavy multi-eq UVFA (DDD sink)
+
+
+### Research pass (2026-09-19 ~15:14 CT) — energy / force / SAC cookbook fills
+
+Digged Spong/MIT energy shaping, Xin parallel-pendulum energy papers, Baek EAAI force bound, Lim/Baek SAC hypers, IROS'24 SAC punishment reward (arXiv:2410.20096), SAC→LQR handoff (arXiv:2312.11311), and re-checked fawraw M4 (still 2026-06-25). **Direction unchanged.** P0 progress + P1 flip are **already live** on v5; top *unimplemented* lever remains **two-policy swing↔hold handoff**. No user ping (refines existing P1/P2; no new #1 lever).
+
+#### `energy_w` ≠ E→E_UUU (fills long-empty gap)
+
+Under product mode, `--energy-w` adds **mean cos-align / height proxy**, not mechanical energy error. Cranking it does **not** implement classical energy swing-up.
+
+**Implementable proxy for our plant** (`θ=0` upright, equal links \(m=0.1\), \(L=0.5\), \(l_c=L/2\), \(g=9.81\), cart \(m_c=1\)):
+
+- World angles (Lim): \(\phi_1=\theta_1\), \(\phi_2=\theta_1+\theta_2\), \(\phi_3=\theta_1+\theta_2+\theta_3\)
+- Potential: \(U = \sum_i m_i g l_{c,i}\cos\phi_i\) → \(U_{\mathrm{UUU}} \approx +0.736\,\mathrm{J}\), \(U_{\mathrm{DDD}} \approx -0.736\,\mathrm{J}\), \(\Delta U \approx 1.47\,\mathrm{J}\)
+- Kinetic \(T\): cart \(\tfrac12 m_c\dot x^2\) + link terms from `physics_triple` mass matrix (or reuse existing batched energy if exposed)
+- Target: \(E_{\mathrm{UUU}} = U_{\mathrm{UUU}}\) at \(\omega=\dot x=0\)
+- RL shaping candidates: \(r_E = -w_E |E - E_{\mathrm{UUU}}|\) or progress \(\Delta\) toward \(E_{\mathrm{UUU}}\); near upright add soft-landing \(-w_\omega\|\omega\|\)
+
+Classical Spong/MIT single cart-pole (reference only): after collocated PFL, \(E=\tfrac12\dot\theta^2-\cos\theta\), \(E^d=1\), \(u = k_E\dot\theta\cos\theta\,\tilde E - k_p x - k_d\dot x\). **Xin CDC 2009** energy control is for **parallel** n-pendulums on a cart — still **no published serial cart-triple energy coefficients**. Glück remains feedforward+TV-LQR, not energy RL.
+
+#### Force sizing — demote 80–100 N probe
+
+| Source | Actuation | Vs our plant |
+|---|---|---|
+| Glück Automatica 2013 | \(\|\ddot s\|\le 22\,\mathrm{m/s}^2\) | Needs ~**22 N** on our \(m_c=1\) |
+| Baek EAAI 2024 (hardware TIP) | \(F\in[-10,10]\,\mathrm{N}\) | Smaller force on their hardware; still swung up |
+| Ours | `forceLimit` **40–50** → peak ~40–50 m/s² | **Already above Glück**; not underpowered |
+
+Keep force probe gated on **rail-slide** or **flat `near_target/align/UUU` past ~u150**. Prefer energy / handoff before more Newtons.
+
+#### Baek / Lim SAC·TQC cookbook (for optional P2 slot)
+
+Same skeleton both Inha-line papers used successfully:
+
+| Knob | Value |
+|---|---|
+| Algo | SAC (Baek) / TQC (Lim): 3 critics, 25 atoms |
+| lr / γ / τ | **3e-4** / **0.99** / **0.005** |
+| Buffer / minibatch | **1e6** / **256** |
+| Policy net | **400→300** ReLU |
+| Update | 1 grad / 1 env step |
+| VER | Mirror each transition; Baek doubles mb 256→512 effective |
+
+#### Off-policy reward polarity (arXiv:2410.20096)
+
+Positive dense rewards that spike after first successful swing-up **destabilize Q** (policy degradation). Prefer **cost-style** reward (**0 at optimum**) for any SAC/TQC trial. Our Lim/Baek product is already bounded ∈[0,1]/milder — but if adding sparse UUU bonuses off-policy, frame as punishments not jackpots.
+
+#### Soft-landing / handoff fill (arXiv:2312.11311 SAC→LQR)
+
+Three-stage reward: (1) quadratic swing, (2) line/height toward upright with **−r_vel** if too fast, (3) large bonus inside LQR RoA. Same story as fawraw catch-basin: deliver **slow + near-upright**. Steal **−r_vel near upright** as the soft-landing coef we still lack from fawraw.
+
+#### fawraw status
+
+Unchanged since mid-2026: no soft-landing numbers, no energy Plan-B coeffs, last code **2026-06-25**.
+
+#### Amend recommended redesign (additions only)
+
+31. When coding P2 energy: implement **true \(|E-E_{\mathrm{UUU}}|\)** (formula above) — do **not** treat cranking height-proxy `energy_w` as energy swing-up.
+32. **Demote force 80–100** until rail-slide / flat near-align evidence; Glück+Baek say 40–50 is enough on this mass scale.
+33. Optional SAC/TQC slot: copy Baek/Lim hypers table; use **cost-style** reward polarity; VER minibatch doubling.
+34. Soft-landing starter: **−r_vel** when \(\|\omega\|\) high near upright (2312.11311) before inventing fawraw-unknown coefs.
+35. Still: after v5 cook, **split swing vs hold + ~0.1 rad handoff** remains highest-ROI unimplemented architecture change.
+
+**No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
