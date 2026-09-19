@@ -96,3 +96,52 @@ Naïve "pad and continue" does **not** just work: weights for θ3 / new goal bit
 - MDPI Machines 13(3):186 (2025) — double inverted pendulum Sim2Real, 4 EPs / 12 transitions
 - https://github.com/fawraw/triple-pendulum-sim2real (open TQC attempt; M4 not finished as of mid-2026)
 - Progressive Neural Networks (Rusu et al. 2016); PPOPT-style adapters
+
+
+## Drawing board — why our overnight triple is stuck (2026-09-19 ~09:30 CT)
+
+Live: mean align ~0.18–0.22, **DDD ~0.45–0.55**, **UUU ~0.01–0.05**. Hang curriculum is teaching “stay down,” not swing up.
+
+### What Lim / Ju / Lee (KIEE 2025) actually did (PDF)
+
+- **Algo:** TQC (not PPO) — distributional critics, truncate top quantiles (Kuznetsov).
+- **Architecture:** **8 separate policies**, one per EP (EP0=DDD … EP7=UUU). Not one UVFA. Transitions “for free” once each EP is reachable from random ICs.
+- **Reward:** **product** of [0,1] terms (max 1/step):
+  - \(R_u = \exp(-0.001 u^2)\), \(R_y = \exp(-0.3 |y|)\)
+  - \(R_{\theta_i} = 0.5 + 0.5\cos(\theta^{world}_i - \theta^*_i)\) on **absolute** angles
+  - \(R_{\dot\theta}\) = exp decay on absolute angular rates
+  - \(R = \prod R_\cdot\)  (all must be good — no compensating “hang forever” with cart motion)
+- **ICs:** wide uniform random every episode (angles ±π, large ω), domain randomization.
+- **Episode:** 10 s @ 10 ms agent step (1000 steps); early stop if |y|>0.48 m or |a|>2.5 m/s².
+- **Net:** critic 3×512, policy 400→300; lr 3e-4; γ 0.99; buffer 1e6.
+
+Demo: https://youtu.be/vVx3ffGo2mk
+
+### What fawraw/triple-pendulum-sim2real does
+
+- **Milestones:** M2 = stabilize **UUU first** → M3 = all 8 EPs (upweight hard EPs) → M4 = 56 transitions.
+- **TQC** + MuJoCo; larger nets ([512,512] breakthrough).
+- Swing-up failure mode they hit: **cart slide to rail** local optimum. Fixes: cart barrier \((x/limit)^8\), progress shaping, higher cart cost.
+- Probe single transitions (DDD→UDD easy, DDD→UUU hard) before full graph.
+
+### Classical (Glück Automatica 2013)
+
+Feedforward BVP + time-varying Riccati — works for DDD→UUU with a model; not our path unless we leave pure RL.
+
+### Vs our current plant
+
+| Ours | Papers that work |
+|---|---|
+| One UVFA, hang_start 0.45–0.60 | Lim: 8 specialists; fawraw: UUU-first milestone |
+| Additive align/energy/clip like double | Lim: **product** reward on absolute angles |
+| Hang-biased resets → DDD sink | Wide random ICs + explicit UUU stage |
+| PPO on-policy | TQC/SAC off-policy (user still prefers PPO — keep PPO but steal reward+curriculum) |
+
+### Recommended redesign (when user green-lights)
+
+1. **UUU-only warmup** (fawraw M2) before multi-eq.
+2. Port Lim-style **product reward** (absolute θ) into `train_triple`.
+3. Cut hang_start way down; widen random ICs.
+4. Optional: **8 PPO heads / 8 runs** (one EP each) instead of one UVFA — matches Lim’s successful structure while keeping PPO.
+5. Cart barrier / stronger center so we don’t learn rail-slide.
+6. Leave current A/B grinding only until redesign is coded — or pause one slot for experiments.
