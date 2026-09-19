@@ -1,8 +1,15 @@
 const HIT = {
   cart: 0.14,
   lower: 0.1,
+  mid: 0.1,
   upper: 0.1,
+  tip: 0.1,
 };
+
+function jointsOf(tips) {
+  if (tips?.poles?.length) return tips.poles;
+  return [tips?.lower, tips?.mid, tips?.upper, tips?.tip].filter(Boolean);
+}
 
 export function createInput(canvas, camera) {
   const pointer = {
@@ -20,22 +27,19 @@ export function createInput(canvas, camera) {
   }
 
   function pickBody(world, tips) {
-    const dCart = Math.hypot(world.x - tips.cart.x, world.y - tips.cart.y);
-    const dLow = Math.hypot(world.x - tips.lower.x, world.y - tips.lower.y);
-    const dUp = Math.hypot(world.x - tips.upper.x, world.y - tips.upper.y);
-    const hits = [
-      { body: "cart", d: dCart, r: HIT.cart },
-      { body: "lower", d: dLow, r: HIT.lower },
-      { body: "upper", d: dUp, r: HIT.upper },
-    ].filter((h) => h.d <= h.r);
+    const joints = jointsOf(tips);
+    const candidates = [
+      { body: "cart", d: Math.hypot(world.x - tips.cart.x, world.y - tips.cart.y), r: HIT.cart },
+      ...joints.map((joint) => ({
+        body: joint.body,
+        d: Math.hypot(world.x - joint.x, world.y - joint.y),
+        r: HIT[joint.body] ?? 0.1,
+      })),
+    ];
+    const hits = candidates.filter((h) => h.d <= h.r);
     if (!hits.length) {
-      // Closest body within a generous grab radius so a thumb still works.
-      const nearest = [
-        { body: "cart", d: dCart },
-        { body: "lower", d: dLow },
-        { body: "upper", d: dUp },
-      ].sort((a, b) => a.d - b.d)[0];
-      return nearest.d < 0.28 ? nearest.body : null;
+      const nearest = candidates.sort((a, b) => a.d - b.d)[0];
+      return nearest && nearest.d < 0.28 ? nearest.body : null;
     }
     hits.sort((a, b) => a.d - b.d);
     return hits[0].body;
@@ -79,9 +83,8 @@ export function createInput(canvas, camera) {
   };
 }
 
-export function createKeys({ onGoal, onTogglePolicy, onCycleGoal } = {}) {
+export function createKeys({ onGoal, onTogglePolicy, onCycleGoal, getGoals } = {}) {
   const held = new Set();
-  const goals = ["UU", "UD", "DU", "DD"];
 
   function onDown(event) {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -91,8 +94,10 @@ export function createKeys({ onGoal, onTogglePolicy, onCycleGoal } = {}) {
       onCycleGoal?.();
       return;
     }
-    if (key >= "1" && key <= "4") {
-      onGoal?.(goals[Number(key) - 1]);
+    if (key >= "1" && key <= "8") {
+      const goals = typeof getGoals === "function" ? getGoals() : ["UU", "UD", "DU", "DD"];
+      const goal = goals[Number(key) - 1];
+      if (goal) onGoal?.(goal);
       return;
     }
     if (key === "p" || key === "P") {

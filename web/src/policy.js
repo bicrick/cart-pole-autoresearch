@@ -40,7 +40,7 @@ export function createPolicy(spec) {
 }
 
 export async function loadPolicy(url = "/policy.json") {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Failed to load policy: ${res.status}`);
   }

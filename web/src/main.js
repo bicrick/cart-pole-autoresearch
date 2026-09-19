@@ -1,31 +1,59 @@
-import { DEFAULT_CONSTANTS } from "./physics.js";
-import { GOAL_IDS, atGoal } from "./goals.js";
 import { loadPolicy } from "./policy.js";
 import { createInput, createKeys } from "./input.js";
 import { createCamera, draw } from "./render.js";
 import { startLoop } from "./loop.js";
+import { PLANTS, plantFromHash, nextPlantId } from "./plants.js";
 
+const page = document.querySelector(".page");
 const canvas = document.getElementById("stage");
 const statusEl = document.getElementById("status");
 const readoutEl = document.getElementById("readout");
 const policyBtn = document.getElementById("policy-toggle");
-const goalButtons = [...document.querySelectorAll("[data-goal]")];
+const plantBtn = document.getElementById("plant-toggle");
+const goalsNav = document.getElementById("goals");
+const hintEl = document.querySelector(".hint");
 const ctx = canvas.getContext("2d");
 const camera = createCamera();
 const input = createInput(canvas, camera);
 
-let currentGoal = "UU";
+let plant = PLANTS[plantFromHash()];
+let currentGoal = plant.defaultGoal;
 let policyOn = false;
 let policyReady = false;
+let started = false;
+let loop = null;
+let constants = plant.constants;
 
 function setGoal(goal) {
-  if (!GOAL_IDS.includes(goal)) return;
+  if (!plant.goalIds.includes(goal)) return;
   currentGoal = goal;
-  goalButtons.forEach((btn) => {
+  [...goalsNav.querySelectorAll("[data-goal]")].forEach((btn) => {
     const on = btn.dataset.goal === goal;
     btn.classList.toggle("is-active", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
+}
+
+function renderGoalButtons() {
+  goalsNav.replaceChildren();
+  plant.goalIds.forEach((id, i) => {
+    if (i) {
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      dot.setAttribute("aria-hidden", "true");
+      dot.textContent = "·";
+      goalsNav.append(dot);
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "text-btn";
+    btn.dataset.goal = id;
+    btn.textContent = id;
+    btn.setAttribute("aria-pressed", "false");
+    btn.addEventListener("click", () => setGoal(id));
+    goalsNav.append(btn);
+  });
+  setGoal(currentGoal);
 }
 
 function setPolicyOn(on) {
@@ -37,18 +65,19 @@ function setPolicyOn(on) {
 }
 
 function cycleGoal() {
-  const i = GOAL_IDS.indexOf(currentGoal);
-  setGoal(GOAL_IDS[(i + 1) % GOAL_IDS.length]);
+  const i = plant.goalIds.indexOf(currentGoal);
+  setGoal(plant.goalIds[(i + 1) % plant.goalIds.length]);
 }
 
 function setStatus(text) {
   if (statusEl) statusEl.textContent = text;
 }
 
-function bindGoalPicker() {
-  goalButtons.forEach((btn) => {
-    btn.addEventListener("click", () => setGoal(btn.dataset.goal));
-  });
+function begin() {
+  if (started) return;
+  started = true;
+  page.classList.add("is-started");
+  setPolicyOn(true);
 }
 
 function fmt(n, digits = 2) {
@@ -58,72 +87,130 @@ function fmt(n, digits = 2) {
 
 function updateReadout(state, force, goalId) {
   if (!readoutEl) return;
-  const hit = atGoal(state, goalId);
-  readoutEl.textContent = [
+  const hit = plant.atGoal(state, goalId);
+  const parts = [
     goalId,
     hit ? "at goal" : "seeking",
     `x ${fmt(state.x)}`,
     `θ1 ${fmt(state.th1)}`,
     `θ2 ${fmt(state.th2)}`,
-    `u ${fmt(force, 1)} N`,
-  ].join("  ·  ");
+  ];
+  if (state.th3 != null) parts.push(`θ3 ${fmt(state.th3)}`);
+  parts.push(`u ${fmt(force, 1)} N`);
+  readoutEl.textContent = parts.join("  ·  ");
 }
 
-async function boot() {
-  bindGoalPicker();
-  setGoal(currentGoal);
+function applyPlantChrome() {
+  document.title = plant.label;
+  if (plantBtn) plantBtn.textContent = plant.label;
+  page.dataset.plant = plant.id;
+  if (hintEl) hintEl.textContent = plant.hint;
+  if (window.location.hash.replace("#", "") !== plant.id) {
+    history.replaceState(null, "", `#${plant.id}`);
+  }
+}
 
-  let policy = null;
-  let constants = DEFAULT_CONSTANTS;
+async function loadPlantPolicy(next) {
+  let nextPolicy = null;
+  let nextConstants = { ...next.constants };
+  let ready = false;
   try {
-    policy = await loadPolicy("/policy.json");
-    constants = { ...DEFAULT_CONSTANTS, ...(policy.spec.physics || {}) };
-    const dim = policy.spec.obs_dim ?? constants.obsDim;
-    policyReady = dim === 16;
-    if (!policyReady) {
+    nextPolicy = await loadPolicy(next.policyUrl);
+    nextConstants = { ...next.constants, ...(nextPolicy.spec.physics || {}) };
+    const dim = nextPolicy.spec.obs_dim ?? nextConstants.obsDim;
+    ready = dim === next.obsDim;
+    if (!ready) {
       setStatus(`policy obs_dim=${dim}`);
-      policy = null;
+      nextPolicy = null;
     } else {
-      const hidden = policy.spec.hidden ?? constants.hidden;
-      setStatus(`${hidden}d mlp · on device`);
+      const hidden = nextPolicy.spec.hidden ?? nextConstants.hidden;
+      setStatus(`${hidden}d mlp · ${next.id}`);
     }
   } catch (err) {
     console.warn(err);
     setStatus("physics only");
-    policy = null;
-    policyReady = false;
+    nextPolicy = null;
+    ready = false;
   }
-  setPolicyOn(policyReady);
+  return { nextPolicy, nextConstants, ready };
+}
 
-  if (policyBtn) {
-    policyBtn.addEventListener("click", () => setPolicyOn(!policyOn));
-  }
-
-  const keys = createKeys({
-    onGoal: setGoal,
-    onTogglePolicy: () => setPolicyOn(!policyOn),
-    onCycleGoal: cycleGoal,
-  });
-
-  let hudAt = 0;
-  startLoop({
-    canvas,
-    ctx,
-    camera,
+function startPlantLoop(nextPolicy, nextConstants) {
+  if (loop) loop.stop();
+  constants = nextConstants;
+  loop = startLoop({
+    plant,
     input,
-    policy,
+    policy: nextPolicy,
     constants,
     getGoal: () => currentGoal,
     getPolicyOn: () => policyOn,
-    getManualForce: () => keys.manualForce(constants.forceLimit ?? 20),
-    onFrame({ state, tips, pointer, force, goalId }) {
-      draw(canvas, ctx, state, tips, camera, pointer, constants, goalId);
+    getStarted: () => started,
+    getManualForce: () => (started ? keys.manualForce(constants.forceLimit ?? 20) : 0),
+    initialState: plant.hanging,
+    onFrame({ state, tips, pointer, force, goalId, policyOn: driving, visual }) {
+      draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, driving, visual, plant.ghostTips);
       const now = performance.now();
       if (now - hudAt > 80) {
         hudAt = now;
         updateReadout(state, force, goalId);
       }
     },
+  });
+}
+
+async function switchPlant(id) {
+  const next = PLANTS[id];
+  if (!next || next.id === plant.id) return;
+  plant = next;
+  currentGoal = plant.defaultGoal;
+  applyPlantChrome();
+  renderGoalButtons();
+  setStatus("loading");
+  const { nextPolicy, nextConstants, ready } = await loadPlantPolicy(plant);
+  policyReady = ready;
+  setPolicyOn(started && ready);
+  startPlantLoop(nextPolicy, nextConstants);
+}
+
+const keys = createKeys({
+  onGoal: (goal) => {
+    if (started) setGoal(goal);
+  },
+  onTogglePolicy: () => {
+    if (started) setPolicyOn(!policyOn);
+  },
+  onCycleGoal: () => {
+    if (started) cycleGoal();
+  },
+  getGoals: () => plant.goalIds,
+});
+
+let hudAt = 0;
+
+async function boot() {
+  applyPlantChrome();
+  renderGoalButtons();
+  const { nextPolicy, nextConstants, ready } = await loadPlantPolicy(plant);
+  policyReady = ready;
+  setPolicyOn(false);
+  startPlantLoop(nextPolicy, nextConstants);
+
+  if (policyBtn) {
+    policyBtn.addEventListener("click", () => setPolicyOn(!policyOn));
+  }
+  if (plantBtn) {
+    plantBtn.addEventListener("click", () => switchPlant(nextPlantId(plant.id)));
+  }
+  window.addEventListener("hashchange", () => {
+    const id = plantFromHash();
+    if (id !== plant.id) switchPlant(id);
+  });
+
+  canvas.addEventListener("pointerdown", begin);
+  window.addEventListener("keydown", (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    begin();
   });
 }
 

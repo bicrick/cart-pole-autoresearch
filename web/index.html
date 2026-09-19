@@ -8,18 +8,11 @@
   </head>
   <body>
     <div class="page">
+      <div class="start" id="start">click to start</div>
       <header class="nav">
         <div class="nav-inner">
-          <div class="brand">double pendulum</div>
-          <nav class="goals" role="group" aria-label="Desired equilibrium">
-            <button type="button" class="text-btn is-active" data-goal="UU" aria-pressed="true">UU</button>
-            <span class="dot" aria-hidden="true">·</span>
-            <button type="button" class="text-btn" data-goal="UD" aria-pressed="false">UD</button>
-            <span class="dot" aria-hidden="true">·</span>
-            <button type="button" class="text-btn" data-goal="DU" aria-pressed="false">DU</button>
-            <span class="dot" aria-hidden="true">·</span>
-            <button type="button" class="text-btn" data-goal="DD" aria-pressed="false">DD</button>
-          </nav>
+          <button type="button" class="text-btn brand" id="plant-toggle">double pendulum</button>
+          <nav class="goals" id="goals" role="group" aria-label="Desired equilibrium"></nav>
           <div class="meta">
             <button type="button" id="policy-toggle" class="text-btn">policy off</button>
             <span class="dot" aria-hidden="true">·</span>

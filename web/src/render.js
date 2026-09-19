@@ -1,8 +1,7 @@
-import { ghostTips } from "./goals.js";
-
-const PAPER = "#fbfbfa";
 const INK = "#21232d";
 const INK_SOFT = "#2a2d38";
+const MUTED = "#8b8f99";
+const MUTED_SOFT = "#9aa0aa";
 const LINK = "#2563eb";
 const RAIL = "#e8e8e6";
 const GHOST = "rgba(90, 94, 107, 0.38)";
@@ -11,18 +10,19 @@ export function createCamera() {
   const camera = {
     x: 0,
     scale: 180,
-    tips: { cart: { x: 0, y: 0 }, lower: { x: 0, y: 0 }, upper: { x: 0, y: 0 } },
+    railY: 0.56,
+    tips: { cart: { x: 0, y: 0 }, poles: [] },
     worldToScreen(wx, wy, canvas) {
       return {
         x: canvas.width * 0.5 + (wx - camera.x) * camera.scale,
-        y: canvas.height * 0.62 - wy * camera.scale,
+        y: canvas.height * camera.railY - wy * camera.scale,
       };
     },
     screenToWorld(sx, sy) {
       const canvas = camera.canvas;
       return {
         x: camera.x + (sx - canvas.width * 0.5) / camera.scale,
-        y: (canvas.height * 0.62 - sy) / camera.scale,
+        y: (canvas.height * camera.railY - sy) / camera.scale,
       };
     },
   };
@@ -42,9 +42,17 @@ function sizeCanvas(canvas) {
   return dpr;
 }
 
+function polesOf(tips) {
+  if (tips?.poles?.length) return tips.poles;
+  return [tips?.lower, tips?.mid, tips?.upper, tips?.tip].filter(Boolean);
+}
+
+function poleReach(constants) {
+  return (constants.poleLength1 ?? 0.5) + (constants.poleLength2 ?? 0.5) + (constants.poleLength3 ?? 0);
+}
+
 function drawTrack(ctx, camera, canvas, constants, dpr) {
   const track = constants.trackLimit ?? 2.4;
-  // Open rail: no end-posts. Past ±track is the void (respawn).
   const left = camera.worldToScreen(-track, 0, canvas);
   const right = camera.worldToScreen(track, 0, canvas);
   ctx.strokeStyle = RAIL;
@@ -53,108 +61,112 @@ function drawTrack(ctx, camera, canvas, constants, dpr) {
   ctx.moveTo(left.x, left.y);
   ctx.lineTo(right.x, right.y);
   ctx.stroke();
-  // Soft fade marks at the void edges (not walls).
-  ctx.strokeStyle = "rgba(33, 35, 45, 0.2)";
-  ctx.setLineDash([4 * dpr, 4 * dpr]);
-  ctx.lineWidth = 1.5 * dpr;
-  ctx.beginPath();
-  ctx.moveTo(left.x, left.y - 10 * dpr);
-  ctx.lineTo(left.x, left.y + 10 * dpr);
-  ctx.moveTo(right.x, right.y - 10 * dpr);
-  ctx.lineTo(right.x, right.y + 10 * dpr);
-  ctx.stroke();
-  ctx.setLineDash([]);
 }
 
-function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr) {
+function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr, ghostTips) {
+  if (typeof ghostTips !== "function") return;
   const ghost = ghostTips(state.x, goalId, constants);
+  const joints = polesOf(ghost);
   const g0 = camera.worldToScreen(ghost.cart.x, 0, canvas);
-  const g1 = camera.worldToScreen(ghost.lower.x, ghost.lower.y, canvas);
-  const g2 = camera.worldToScreen(ghost.upper.x, ghost.upper.y, canvas);
   ctx.strokeStyle = GHOST;
   ctx.lineWidth = 3 * dpr;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.beginPath();
   ctx.moveTo(g0.x, g0.y);
-  ctx.lineTo(g1.x, g1.y);
-  ctx.lineTo(g2.x, g2.y);
+  for (const joint of joints) {
+    const p = camera.worldToScreen(joint.x, joint.y, canvas);
+    ctx.lineTo(p.x, p.y);
+  }
   ctx.stroke();
   ctx.fillStyle = GHOST;
   ctx.beginPath();
-  ctx.arc(g1.x, g1.y, 4 * dpr, 0, Math.PI * 2);
-  ctx.arc(g2.x, g2.y, 5 * dpr, 0, Math.PI * 2);
+  joints.forEach((joint, i) => {
+    const p = camera.worldToScreen(joint.x, joint.y, canvas);
+    ctx.moveTo(p.x + (4 + i) * dpr, p.y);
+    ctx.arc(p.x, p.y, (4 + i) * dpr, 0, Math.PI * 2);
+  });
   ctx.fill();
 }
 
-export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalId) {
+export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, policyOn = true, visual = null, ghostTips = null) {
   const dpr = sizeCanvas(canvas);
   camera.canvas = canvas;
   camera.x = 0;
   const track = constants.trackLimit ?? 2.4;
-  const reach = (constants.poleLength1 ?? 0.5) + (constants.poleLength2 ?? 0.5);
-  const halfSpan = track + reach * 0.55;
+  const reach = poleReach(constants);
+  const tip = 0.08;
+  const pad = 0.16;
+  const halfSpan = track + reach * 0.45;
   const scaleX = canvas.width / (2 * halfSpan);
-  const scaleY = canvas.height / 2.7;
-  camera.scale = Math.min(scaleX, scaleY);
+  const up = (camera.railY * canvas.height) / (reach + tip + pad);
+  const down = ((1 - camera.railY) * canvas.height) / (reach + tip + pad);
+  camera.scale = Math.min(scaleX, up, down);
   camera.tips = tips;
 
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   drawTrack(ctx, camera, canvas, constants, dpr);
-  drawGhost(ctx, camera, canvas, state, goalId, constants, dpr);
+  if (policyOn && !visual?.muted) drawGhost(ctx, camera, canvas, state, goalId, constants, dpr, ghostTips);
 
-  const cart = camera.worldToScreen(tips.cart.x, 0, canvas);
-  const p1 = camera.worldToScreen(tips.lower.x, tips.lower.y, canvas);
-  const p2 = camera.worldToScreen(tips.upper.x, tips.upper.y, canvas);
+  const lift = visual?.y ?? 0;
+  const cart = camera.worldToScreen(tips.cart.x, lift, canvas);
+  const joints = polesOf(tips).map((joint) => ({
+    ...joint,
+    screen: camera.worldToScreen(joint.x, joint.y + lift, canvas),
+  }));
+  const ink = policyOn && !visual?.muted ? INK : MUTED;
+  const body = policyOn && !visual?.muted ? INK_SOFT : MUTED_SOFT;
+  ctx.save();
+  ctx.globalAlpha = visual?.alpha ?? 1;
 
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = ink;
   ctx.lineWidth = 5 * dpr;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.beginPath();
   ctx.moveTo(cart.x, cart.y);
-  ctx.lineTo(p1.x, p1.y);
-  ctx.lineTo(p2.x, p2.y);
+  for (const joint of joints) ctx.lineTo(joint.screen.x, joint.screen.y);
   ctx.stroke();
 
   const cartW = 0.28 * camera.scale;
   const cartH = 0.12 * camera.scale;
-  ctx.fillStyle = INK_SOFT;
-  ctx.fillRect(cart.x - cartW * 0.5, cart.y - cartH * 0.35, cartW, cartH);
+  const cartX = cart.x - cartW * 0.5;
+  const cartY = cart.y - cartH * 0.35;
+  const wheelR = 0.03 * camera.scale;
+  ctx.fillStyle = body;
+  ctx.fillRect(cartX, cartY, cartW, cartH);
   ctx.beginPath();
-  ctx.fillStyle = INK;
-  ctx.arc(cart.x - cartW * 0.28, cart.y + cartH * 0.55, 0.03 * camera.scale, 0, Math.PI * 2);
-  ctx.arc(cart.x + cartW * 0.28, cart.y + cartH * 0.55, 0.03 * camera.scale, 0, Math.PI * 2);
+  ctx.fillStyle = ink;
+  ctx.arc(cart.x - cartW * 0.28, cart.y + cartH * 0.55, wheelR, 0, Math.PI * 2);
+  ctx.arc(cart.x + cartW * 0.28, cart.y + cartH * 0.55, wheelR, 0, Math.PI * 2);
   ctx.fill();
 
-  const r1 = 0.045 * camera.scale;
-  const r2 = 0.055 * camera.scale;
-  ctx.fillStyle = pointer.body === "lower" ? LINK : INK;
-  ctx.beginPath();
-  ctx.arc(p1.x, p1.y, r1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = pointer.body === "upper" ? LINK : INK;
-  ctx.beginPath();
-  ctx.arc(p2.x, p2.y, r2, 0, Math.PI * 2);
-  ctx.fill();
-  if (pointer.body === "cart") {
+  joints.forEach((joint, i) => {
+    const r = (0.045 + i * 0.01) * camera.scale;
+    ctx.fillStyle = pointer.body === joint.body ? LINK : ink;
+    ctx.beginPath();
+    ctx.arc(joint.screen.x, joint.screen.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  if (pointer.body === "cart" && !visual?.muted) {
     ctx.strokeStyle = LINK;
     ctx.lineWidth = 2.5 * dpr;
     ctx.strokeRect(cart.x - cartW * 0.5, cart.y - cartH * 0.35, cartW, cartH);
   }
 
-  if (pointer.active && pointer.body) {
+  if (pointer.active && pointer.body && !visual?.muted) {
     const grab = camera.worldToScreen(pointer.world.x, pointer.world.y, canvas);
     ctx.strokeStyle = LINK;
     ctx.lineWidth = 1.5 * dpr;
     ctx.setLineDash([4 * dpr, 4 * dpr]);
     ctx.beginPath();
-    const from = pointer.body === "cart" ? cart : pointer.body === "lower" ? p1 : p2;
+    const from = pointer.body === "cart" ? cart : joints.find((j) => j.body === pointer.body)?.screen ?? cart;
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(grab.x, grab.y);
     ctx.stroke();
     ctx.setLineDash([]);
   }
+  ctx.restore();
 }

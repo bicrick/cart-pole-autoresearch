@@ -15,6 +15,7 @@ export const DEFAULT_CONSTANTS = {
   wallRestitution: 0.0,
   hidden: 128,
   obsDim: 16,
+  nLinks: 2,
   obsLow: [-4.0, -6.0, -1.0, -1.0, -1.0, -1.0, -12.0, -12.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0, -1.0, -1.0],
   obsHigh: [4.0, 6.0, 1.0, 1.0, 1.0, 1.0, 12.0, 12.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
 };
@@ -44,7 +45,7 @@ export function cloneState(state) {
 }
 
 export function accelerations(state, force, extraQ, constants = DEFAULT_CONSTANTS) {
-  const { x, xd, th1, th1d, th2, th2d } = state;
+  const { xd, th1, th1d, th2, th2d } = state;
   const M = constants.cartMass;
   const m1 = constants.poleMass1;
   const m2 = constants.poleMass2;
@@ -87,7 +88,6 @@ export function step(state, force, extraQ, constants = DEFAULT_CONSTANTS) {
   const th1d = state.th1d + acc.t1dd * dt;
   const th2d = state.th2d + acc.t2dd * dt;
   const x = state.x + xd * dt;
-  // No walls — cart can run into the void; loop.js respawns on oob.
   return {
     x,
     xd,
@@ -98,7 +98,6 @@ export function step(state, force, extraQ, constants = DEFAULT_CONSTANTS) {
   };
 }
 
-/** True when the cart has left the visible track (demo void / train episode end). */
 export function offTrack(state, constants = DEFAULT_CONSTANTS) {
   const track = constants.trackLimit ?? 2.4;
   return Math.abs(state.x) > track;
@@ -135,10 +134,17 @@ export function tipPositions(state, constants = DEFAULT_CONSTANTS) {
   const l2 = constants.poleLength2;
   const p1x = state.x + l1 * Math.sin(state.th1);
   const p1y = l1 * Math.cos(state.th1);
+  const lower = { x: p1x, y: p1y, body: "lower" };
+  const upper = {
+    x: p1x + l2 * Math.sin(state.th2),
+    y: p1y + l2 * Math.cos(state.th2),
+    body: "upper",
+  };
   return {
     cart: { x: state.x, y: 0 },
-    lower: { x: p1x, y: p1y },
-    upper: { x: p1x + l2 * Math.sin(state.th2), y: p1y + l2 * Math.cos(state.th2) },
+    lower,
+    upper,
+    poles: [lower, upper],
   };
 }
 
