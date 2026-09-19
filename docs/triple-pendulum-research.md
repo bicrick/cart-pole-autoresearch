@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~15:42 CT.
+Last updated: 2026-09-19 ~15:50 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -14,7 +14,7 @@ Last updated: 2026-09-19 ~15:42 CT.
 | Goals | `train/goals_triple.py` | 8 eqs; product reward + **`progress_w` Δ cos-align**; Baek α floors; UP×5/DOWN×1; **`energy_w` = height/align proxy (not E→E_UUU)** |
 | Train | `train/train_triple.py` | `--progress-w` (default 1.0 product); `--flip-augment` (Baek VER, default on); `--eval-curriculum` → `eval/near_target/*` + `eval/hang/*` |
 | Launch | `scripts/next-train-triple.sh` | Passes `PROGRESS_W` / `FLIP_AUGMENT` |
-| Slots | `scripts/continue-triple-{a,b,c}.sh` | **A** swing (hang+near, f50, progress+flip); **B** hold (near_target, f40); **C** combo (near+hang0.3, progress+flip). Markers `.triple-*-progress-flip-v5` / hold / combo |
+| Slots | `scripts/continue-triple-{a,b,c}.sh` | **A** swing f50 ent0.05 lr1e-4; **B** hold f40 ent0.03 lr1e-4; **C** combo f40 ent0.04 lr1e-4 (cool-ent **v6** staged). Live stretch still v5 until u400. |
 
 **Symmetry (Baek VER / `--flip-augment`):** planar reflect across the vertical midline maps `(x,ẋ,θᵢ,θ̇ᵢ,F)→(−x,−ẋ,−θᵢ,−θ̇ᵢ,−F)`. Dynamics + product reward are equivariant; θ*∈{0,π} goal encodings invariant. After GAE, PPO batch is duplicated with flipped obs/raw and recomputed logπ.
 
@@ -22,7 +22,7 @@ Last updated: 2026-09-19 ~15:42 CT.
 
 **Slot policy:** **Kill double/xonly.** All 3 L4 slots on `cartpole-train-od` are triple-a/b/c only.
 
-**Cold start:** new progress reward → wipe once via `.triple-a-progress-flip-v5`, `.triple-b-hold-progress-flip-v5`, `.triple-c-combo-progress-flip-v5`.
+**Cold start:** cool-ent v6 → wipe once via `.triple-a-cool-ent-v6`, `.triple-b-cool-ent-v6`, `.triple-c-cool-ent-v6` (after v5 finishes).
 
 **Launch:**
 ```bash
@@ -31,6 +31,23 @@ NUM_ENVS=8192 FORCE_LIMIT=40 PROGRESS_W=1.0 FLIP_AUGMENT=1 bash scripts/next-tra
 # A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
+
+## Overnight fire — status (2026-09-19 ~15:50 CT)
+
+**VM:** `cartpole-train-od` RUNNING us-east1-b L4 ~99%/15.7GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~36.9h ≈ **~$26–28** @~$0.70–0.76/hr (≤$30; ~2–3h headroom to u400). continue-triple-a/b/c rearmed with **cool-ent v6** (live trains still v5). GPU healthy.
+
+**Jobs (alive, progress+flip v5 — do not mid-run kill):**
+| Slot | Recipe | ~u | rollout_r | entropy | goal_frac/UUU | near_target at_goal/UUU | near_target align/UUU | hang align/UUU |
+|---|---|---|---|---|---|---|---|---|
+| A | swing hang+near f50 bar10 e0.5 prog1+flip | ~133 | ~0.49 | **~−0.34** ↓↓ | ~0.94 | ~0.042 flat | ~+0.168 | ~−0.087 |
+| B | hold near_target f40 bar10 e0.15 prog1+flip | ~131 | ~0.52 | **~−0.17** ↓ | ~0.93 | ~0.042 flat | ~+0.099 | ~−0.30↑ |
+| C | combo hang0.3 f40 bar10 e0.35 prog1+flip | ~130 | ~0.51 | **~−0.14** ↓ | ~0.93 | ~0.041 flat | ~+0.144 | ~−0.21 |
+
+**Diagnosis:** Gate from 15:32 fired — **all three slots now entropy-negative** (A worst; B/C crossed after u100). near_target at_goal/UUU still ~0.04 (no hold progress). oob=0; force 40–50 + barrier10 still OK vs Glück/Lim (not underpowered / no rail-slide). Collapse is explore/β under fixed `--ent=0.01`, matching 15:42 research note.
+
+**Action (this fire):** Staged **cool-ent v6** for u400 handoff (no mid-run kill): wire `ENT` in `next-train-triple.sh`; continue-a/b/c → `LR=1e-4`, `ENT=0.05/0.03/0.04`, cold markers `.triple-*-cool-ent-v6`. Watchers restarted; live v5 trains undisturbed. u400 ETA ~18:20 CT (~$28).
+
+**Watch next:** v5 finish → auto cold v6; entropy floor + near_target at_goal/UUU. Stage-gate still UUU hold ≳0.80 before multi-eq. NEED_USER_PING yes (all-slot entropy collapse + staged retune).
 
 ## Overnight fire — status (2026-09-19 ~15:32 CT)
 

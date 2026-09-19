@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Loop forever: triple-C = swing+hold combined baseline (flip-augment + progress).
-# near_target + hang≈0.3, forceLimit=40, soft barrier. Cold wipe via v5 marker.
+# v6 cool-ent: LR=1e-4, ENT=0.04, f40, soft barrier.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RUN_MATCH='ft-triple-c'
@@ -19,12 +19,11 @@ while true; do
     sleep 30
     continue
   fi
-  if [[ "${TRIPLE_C_COLD:-1}" == "1" && ! -f policies/.triple-c-combo-progress-flip-v5 ]]; then
+  if [[ "${TRIPLE_C_COLD:-1}" == "1" && ! -f policies/.triple-c-cool-ent-v6 ]]; then
     rm -f policies/checkpoint-triple-c.pt
-    touch policies/.triple-c-combo-progress-flip-v5
-    echo "$(date -u +%FT%TZ) cold-start triple-c (UUU swing+hold / f40 / progress+flip); marker set" >> logs/continue-triple-c.log
+    touch policies/.triple-c-cool-ent-v6
+    echo "$(date -u +%FT%TZ) cold-start triple-c (cool-ent v6 / f40 / ent0.04 / lr1e-4); marker set" >> logs/continue-triple-c.log
   fi
-  # Slot C: swing+hold combined with flip-augment + progress (baseline).
   nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
     REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
     WARMUP_UPDATES=100000 WARMUP_GOAL=UUU \
@@ -33,8 +32,8 @@ while true; do
     GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
-    INIT_MODE=near_target ENERGY_W=0.35 LR=3e-4 \
-    RUN_NAME=ft-triple-c-e8192-r256-uuu-combo-f40-bar10-prog1-flip \
+    INIT_MODE=near_target ENERGY_W=0.35 LR=1e-4 ENT=0.04 \
+    RUN_NAME=ft-triple-c-e8192-r256-uuu-combo-f40-bar10-prog1-flip-ent04-lr1e4 \
     CHECKPOINT=policies/checkpoint-triple-c.pt \
     OUT=policies/policy-triple-c.json \
     bash scripts/next-train-triple.sh \

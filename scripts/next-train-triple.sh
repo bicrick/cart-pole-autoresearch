@@ -25,6 +25,7 @@ ENERGY_W="${ENERGY_W:-0.15}"
 EPISODE_LEN="${EPISODE_LEN:-1200}"
 IMPULSE_P="${IMPULSE_P:-0.01}"
 LR="${LR:-3e-4}"
+ENT="${ENT:-0.01}"
 REWARD_MODE="${REWARD_MODE:-product}"
 CART_BARRIER_COEF="${CART_BARRIER_COEF:-50}"
 W_UP="${W_UP:-5.0}"
@@ -58,6 +59,7 @@ exec python3 train/train_triple.py \
   --rollout "${ROLLOUT}" \
   --episode-len "${EPISODE_LEN}" \
   --lr "${LR}" \
+  --ent "${ENT}" \
   --track-limit 2.4 \
   --oob-penalty "${OOB_PENALTY:-20}" \
   --reward-clip "${REWARD_CLIP:-8.0}" \

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Loop forever: triple-A = UUU swing-up specialist (hang+near mix, progress+energy).
-# forceLimit=50, soft barrier=10, progress_w=1, flip-augment on. Cold wipe via v5 marker.
+# v6 cool-ent: LR=1e-4, ENT=0.05 (anti-collapse), f50, soft barrier, progress+flip.
+# Cold wipe via .triple-a-cool-ent-v6 marker (do not mid-run kill v5).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RUN_MATCH='ft-triple-a'
@@ -19,13 +20,11 @@ while true; do
     sleep 30
     continue
   fi
-  # Progress+flip v5 cold-start once (new reward → wipe old ckpt).
-  if [[ "${TRIPLE_A_COLD:-1}" == "1" && ! -f policies/.triple-a-progress-flip-v5 ]]; then
+  if [[ "${TRIPLE_A_COLD:-1}" == "1" && ! -f policies/.triple-a-cool-ent-v6 ]]; then
     rm -f policies/checkpoint-triple-a.pt
-    touch policies/.triple-a-progress-flip-v5
-    echo "$(date -u +%FT%TZ) cold-start triple-a (UUU swing hang+near / f50 / progress+flip); marker set" >> logs/continue-triple-a.log
+    touch policies/.triple-a-cool-ent-v6
+    echo "$(date -u +%FT%TZ) cold-start triple-a (cool-ent v6 / f50 / ent0.05 / lr1e-4); marker set" >> logs/continue-triple-a.log
   fi
-  # Slot A: UUU swing-up specialist — hang+near mix, progress+energy, force 40–60, soft barrier.
   nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=50 \
     REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
     WARMUP_UPDATES=100000 WARMUP_GOAL=UUU \
@@ -34,8 +33,8 @@ while true; do
     GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
-    INIT_MODE=bottom ENERGY_W=0.5 LR=3e-4 \
-    RUN_NAME=ft-triple-a-e8192-r256-uuu-swing-f50-bar10-prog1-flip \
+    INIT_MODE=bottom ENERGY_W=0.5 LR=1e-4 ENT=0.05 \
+    RUN_NAME=ft-triple-a-e8192-r256-uuu-swing-f50-bar10-prog1-flip-ent05-lr1e4 \
     CHECKPOINT=policies/checkpoint-triple-a.pt \
     OUT=policies/policy-triple-a.json \
     bash scripts/next-train-triple.sh \
