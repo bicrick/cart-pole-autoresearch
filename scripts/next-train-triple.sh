@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Cart-triple PPO — Lim/fawraw product-reward recipe (UUU-first → multi-eq).
 # Keep PPO; product reward on world angles; low hang; cart barrier; fall grace.
-# NOT transition-only (leave that for double xonly).
+# forceLimit default 40 N (was 20; underpowered for 3×0.5m + friction — see research notes).
+# NOT transition-only (leave that for double xonly — currently killed for triple L4 slots).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -32,7 +33,13 @@ ALPHA_TH="${ALPHA_TH:-0.5}"
 FALL_GRACE_STEPS="${FALL_GRACE_STEPS:-20}"
 START_GRACE_STEPS="${START_GRACE_STEPS:-0}"
 INIT_MODE="${INIT_MODE:-mixed}"
-RUN_NAME="${RUN_NAME:-ft-triple-e${NUM_ENVS}-r${ROLLOUT}-prod-uuu-bar50}"
+FORCE_LIMIT="${FORCE_LIMIT:-40}"
+RUN_NAME="${RUN_NAME:-ft-triple-e${NUM_ENVS}-r${ROLLOUT}-prod-uuu-f${FORCE_LIMIT}}"
+
+FORCE_ARGS=()
+if [[ -n "${FORCE_LIMIT}" ]]; then
+  FORCE_ARGS+=(--force-limit "${FORCE_LIMIT}")
+fi
 
 exec python3 train/train_triple.py \
   --num-envs "${NUM_ENVS}" \
@@ -75,4 +82,5 @@ exec python3 train/train_triple.py \
   --run-name "${RUN_NAME}" \
   --checkpoint "${CHECKPOINT:-policies/checkpoint-triple.pt}" \
   --out "${OUT:-policies/policy-triple.json}" \
+  "${FORCE_ARGS[@]}" \
   "$@"

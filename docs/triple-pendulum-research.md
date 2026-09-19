@@ -1,34 +1,39 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~11:33 CT.
+Last updated: 2026-09-19 ~11:45 CT.
 
 
-## Implementation status (2026-09-19 ~11:30 CT)
+## Implementation status (2026-09-19 ~11:45 CT)
 
-**Built on `main`:** cart-triple plant + **Lim/fawraw redesign** (still PPO UVFA, not 8× TQC).
+**Built on `main`:** cart-triple plant + **Lim/fawraw redesign** (still PPO UVFA, not 8× TQC) + **forceLimit=40** A/B.
 
 | Piece | Path | Notes |
 |---|---|---|
 | Physics | `train/physics_triple.py` | Batched torch, 4×4 mass solve, θ=0 upright, no track walls |
-| Constants | `shared/constants-triple.json` | 3 equal links; `obsDim=25` |
+| Constants | `shared/constants-triple.json` | 3 equal links; `obsDim=25`; **`forceLimit=40.0`** (was 20) |
+| Force override | `--force-limit` / `FORCE_LIMIT` | CLI/env override of hard `tanh(forceLimit)` action cap; also `shared/constants-triple-force40.json` |
 | Goals | `train/goals_triple.py` | 8 eqs; **`product_reward`** (Lim coeffs on world θ/ω) + Baek α floors + UP×5/DOWN×1; legacy `goal_reward` additive kept |
-| Train | `train/train_triple.py` | `--reward-mode product|additive`; `--cart-barrier-coef`; `--fall-grace-steps` / `--start-grace-steps`; `--init-mode mixed|bottom|near_target|wide`; `--warmup-hang-start-p`; optional `--angle-fall` |
+| Train | `train/train_triple.py` | `--reward-mode product|additive`; `--cart-barrier-coef`; `--force-limit`; `--fall-grace-steps` / `--start-grace-steps`; `--init-mode`; `--warmup-hang-start-p`; optional `--angle-fall` |
 | Smoke | `train/test_physics_triple.py` | Inverted unstable, hang restoring, nowalls |
-| Launch | `scripts/next-train-triple.sh` | **Product + UUU-first** (warmup hang=0, hang_start≈0.10 post-warmup, barrier=50, fall_grace=20) |
-| UUU stage | `scripts/next-train-triple-uuu.sh` | Hold-biased wrapper (`init_mode=near_target`, higher uu-bias) |
-| Watchers | `scripts/continue-triple-a.sh` / `b` | A: product defaults; B: W_UP=8 + lr=5e-4; **cold-start** on first product launch (reward scale changed) |
+| Launch | `scripts/next-train-triple.sh` | Product + UUU-first; default `FORCE_LIMIT=40` |
+| UUU stage | `scripts/next-train-triple-uuu.sh` / `next-train-triple-c.sh` | Hold / pure UUU specialist wrappers |
+| Watchers | `scripts/continue-triple-{a,b,c}.sh` | **A:** f40 bar50 w_up5 lr3e-4; **B:** f40 bar10 w_up8 lr5e-4; **C:** UUU-only forever, hang=0.05, near=0.3 |
 
 **OBS_DIM = 25** = 11 state + one-hot(8) + target sin/cos(6).
 
 **Curriculum default (redesign):** UUU-only `warmup_updates` with `warmup_hang_start_p=0` → multi-eq with **low** `hang_start_p≈0.10` (was 0.45–0.60 DDD sink), product reward, cart barrier, fall grace. Do **not** default to `--transition-only`.
 
-**Cold start note:** Switching additive→product changes reward scale; continue-a/b wipe old triple ckpts once via `policies/.triple-{a,b}-product-v1` markers. Double **xonly** untouched.
+**Force diagnosis (2026-09-19):** At `forceLimit=20` + `cartMass=1.0` the hard action cap is **~20 m/s²** cart accel (`tanh` saturates at ±forceLimit). Glück swing-up used ~**22 m/s²**; multi-arm cart-triple benchmarks often size ~**110 N continuous / ~20 m/s²** on heavier carts — with our **3×0.5 m** poles + **cartFriction=0.08**, 20 N is likely **underpowered for UUU swing-up**. Product reward `R_u=exp(-k u²)` is only a soft preference; the **HARD** ceiling is `tanh(forceLimit)`. Barrier=50 also fights aggressive rail use — keep on job A, lower on B. **Default bumped to 40 N** (~40 m/s² peak); cold-start markers `policies/.triple-{a,b,c}-force40-v1`.
+
+**Slot policy (2026-09-19 ~11:45 CT):** **Kill double xonly / continue-xonly.** All 3 L4 training slots on `cartpole-train-od` are triple-a/b/c.
+
+**Cold start note:** forceLimit 20→40 changes action scale; continue-a/b/c wipe old ckpts once via `.triple-*-force40-v1` markers.
 
 **Launch:**
 ```bash
-NUM_ENVS=8192 bash scripts/next-train-triple.sh
-# UUU-hold stage: bash scripts/next-train-triple-uuu.sh
-# A/B on VM: continue-triple-a.sh / continue-triple-b.sh
+NUM_ENVS=8192 FORCE_LIMIT=40 bash scripts/next-train-triple.sh
+# UUU specialist: bash scripts/next-train-triple-c.sh
+# A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
 
@@ -83,7 +88,7 @@ Naïve "pad and continue" does **not** just work: weights for θ3 / new goal bit
 
 ## Implication for our stack
 
-- Keep double **xonly** grinding 12 directed transitions on the shared L4; share headroom with triple multi-eq jobs (do not kill xonly).
+- **(Updated 2026-09-19)** Double **xonly killed** — all 3 L4 slots on triple-a/b/c while diagnosing UUU underpower / forceLimit.
 - Triple plant is live (see Implementation status). Default recipe: **normal multi-eq PPO** (hang/near-goal/UUU bias) to reach/hold 8 eqs — same path as early double, **not** transition-only first.
 - Later: optional `--transition-only` over 56 pairs, or Lim-style 8× TQC as A/B — not the overnight default.
 - Optional: adapter/progressive init from double ckpt as a side experiment, not a requirement.
@@ -212,7 +217,7 @@ fawraw reward itself is still **additive** (−weighted ang² − vel − cart �
 13. Multi-eq hard-EP: start `hard_ep_weight≈10`, escalate to 20 only if tip-up EPs stay at 0; watch UUU regression.
 14. Copy probe barrier pack when swing-up starts: `barrier_coef=50`, `cart_cost≈0.2–0.5`, `progress=1.0`.
 
-**Green-lit 2026-09-19:** product/UUU-first/grace/barrier landed on main; still do not kill double xonly.
+**Green-lit 2026-09-19:** product/UUU-first/grace/barrier landed on main; **xonly killed** same day for forceLimit=40 triple A/B/C.
 
 
 ### Research pass (2026-09-19 ~10:31 CT) — new actionable diffs
@@ -391,5 +396,19 @@ arXiv:2606.22145 (2026) — *single* cart-pole swing-up↔stabilize zero-shot: s
 29. 56 success metric: **0.2 rad × 200 steps** (+ optional bonus 200); require hold after arrival.
 30. Optional later: action LPF **τ≈0.3** on swing-up (arXiv:2606.22145) for smoother hand-off.
 
-**Still do not kill double xonly.** Product/UUU-first/grace/barrier already on main; next code lever after UUU holds is hard-EP weighting + consolidate, not a redesign.
+**xonly killed 2026-09-19 ~11:45 CT** so all 3 L4 slots run triple (force40 A/B/C). Next code lever after UUU holds is hard-EP weighting + consolidate, not a redesign.
+
+
+## Force / actuation diagnosis (2026-09-19 ~11:45 CT)
+
+| Quantity | Value | Implication |
+|---|---|---|
+| `constants-triple.json` `forceLimit` (old) | **20.0 N** | Hard `tanh` action cap |
+| `cartMass` | 1.0 kg | Peak cart accel ≈ force/mass ≈ **20 m/s²** |
+| Glück Automatica 2013 swing-up | ~**22 m/s²** cart accel | Classical DDD→UUU already at/above our old cap |
+| Multi-arm / lab cart-triple sizing | ~110 N continuous / ~20 m/s² on heavier carts | Same accel ballpark; our 20 N @ 1 kg matches accel but **friction 0.08** + 3×0.5 m links eat budget |
+| Product `R_u` | Soft `exp(-k u²)` | Prefer gentle force; does **not** raise the hard ceiling |
+| Cart barrier | `(x/track)^8 * coef` | coef=50 fights rail-run-up needed for energy pump |
+
+**Decision:** bump default `forceLimit` → **40.0** (optional `--force-limit` / `FORCE_LIMIT` / `constants-triple-force40.json`). Keep barrier=50 on **triple-a**; drop to **10** on **triple-b** so the cart can swing. **triple-c** = UUU-only specialist (`warmup_updates=100000`, `hang_start_p=0.05`, `near_goal_p=0.3`).
 

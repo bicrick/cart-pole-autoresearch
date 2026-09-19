@@ -270,6 +270,12 @@ def parse_args():
         default=0.0,
         help="Extra additive vel^2 cost (additive mode; prefer 0.01-0.02)",
     )
+    parser.add_argument(
+        "--force-limit",
+        type=float,
+        default=None,
+        help="Override constants forceLimit (N); also env FORCE_LIMIT. Hard tanh action cap.",
+    )
     parser.add_argument("--device", default=None)
     parser.add_argument("--checkpoint", type=Path, default=ROOT / "policies" / "checkpoint-triple.pt")
     parser.add_argument("--out", type=Path, default=POLICY_PATH)
@@ -749,6 +755,16 @@ def goal_probs_for_update(args, update: int):
 def main():
     args = parse_args()
     constants = load_constants()
+    # Optional force override: CLI --force-limit wins over env FORCE_LIMIT over JSON default.
+    fl = args.force_limit
+    if fl is None:
+        env_fl = os.environ.get("FORCE_LIMIT", "").strip()
+        if env_fl:
+            fl = float(env_fl)
+    if fl is not None:
+        constants = dict(constants)
+        constants["forceLimit"] = float(fl)
+        args.force_limit = float(fl)
     if args.smoke:
         args.num_envs = min(args.num_envs, 32)
         args.rollout = 32
@@ -781,6 +797,7 @@ def main():
         f"reward: mode={args.reward_mode} align_w={args.align_w} energy_w={args.energy_w} spin_w={args.spin_w} "
         f"center_w={args.center_w} center_hold_w={args.center_hold_w} "
         f"barrier={args.cart_barrier_coef} w_up={args.w_up} w_down={args.w_down} "
+        f"forceLimit={constants['forceLimit']} "
         f"alpha_th={args.alpha_th} track_limit={args.track_limit} reward_clip={args.reward_clip} "
         f"oob_penalty={args.oob_penalty} "
         f"warmup={args.warmup_updates}x{args.warmup_goal}(hang={args.warmup_hang_start_p}) "

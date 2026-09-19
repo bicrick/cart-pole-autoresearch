@@ -18,6 +18,7 @@ export CART_BARRIER_COEF="${CART_BARRIER_COEF:-50}"
 export W_UP="${W_UP:-5.0}"
 export W_DOWN="${W_DOWN:-1.0}"
 export FALL_GRACE_STEPS="${FALL_GRACE_STEPS:-20}"
-export RUN_NAME="${RUN_NAME:-ft-triple-uuu-e${NUM_ENVS:-8192}-r${ROLLOUT:-256}-prod}"
+export FORCE_LIMIT="${FORCE_LIMIT:-40}"
+export RUN_NAME="${RUN_NAME:-ft-triple-uuu-e${NUM_ENVS:-8192}-r${ROLLOUT:-256}-prod-f${FORCE_LIMIT}}"
 
 exec bash scripts/next-train-triple.sh "$@"
