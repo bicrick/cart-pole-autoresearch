@@ -484,3 +484,41 @@ arXiv:2606.22145 (2026) — *single* cart-pole swing-up↔stabilize zero-shot: s
 
 **Decision:** bump default `forceLimit` → **40.0** (optional `--force-limit` / `FORCE_LIMIT` / `constants-triple-force40.json`). Keep barrier=50 on **triple-a**; drop to **10** on **triple-b** so the cart can swing. **triple-c** = UUU-only specialist (`warmup_updates=100000`, `hang_start_p=0.05`, `near_goal_p=0.3`).
 
+
+## Strategy research — what to implement next (2026-09-19 ~14:30 CT)
+
+Live symptom: even UUU-only + force40/60, `at_goal/UUU≈0` and align/UUU often ≤0. Eval uses random ICs (harsh); train may still not be pumping energy.
+
+### Ranked strategies that worked elsewhere
+
+1. **Baek et al. EAAI 2024 (hardware TIP swing-up)** — **SAC/off-policy** + **product reward**  
+   `R = f(a)·g(x)·h(θ1)·h(θ2)·h(θ3)·min(e(ω))` with α floors so one term can’t zero the product.  
+   **VER (virtual experience replay):** mirror trajectories left↔right using geometric symmetry → ~⅔ fewer samples. Ports to PPO as a **rollout augmenter** (duplicate flipped obs/actions/rewards).
+
+2. **Two-policy handoff (cart-pole 2026 arXiv + fawraw M4)** — train **swing-up** and **stabilize** separately; switch when state enters catch basin (~0.1 rad, near-zero ω). Our single PPO tries both and fails both. Highest-ROI architecture change if UUU-only stays flat.
+
+3. **Energy-based swing-up (Xin double-cart analysis)** — pump total energy toward E(UUU), then local capture. Almost-global for double; for triple, classical uses **feedforward trajectory + TV-LQR** (Glück), not pure energy. Still: add an **explicit energy-to-UUU term** stronger than our current 0.35 additive bonus inside product.
+
+4. **Progress shaping + cart barrier (fawraw)** — dense Δ(angle-error) reward; barrier stops rail-slide local optima. We have barrier; we may lack strong **progress** (derivative of |θ−θ*|).
+
+5. **Curriculum SAC (Cambridge Robotica 2026 UTPR)** — adaptive CL easy→hard + quadratic+integral angle error for hold. Good for **stabilize** phase after swing-up.
+
+6. **LQR-trees / funnel capture (double)** — covers many ICs with trajectory tree. Heavy; only if we leave pure end-to-end RL.
+
+### Recommended implementation order (keep PPO for now)
+
+| Priority | Change | Why |
+|---|---|---|
+| P0 | **Train-eval fix**: log `at_goal` from *near_target / hang* starts, not only random ICs | We’re diagnosing with the wrong meter |
+| P0 | **Progress reward** Δ cos-align toward UUU | Baek/fawraw dense swing signal |
+| P1 | **Left–right VER / flip augment** in PPO rollouts | Baek’s big sample-efficiency win |
+| P1 | **Split swing vs hold** (two nets or two heads) + handoff | Matches every successful hardware story |
+| P2 | Stronger energy-to-E_uuu term; consider **force 80–100 N** probe | Underactuated energy pump + bench-scale force |
+| P2 | Off-policy **SAC/TQC** side experiment (one slot) | Papers that hit hardware used SAC/TQC not PPO |
+| P3 | Multi-eq only after UUU hold ≥0.8 | Stage gate |
+
+### Not the bottleneck (already tried)
+
+- force 20→40 alone (didn’t unlock UUU)
+- Soft vs hard barrier alone
+- Hang-heavy multi-eq UVFA (DDD sink)
