@@ -161,6 +161,8 @@ def product_reward(
     cart_barrier_coef: float = 50.0,
     reward_clip: float = 0.0,
     sparse_bonus: float = 0.0,
+    # Optional additive height shaping (product otherwise ignores energy_w)
+    energy_w: float = 0.0,
     **_ignored,
 ):
     """Lim-style product of [0,1] terms on absolute/world angles + rates.
@@ -230,6 +232,15 @@ def product_reward(
 
     if sparse_bonus and sparse_bonus > 0:
         rew = rew + float(sparse_bonus) * at_goal(state, goal_ids).to(state.dtype)
+
+    # Optional potential-height bonus toward goal (helps UUU swing-up under product).
+    # Uses mean angle-align to target ∈ [-1,1]; scale by energy_w (default 0 = off).
+    if energy_w and float(energy_w) > 0:
+        a1 = angle_align(th1, angles[..., 0])
+        a2 = angle_align(th2, angles[..., 1])
+        a3 = angle_align(th3, angles[..., 2])
+        height = (a1 + a2 + a3) / 3.0
+        rew = rew + float(energy_w) * height
 
     # Cart barrier (fawraw): strong near-rail penalty
     if cart_barrier_coef and cart_barrier_coef > 0 and track_limit > 0:

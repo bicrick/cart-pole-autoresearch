@@ -378,7 +378,7 @@ def random_states(
     init_mode:
       mixed       — curriculum mix (default)
       bottom      — all near hanging DDD (swing-up from bottom)
-      near_target — all near assigned goal (hold stage)
+      near_target — near assigned goal; hang_start_p overlays hang ICs for swing-up
       wide        — Lim-style wide random ICs (full angle, larger rates)
     """
     mode = (init_mode or "mixed").lower()
@@ -407,6 +407,7 @@ def random_states(
         return torch.stack((x, xd, th1, th1d, th2, th2d, th3, th3d), dim=-1)
 
     if mode == "near_target" and goals is not None:
+        # Hold prior near assigned goal; optional hang_start_p overlays swing-up ICs.
         angles = goal_angles(goals, device=device, dtype=torch.float32)
         x = torch.empty(n, device=device).uniform_(-0.5, 0.5)
         xd = torch.empty(n, device=device).uniform_(-0.5, 0.5)
@@ -416,6 +417,18 @@ def random_states(
         th1d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
         th2d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
         th3d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
+        if hang_start_p > 0:
+            hit = torch.rand(n, device=device) < hang_start_p
+            if hit.any():
+                n_hit = int(hit.sum())
+                x[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
+                xd[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
+                th1[hit] = math.pi + torch.empty(n_hit, device=device).uniform_(-0.35, 0.35)
+                th2[hit] = math.pi + torch.empty(n_hit, device=device).uniform_(-0.35, 0.35)
+                th3[hit] = math.pi + torch.empty(n_hit, device=device).uniform_(-0.35, 0.35)
+                th1d[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
+                th2d[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
+                th3d[hit] = torch.empty(n_hit, device=device).uniform_(-1.0, 1.0)
         return torch.stack((x, xd, th1, th1d, th2, th2d, th3, th3d), dim=-1)
 
     # mixed (default): wider base than old ±8 rad/s — closer to Lim coverage

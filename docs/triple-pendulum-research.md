@@ -1,9 +1,9 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~11:45 CT.
+Last updated: 2026-09-19 ~12:40 CT.
 
 
-## Implementation status (2026-09-19 ~11:45 CT)
+## Implementation status (2026-09-19 ~12:40 CT)
 
 **Built on `main`:** cart-triple plant + **Lim/fawraw redesign** (still PPO UVFA, not 8× TQC) + **forceLimit=40** A/B.
 
@@ -17,7 +17,7 @@ Last updated: 2026-09-19 ~11:45 CT.
 | Smoke | `train/test_physics_triple.py` | Inverted unstable, hang restoring, nowalls |
 | Launch | `scripts/next-train-triple.sh` | Product + UUU-first; default `FORCE_LIMIT=40` |
 | UUU stage | `scripts/next-train-triple-uuu.sh` / `next-train-triple-c.sh` | Hold / pure UUU specialist wrappers |
-| Watchers | `scripts/continue-triple-{a,b,c}.sh` | **A:** f40 bar50 w_up5 lr3e-4; **B:** f40 bar10 w_up8 lr5e-4; **C:** UUU-only forever, hang=0.05, near=0.3 |
+| Watchers | `scripts/continue-triple-{a,b,c}.sh` | **A:** f40 bar50 w_up5 lr3e-4; **B:** f40 bar10 w_up8 lr5e-4; **C:** UUU swing-up forever, near_target+hang=0.3, bar10, energy_w=0.35, start_grace=40 |
 
 **OBS_DIM = 25** = 11 state + one-hot(8) + target sin/cos(6).
 
