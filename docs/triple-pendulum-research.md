@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~17:07 CT.
+Last updated: 2026-09-19 ~17:33 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -926,5 +926,79 @@ Sum of **positive truncated Lyapunov exponents** as intrinsic reward; SAC swings
 48. Optional swing explore: **energy-controller action bias** (EBERL-style; exact \(E\) OK in sim) before DeLaN/SAC rewrite.
 49. Ignore SuPLE unless product+energy+handoff fail — then as P3 intrinsic, not overnight.
 50. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented after v6.
+
+**No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
+
+
+### Research pass (2026-09-19 ~17:33 CT) — Dyad E_margin + RoA handoff + ASAP soft actions
+
+Digged Dyad `CartWithSwingup` (JuliaHub MultibodyComponents example), arXiv:2606.28627 (cart-pole energy→LQR reachability / certified RoA handoff), ASAP AAAI'26 (arXiv:2601.18479 action smoothness; code AIRLABkhu/ASAP), re-checked fawraw (still last *code* **2026-06-25** / no new M4 soft-landing). Live: cool-ent **v6** cooking on A/B/C; VM `cartpole-train-od` RUNNING; do not mid-kill. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (fills classical energy-law + soft-delivery cookbooks under existing P1/P2; does not displace handoff as #1).
+
+#### Dyad energy swing-up law — fills empty classical \(u_E\) cookbook
+
+17:07 / EBERL locked *shape* of energy explore / saturated reward, but still had **no concrete cart-pole bang-bang coeffs**. Dyad ships a working single-pole hybrid with copy-paste numbers (plant-scale differs — treat as **ratios**, retune \(k_{\mathrm{swing}}\) / \(E_{\mathrm{margin}}\) on our \(U_{\mathrm{UUU}}\approx0.736\,\mathrm{J}\)):
+
+\[
+u_{\mathrm{swing}} = k_{\mathrm{swing}}\bigl(E-(E_r+E_{\mathrm{margin}})\bigr)\,\mathrm{sign}(\dot\phi\cos(\phi-\pi)) - k_x x - k_v \dot x
+\]
+
+| Knob | Dyad default | Steal |
+|---|---|---|
+| \(E_r\) | upright total energy @ \(\omega=\dot x=0\) | our mass-matrix \(E_{\mathrm{UUU}}\) (not height-proxy) |
+| **\(E_{\mathrm{margin}}\)** | **0.4** (same units as \(E_r\)) | Pump **above** upright so tip **passes** with small \(\omega\) for catcher |
+| \(k_{\mathrm{swing}}\) | 100 | Scale to forceLimit 40–50; start lower if saturates always |
+| \(k_x, k_v\) | 2, 4 | Cart centering during pump (fights rail-slide without barrier-only) |
+| \(\phi_{\mathrm{switch}}\) | 0.4 rad (~23°) | Single-pole only — **triple still use measured ≤0.1 rad** basin |
+| Saturation | \(\|u\|\le 12\) | Maps to our forceLimit; not a reason to jump to 80–100 |
+| \(E\) definition | **cart-frame** (Galilean: subtract cart×link momentum cross terms) | Prefer plant \(T+U\) consistent with `physics_triple`; document frame |
+
+**Complements airo7 dual-gate (do not confuse):**
+
+| Role | Target |
+|---|---|
+| Swing energy *setpoint* (Dyad / classical) | \(E\to E_{\mathrm{UUU}}+E_{\mathrm{margin}}\) (slight overshoot) |
+| Handoff *enter* gate (airo7) | angle basin **and** \(E\le\sim 1.08\,E_{\mathrm{UUU}}\) (reject fast flyers) |
+| Soft-landing | low \(\|\omega\|\) at enter (2312.11311 −r_vel) |
+
+So: classical teacher **aims slightly hot**; catcher **refuses too-hot**. Same split EBERL/Machines'25 already argued (energy swing + LQR/SMC hold).
+
+#### Certified RoA handoff (arXiv:2606.28627) — why catch-basin measurement matters
+
+Formalizes the architecture we already ranked #1:
+
+1. Energy shaping drives onto the upright **homoclinic** (energy error → 0).
+2. Augmented Lyapunov also drives **cart velocity → 0** (almost-global).
+3. Local LQR has a certified ellipsoidal **RoA**; the **switching region must lie strictly inside** that RoA (one-way handoff).
+4. End-to-end reachability = swing delivers into that interior set.
+
+**Steal (design rule, not new #1):** when coding handoff, treat fawraw `measure_catch_basin.py` as the empirical RoA probe — widen hold basin **or** soft-deliver until swing's arrival set ⊂ measured catch set. Do not switch on angle alone if \(\dot x\) / \(\omega\) leave the LQR ellipsoid. Matches Glück ~0.6 m overshoot hypersensitivity already noted.
+
+#### ASAP (AAAI 2026) — PPO soft-delivery co-traveler
+
+fawraw M4 soft-landing coeffs still unspecified. ASAP gives a **trainable** smoothness prior for our PPO swing slot (complements LPF τ≈0.3 from 2606.22145):
+
+| Term | Idea |
+|---|---|
+| Spatial \(L_S\) / predictor \(L_P\) | Align \(\pi(s_t)\) with action predicted from preceding state \(s_{t-1}\) (transition-induced similar states) |
+| Temporal \(L_T\) | Penalize **second-order** action diffs (high-freq chatter / bang-bang) |
+| Total | \(J_\pi + \lambda_S L_S + \lambda_P L_P + \lambda_T L_T\) |
+| PPO tip | Prefer **smaller \(\lambda_P\)** + many parallel envs (we already run 8192) |
+| Code | https://github.com/AIRLABkhu/ASAP |
+
+**When:** after / with two-policy handoff if swing still arrives bangy; optional cheap A/B on slot A before full split. Not a substitute for split nets. Chinese "smooth exploration PPO" (mutation + oscillation regs, Electronic Science & Technology 2025) is same family, thinner cookbook — prefer ASAP if coding.
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing **numeric** coefs: still unspecified; last code **2026-06-25**.
+- Serial **cart-triple** classical energy coeffs: still none (Dyad/2606.28627 are single-pole — scale + measure).
+- Force 80–100: still demoted.
+- Rank: after v6 cook, **split swing vs hold** still #1; **Dyad \(E_{\mathrm{margin}}\) teacher** + **RoA-strict switch** + **ASAP / LPF soft actions** join saturated-\(E\) / E-gate / EBERL-bias / PBRS / cool-ent / `p_trunc` / flip A/B as co-travelers.
+
+#### Amend recommended redesign (additions only)
+
+51. Classical / EBERL energy bias: target **\(E_{\mathrm{UUU}}+E_{\mathrm{margin}}\)** (start \(E_{\mathrm{margin}}/E_{\mathrm{UUU}}\sim0.05\)–0.2, Dyad's 0.4/\(E_r\) is ~20% — retune); keep cart \(k_x,k_v\) terms; use \(\mathrm{sign}(\dot\phi\cos\phi)\) form adapted to θ=0 upright.
+52. Handoff switch set must be **strict subset of measured hold RoA** (2606.28627); angle∩energy∩low-\(\omega\) gates are the practical proxy — run catch-basin measure before trusting latch.
+53. Soft-delivery: prefer **LPF τ≈0.3** first; if chatter remains, add **ASAP** \(\lambda_T\) (and light \(\lambda_S\)) on swing PPO rather than inventing fawraw soft-landing weights.
+54. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented after v6.
 
 **No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
