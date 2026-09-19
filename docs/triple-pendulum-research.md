@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~18:08 CT.
+Last updated: 2026-09-19 ~18:36 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -1076,3 +1076,71 @@ Our shipping progress is still raw Δ (`progress_w*(align_now−align_prev)`). N
 59. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented after v6.
 
 **No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
+
+
+### Research pass (2026-09-19 ~18:36 CT) — FastTD3 / CrossQ anti-pattern + CLF-RL hold shaping
+
+Digged FastTD3 (arXiv:2505.22642 + younggyoseo/fasttd3; PQL recipe), CrossQ+WN (arXiv:2506.03758), CLF-RL stability (arXiv:2605.01978 / Li–Olkin RA-L 2026 practical form), re-checked fawraw (still last *code* **2026-06-25** / docs **2026-07-02**). Live cool-ent **v6** ~u200–210 (A entropy~1.31 nt_align/UUU~**+0.24** hang_align/UUU~**+0.025**; B entropy~0.39 cooling — v7b ENT0.08 staged; C entropy~1.20 nt_align~+0.19); **nt_at_goal/UUU still ~0.04–0.06**. Do not mid-kill. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (fills P1-hold + P2-off-policy cookbooks; does not displace handoff as #1).
+
+#### Live read (why handoff still #1)
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | hang_align/UUU |
+|---|---|---|---|---|---|
+| A swing | ~210 | **~1.31** | ~0.061 | **~+0.241** | **~+0.025** |
+| B hold | ~201 | ~0.39 ↓ | ~0.042 | ~+0.168 | ~−0.16 |
+| C combo | ~200 | ~1.20 | ~0.048 | ~+0.190 | ~−0.07 |
+
+**Diagnosis:** progress+flip+cool-ent **moves align** (A hang UUU align crossed positive; best curriculum signal so far) but **does not unlock hold** (at_goal stuck ~0.04–0.06). Same failure mode as fawraw M4 (reach without catch). Overnight owns B v7b; research does not retune mid-run.
+
+#### FastTD3 (arXiv:2505.22642) — wall-clock off-policy at our env scale
+
+18:08 locked Raffin **SAC** speed hypers. FastTD3 is the **TD3/distributional** cousin from Parallel Q-Learning (PQL): same “thousands of envs → few grads / big batches” philosophy, often **matches PPO wall-clock** on Isaac/Playground.
+
+| Knob | Steal for optional P2 slot |
+|---|---|
+| Parallel envs | Already have **8192** — FastTD3 is built for this |
+| Critic | **Distributional** (Bellemare atoms) — same family as Lim TQC |
+| Batch | **Large** (repo examples **8192**; scale to GPU) |
+| `n_steps` | **>1** (repo notes Raffin fix Jun 2025 stabilizes n-step) |
+| Architecture | Prefer **FastTD3 + SimbaV2** (maintainers’ default since 2025-06) |
+| Reward caveat | Off-policy may need **different** reward shaping than PPO-tuned product — retune penalties if gait/force looks wrong at same return |
+
+**Vs Raffin SAC:** use FastTD3/TQC when we want distributional critics + TD3 delay; use Raffin SAC when we want entropy auto-tune + gSDE. Both beat textbook high-RR SAC at our env count. Still prefer **two-policy handoff** if only one architecture change.
+
+#### CrossQ+WN (arXiv:2506.03758) — do **not** pick for UUU
+
+CrossQ+weight-norm scales UTD on DMC dog/humanoid, but authors explicitly call out **poor performance on sparse `pendulum-swingup`** (attribute to sparse reward). Our harsh `eval/at_goal/UUU` is the same sparse-hold meter. **Anti-pattern:** skip CrossQ for the optional off-policy slot; stick **TQC / Raffin SAC / FastTD3**.
+
+#### CLF-RL hold shaping (arXiv:2605.01978) — soft-landing / hold cookbook
+
+Fills the still-empty fawraw soft-landing **numeric** gap with a **control-Lyapunov** reward used in practice (IsaacLab + PPO) and proven exponentially stable for the optimal policy (cart-pole verified). **Local around upright** — use on the **hold** net after handoff, not as the hang→UUU swing objective.
+
+Practical discrete reward (paper §IV-B):
+
+| Term | Formula | Role |
+|---|---|---|
+| \(r_V\) | \(\beta\exp(-V/\sigma^2)\) | Dense proximity to upright (V = CLF / quadratic on error) |
+| \(r_{\Delta V}\) | \(-\rho\,\mathrm{clip}\bigl((\Delta V+\lambda V)/\sigma_{\dot V},\,0,\,1\bigr)\) | Penalize CLF increase (stability decrease condition) |
+| \(r_{\mathrm{reg}}\) | \(-w_u\|u\|^2\) | Soft actuation |
+| Total | \(R=r_V+r_{\Delta V}+r_{\mathrm{reg}}\) | Max \(\beta\) at \(V=0\) |
+
+Starter scales (retune): \(\lambda\) slightly below CLF rate \(\alpha\); \(\beta\) ~ product-hold magnitude; \(\sigma\) so typical near-basin \(V\) sits mid-exp; \(\rho\) so one bad \(\Delta V\) step ≈ a few \(r_V\) units. For our plant, a cheap V before a true CLF: \(V=\sum_i w_i(1-\cos\phi_i)+c_x x^2+c_\omega\|\omega\|^2\) near UUU (world angles), or LQR Riccati quadratic once a linearization exists.
+
+**Steal:** when coding two-policy, train **hold** with CLF-RL (or quadratic+decrease) from **near_target / measured basin** ICs; keep product+progress (+ optional saturated E) on **swing**. Complements ASAP/LPF soft delivery on the swing side and E-gate on the switch.
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing **numeric** coefs: still unspecified (CLF-RL is our substitute cookbook).
+- Serial cart-triple classical energy bang-bang coeffs: still none.
+- Force 80–100: still demoted.
+- Baek VER: no new multi-link / on-policy paper (shipping flip A/B from 16:40 still the on-policy lever).
+- Rank: after v6 cook, **split swing vs hold** still #1; FastTD3 (+SimbaV2) joins Raffin SAC under P2; **CLF-RL hold reward** joins ASAP/E-gate/soft-landing under P1; **CrossQ banned** for sparse UUU.
+
+#### Amend recommended redesign (additions only)
+
+60. Optional P2 off-policy: prefer **TQC / Raffin SAC / FastTD3(+SimbaV2)**; **never CrossQ** for sparse UUU hold.
+61. FastTD3 starter: distributional critic + large batch + `n_steps>1` + SimbaV2; retune product penalties if behavior diverges from PPO at same return.
+62. Hold net reward: adopt **CLF-RL** \(r_V+r_{\Delta V}+r_{\mathrm{reg}}\) (formulas above) from basin ICs; swing keeps product+progress (+ saturated E when coded).
+63. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented — live v6 align↑/at_goal flat is the empirical confirmation.
+
+**No code this fire** (overnight owns train / B v7b; wait for green-light / overnight ask). NEED_USER_PING no.
