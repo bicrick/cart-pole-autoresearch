@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~00:10 CT.
+Last updated: 2026-09-19 ~09:37 CT.
 
 
 ## Implementation status (2026-09-19)
@@ -106,42 +106,58 @@ Live: mean align ~0.18–0.22, **DDD ~0.45–0.55**, **UUU ~0.01–0.05**. Hang 
 
 - **Algo:** TQC (not PPO) — distributional critics, truncate top quantiles (Kuznetsov).
 - **Architecture:** **8 separate policies**, one per EP (EP0=DDD … EP7=UUU). Not one UVFA. Transitions “for free” once each EP is reachable from random ICs.
-- **Reward:** **product** of [0,1] terms (max 1/step):
+- **Reward:** **product** of [0,1] terms (max 1/step; ep max 1000 over 10 s @ 10 ms):
   - \(R_u = \exp(-0.001 u^2)\), \(R_y = \exp(-0.3 |y|)\)
-  - \(R_{\theta_i} = 0.5 + 0.5\cos(\theta^{world}_i - \theta^*_i)\) on **absolute** angles
-  - \(R_{\dot\theta}\) = exp decay on absolute angular rates
+  - \(R_{\theta_1} = 0.5 + 0.5\cos(\theta_1 - \theta_1^*)\)
+  - \(R_{\theta_2} = 0.5 + 0.5\cos(\theta_1+\theta_2 - \theta_2^*)\)  (world/cumulative abs angles)
+  - \(R_{\theta_3} = 0.5 + 0.5\cos(\theta_1+\theta_2+\theta_3 - \theta_3^*)\)
+  - \(R_{\dot\theta_1} = \exp(-0.015 |\dot\theta_1|)\), \(R_{\dot\theta_2} = \exp(-0.009 |\dot\theta_1+\dot\theta_2|)\), \(R_{\dot\theta_3} = \exp(-0.005 |\dot\theta_1+\dot\theta_2+\dot\theta_3|)\)
   - \(R = \prod R_\cdot\)  (all must be good — no compensating “hang forever” with cart motion)
-- **ICs:** wide uniform random every episode (angles ±π, large ω), domain randomization.
+- **ICs (exact):** \(y\sim U(-0.3,0.3)\), \(\dot y\sim U(-1.2,1.2)\); \(\theta_i\sim U(-\pi,\pi)\); \(\dot\theta_1\sim U(-10,10)\), \(\dot\theta_2\sim U(-20,20)\), \(\dot\theta_3\sim U(-30,30)\).
 - **Episode:** 10 s @ 10 ms agent step (1000 steps); early stop if |y|>0.48 m or |a|>2.5 m/s².
-- **Net:** critic 3×512, policy 400→300; lr 3e-4; γ 0.99; buffer 1e6.
+- **Net:** critic 3×512, policy 400→300; lr 3e-4; γ 0.99; buffer 1e6; 25 atoms; minibatch 256.
+- **EP targets (Table 3):** world angles — EP0 all −π; EP7 all 0; mixed EPs set each link’s world angle to 0 (up) or −π (down).
 
 Demo: https://youtu.be/vVx3ffGo2mk
 
 ### What fawraw/triple-pendulum-sim2real does
 
 - **Milestones:** M2 = stabilize **UUU first** → M3 = all 8 EPs (upweight hard EPs) → M4 = 56 transitions.
-- **TQC** + MuJoCo; larger nets ([512,512] breakthrough).
-- Swing-up failure mode they hit: **cart slide to rail** local optimum. Fixes: cart barrier \((x/limit)^8\), progress shaping, higher cart cost.
+- **TQC** + MuJoCo; larger nets ([512,512] breakthrough vs [256,256] catastrophic forgetting on hard EPs).
+- **M3 hard-EP recipe that worked (M3b-v6):** warm-start prior ckpt → phase1 `hard_ep_weight=20` (~46% each on EP4/EP6) lr=1e-4 × 600K → phase2 consolidate `hard_ep_weight=2.5` lr=5e-5 × 500K → 72.5% overall, all 8 EPs non-zero.
+- Swing-up failure mode: **cart slide to rail** local optimum. Fixes: cart barrier \((x/\mathrm{limit})^8\) (coef≈50), progress shaping, higher cart cost.
+- **M4 status (2026-06):** two-stage hand-off (swing-up → M3 stabilizer). Binding constraint = catcher basin ~0.1 rad / near-zero vel; swing-up delivers ~0.2 rad mid-swing. Next for them: wider-basin catcher + **soft landing** (arrive slow + cart-centred). See their `docs/m4_findings.md`.
 - Probe single transitions (DDD→UDD easy, DDD→UUU hard) before full graph.
 
 ### Classical (Glück Automatica 2013)
 
-Feedforward BVP + time-varying Riccati — works for DDD→UUU with a model; not our path unless we leave pure RL.
+Feedforward BVP + time-varying Riccati — works for DDD→UUU with a model; not our path unless we leave pure RL. (T≈3.5 s, accel limit ~22 m/s² in their setup; experimental validation.)
+
+### Adjacent (not cart-56)
+
+Cambridge Robotica 2026 (CSAC-QI): underactuated triple **balance** only (SAC + integral joint-error reward + curriculum). Useful for hold-precision ideas; not a 56-transition recipe.
 
 ### Vs our current plant
 
 | Ours | Papers that work |
 |---|---|
 | One UVFA, hang_start 0.45–0.60 | Lim: 8 specialists; fawraw: UUU-first milestone |
-| Additive align/energy/clip like double | Lim: **product** reward on absolute angles |
-| Hang-biased resets → DDD sink | Wide random ICs + explicit UUU stage |
+| Additive align/energy/clip like double | Lim: **product** reward on absolute/world angles |
+| Hang-biased resets → DDD sink | Wide random ICs (Lim ranges above) + explicit UUU stage |
 | PPO on-policy | TQC/SAC off-policy (user still prefers PPO — keep PPO but steal reward+curriculum) |
 
 ### Recommended redesign (when user green-lights)
 
 1. **UUU-only warmup** (fawraw M2) before multi-eq.
-2. Port Lim-style **product reward** (absolute θ) into `train_triple`.
-3. Cut hang_start way down; widen random ICs.
-4. Optional: **8 PPO heads / 8 runs** (one EP each) instead of one UVFA — matches Lim’s successful structure while keeping PPO.
-5. Cart barrier / stronger center so we don’t learn rail-slide.
-6. Leave current A/B grinding only until redesign is coded — or pause one slot for experiments.
+2. Port Lim-style **product reward** with the exact coeffs above (absolute/world θ) into `train_triple`.
+3. Cut hang_start way down; adopt Lim IC ranges (or close).
+4. Multi-eq stage: **hard-EP oversample** (fawraw M3 weight schedule) once UUU holds — tip-up-only / mid-up EPs starve under uniform 1/8.
+5. Optional: **8 PPO heads / 8 runs** (one EP each) instead of one UVFA — matches Lim’s successful structure while keeping PPO.
+6. Cart barrier \((x/\mathrm{limit})^8\) / stronger center so we don’t learn rail-slide.
+7. Later (56 phase): soft-landing term + optionally swing-up→hold hand-off; do **not** start transition-only until local capture works.
+8. Leave current A/B grinding only until redesign is coded — or pause one slot for experiments. Do not kill double xonly.
+
+### Recipe lock-in (2026-09-19 ~09:37 CT research pass)
+
+No direction change vs morning drawing board — only **copy-paste numbers** filled from Lim PDF + fawraw M3/M4 notes so a code pass can start without re-reading papers. Still waiting on user green-light to implement; overnight UVFA+hang stays parked as the failed recipe.
+
