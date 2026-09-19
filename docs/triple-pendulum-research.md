@@ -1,9 +1,9 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~12:40 CT.
+Last updated: 2026-09-19 ~12:55 CT.
 
 
-## Implementation status (2026-09-19 ~12:40 CT)
+## Implementation status (2026-09-19 ~12:55 CT)
 
 **Built on `main`:** cart-triple plant + **Lim/fawraw redesign** (still PPO UVFA, not 8× TQC) + **forceLimit=40** A/B.
 
@@ -17,7 +17,7 @@ Last updated: 2026-09-19 ~12:40 CT.
 | Smoke | `train/test_physics_triple.py` | Inverted unstable, hang restoring, nowalls |
 | Launch | `scripts/next-train-triple.sh` | Product + UUU-first; default `FORCE_LIMIT=40` |
 | UUU stage | `scripts/next-train-triple-uuu.sh` / `next-train-triple-c.sh` | Hold / pure UUU specialist wrappers |
-| Watchers | `scripts/continue-triple-{a,b,c}.sh` | **A:** f40 bar50 w_up5 lr3e-4; **B:** f40 bar10 w_up8 lr5e-4; **C:** UUU swing-up forever, near_target+hang=0.3, bar10, energy_w=0.35, start_grace=40 |
+| Watchers | `scripts/continue-triple-{a,b,c}.sh` | **A:** UUU-only bottom-swing f40 bar10 e05 hang1.0 (marker `.triple-a-uuu-bottom-v3`); **B:** UUU-only wide f60 bar10 e035 hang0.3 near0.25 lr5e-4 (marker `.triple-b-uuu-wide-f60-v3`); **C:** UUU swing near_target+hang=0.3 bar10 e035 (leave alone) |
 
 **OBS_DIM = 25** = 11 state + one-hot(8) + target sin/cos(6).
 
@@ -36,6 +36,16 @@ NUM_ENVS=8192 FORCE_LIMIT=40 bash scripts/next-train-triple.sh
 # A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
+
+## Overnight fire — A/B stage-gate restart (2026-09-19 ~12:50 CT)
+
+**Diagnosis (~12:48 CT):** A (f40 bar50) ~u190–200 reward~215 at_goal/UUU≈0.0001 align/UUU≈−0.27 (DDD preferred). B (f40 bar10) ~u200 reward~226 at_goal/UUU≈0.0006 align/UUU≈−0.22. Both left UUU warmup at u80 with **zero hold** — violates fawraw stage gate ≥0.80. force40 alone did not unlock UUU; soft barrier on B insufficient. C (UUU swing retune) ~u40 at_goal/UUU≈0.004 — left alone.
+
+**Fix:** rewrite A/B to **UUU-only forever** (WARMUP_UPDATES=100000, no goal switch/fold), cold wipe via new markers:
+- **A** `.triple-a-uuu-bottom-v3`: `INIT_MODE=bottom`, hang=1.0, FORCE=40, bar=10, ENERGY_W=0.5, start_grace=40 → `ft-triple-a-…-uuu-bottom-f40-bar10-e05`
+- **B** `.triple-b-uuu-wide-f60-v3`: `INIT_MODE=wide`, hang=0.3, FORCE=60, bar=10, ENERGY_W=0.35, NEAR_GOAL_P=0.25, LR=5e-4 → `ft-triple-b-…-uuu-wide-f60-bar10-e035-lr5e4`
+
+Do not open multi-eq until UUU hold ≳0.80.
 
 ## What "56" means
 
