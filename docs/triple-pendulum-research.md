@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~16:40 CT.
+Last updated: 2026-09-19 ~17:07 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -851,3 +851,80 @@ Aström–Furuta (single pole, reference): energy bang-bang ∝ sign(θ̇ cos θ
 
 **No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
 
+
+### Research pass (2026-09-19 ~17:07 CT) — saturated E bonus + E-gated handoff + EBERL
+
+Digged airo7 MPC↔PPO cart-pole study (June 2026), EBERL (IEEE Access 2025, Taets et al. OA PDF), SuPLE (arXiv:2411.13613), re-checked fawraw (still last *code* **2026-06-25**). Live: cool-ent **v6** cold ~16:42 CT (~u10 @16:48; entropy healthy again); do not mid-kill. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (fills empty energy/soft-landing gaps under existing P1/P2; does not displace handoff as #1).
+
+#### Saturated energy bonus (airo7) — fills P2 E→E_UUU shape
+
+Our 15:14 pass locked true `|E−E_UUU|` vs height-proxy `energy_w`. airo7's working **single-pole PPO** reward adds the missing anti-spin form:
+
+\[
+r = (1+\cos\phi) + 0.75\min\!\bigl(E/E^*,\,1\bigr) - 0.005\,u^2 - 0.05\,\dot\theta^2 - 0.20\,x^2 - 0.03\,\dot x^2
+\]
+
+| Knob | Value | Why |
+|---|---|---|
+| Energy term | **`0.75·min(E/E*, 1)`** | Dense swing signal; **saturates** so excess KE is not rewarded (spinning trap) |
+| \(E^*\) | upright potential at \(\omega=\dot x=0\) | Must match plant inertia (airo7: uniform-rod \(I=\tfrac43 ml^2\); ours: mass-matrix \(T+U\) from `physics_triple`) |
+| Success meter | held **1 s** inside \(\|\phi\|<0.05\) (not a single crossing) | Matches fawraw "hold not touch-and-go" |
+| Curriculum | **35%** near-upright / **65%** hang + small vel noise | Same spirit as our hang/near_target mix; airo7 numbers for single pole |
+| PPO hypers (their cookbook) | γ0.99, λ0.95, clip **0.2**, ent **0.01**, lr 3e-4 linear decay, 4 envs × 1024 steps, mb 256, 10 epochs | Generic; our cool-ent v6 already raised ent above 0.01 |
+
+**Steal for our P2 energy coding:** prefer **saturated progress toward \(E_{\mathrm{UUU}}\)** over raw \(-|E-E_{\mathrm{UUU}}|\) alone. Still use our plant \(U_{\mathrm{UUU}}\approx +0.736\,\mathrm{J}\) / \(\Delta U\approx 1.47\,\mathrm{J}\) from 15:14. Does **not** replace product reward — add as optional `energy_w` replacement inside/alongside product when green-lit.
+
+#### Dual-gate handoff with energy (airo7) — fills handoff enter condition
+
+Already had angle≤0.1 rad / ~0 ω (fawraw) + hysteresis exit (2606.22145) + optional LQR/SMC hold (16:40). airo7's hybrid MPC adds the **energy gate** classical swing-up always needed:
+
+| Phase | Gate |
+|---|---|
+| Enter balance | \(\|\phi\|\le 0.35\) **and** \(E \le 1.08\,E^*\) |
+| Exit back to swing | \(\|\phi\| > 0.60\) (wider → hysteresis) |
+| Rest kick (classical energy law only) | if \(\|u_E\|<0.2\) and \(E<0.05\,E^*\): kick \(\mathrm{sign}(-x)·3\,\mathrm{N}\) |
+
+Scale 0.35/0.60 to **measured** triple basin (still ≤0.1 rad for fawraw-style catcher); keep the **\(E\le 1.08 E^*\)** idea so we do not hand off a fast overshoot. Soft-landing still: arrive with low \(\|\omega\|\) (2312.11311 −r_vel).
+
+#### EBERL (IEEE Access 2025) — energy controller as *exploration*, not just reward
+
+Taets / Lefebvre / Ostyn / Crevecoeur: SAC fails swing-up from **rest** on Cartpole/Furuta/Pendubot under torque limits (local min = hang). Fix: bias SAC exploration with a classical energy pump while learning.
+
+| Piece | Recipe |
+|---|---|
+| Energy law | \(u_{\mathrm{eb}} = -K\,\mathrm{sat}_5\bigl((H-H^*)\,G\,\dot q\bigr)\) |
+| sat₅ deadzone | **zero** when \(H\) within **±5%** of path from \(H_0\) to \(H^*\) (stops chatter at target energy) |
+| SAC compose | sample \(u \sim \mathcal{N}(\mu(x,u_{\mathrm{eb}}), \Sigma)\); after train drop \(u_{\mathrm{eb}}\) → pure \(\mu(x,0)\) |
+| Hold | **LQR** when \(\|x-x^*\| < b\) (DeLaN-linearized Riccati) |
+| Reward | sparse cost-style \(r=\exp(-4 q_{\mathrm{tip}}^2)-1\) (negative; matches 15:14 polarity note) |
+| Energy model | **DeLaN** learned online (or exact plant energy for sim-only) |
+| Starts | **rest / bottom only** — no Lim-wide random ICs |
+
+**Steal for us (cheap → expensive):**
+
+1. **Cheap (sim):** expose exact \(E\) from `physics_triple` mass matrix; optional classical \(u_E \propto -\mathrm{sat}((E-E_{\mathrm{UUU}})\,\dot\phi\cos\phi)\) as **action bias / teacher** on swing slot A — same role as EBERL's \(u_{\mathrm{eb}}\) without DeLaN.
+2. **Medium:** feed \(E\) (and \(E_{\mathrm{UUU}}\)) into obs / product term with airo7 saturation.
+3. **Heavy P2 SAC slot:** full EBERL (DeLaN + energy-mean + LQR catch) if we leave PPO.
+
+Does **not** demote two-policy handoff — EBERL *is* a swing+LQR-hold split with energy-directed explore. Reinforces P1 architecture; gives a concrete energy-explore recipe if we keep one net longer.
+
+#### SuPLE (arXiv:2411.13613) — note only
+
+Sum of **positive truncated Lyapunov exponents** as intrinsic reward; SAC swings + holds **double** pendulum from bottom **without** random resets (sparse/quadratic fail). Needs Jacobian / LE estimation each step — **P3** curiosity alternative if product+progress+energy+handoff all stall. Not a next-code lever.
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing coefs: still unspecified; last code **2026-06-25**.
+- Serial cart-triple **classical** energy bang-bang coeffs: still none (airo7/EBERL are single / Furuta / Pendubot).
+- Force 80–100: still demoted.
+- Rank: after v6 cook, **split swing vs hold** still #1; **saturated \(E\)** + **E-gate on handoff** + optional **energy-bias explore** join PBRS / cool-ent / `p_trunc` / flip A/B as cheap–medium co-travelers.
+
+#### Amend recommended redesign (additions only)
+
+46. When coding P2 energy: use **`w_E · min(E/E_UUU, 1)`** (airo7 saturate) rather than uncapped \(-|E-E_{\mathrm{UUU}}|\) or height-proxy `energy_w`.
+47. Handoff enter: require **angle basin AND \(E\le\sim 1.08\,E_{\mathrm{UUU}}\)**; exit wider (hysteresis); scale angles to measured triple basin.
+48. Optional swing explore: **energy-controller action bias** (EBERL-style; exact \(E\) OK in sim) before DeLaN/SAC rewrite.
+49. Ignore SuPLE unless product+energy+handoff fail — then as P3 intrinsic, not overnight.
+50. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented after v6.
+
+**No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
