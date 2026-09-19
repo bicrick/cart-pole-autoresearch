@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~14:35 CT.
+Last updated: 2026-09-19 ~14:40 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -31,6 +31,21 @@ NUM_ENVS=8192 FORCE_LIMIT=40 PROGRESS_W=1.0 FLIP_AUGMENT=1 bash scripts/next-tra
 # A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
+
+## Overnight fire — status (2026-09-19 ~14:40 CT)
+
+**VM:** `cartpole-train-od` RUNNING us-east1-b L4 ~99%/13.6GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~35.7h ≈ **~$25** @~$0.70/hr (≤$30; ~5–6h headroom). continue-triple-a/b/c armed. Box/VM HEAD `78d9c4f` hashes match.
+
+**Jobs (alive, progress+flip v5 cold-started ~14:36 CT):**
+| Slot | Recipe | ~u | rollout_r | entropy | goal_frac/UUU | near_target at_goal/UUU (u1) |
+|---|---|---|---|---|---|---|
+| A | swing hang+near f50 bar10 e0.5 prog1+flip | ~8 | ~0.17↑ | ~1.26 | ~0.92 | ~0.038 |
+| B | hold near_target f40 bar10 e0.15 prog1+flip | ~7 | ~0.31↑ | ~1.30 | ~0.92 | ~0.034 |
+| C | combo hang0.3 f40 bar10 e0.35 prog1+flip | ~7 | ~0.28↑ | ~1.30 | ~0.92 | ~0.036 |
+
+**Diagnosis:** Fresh P0/P1 redeploy cooking. Entropy healthy (no B-style collapse). Curriculum meters live. Early UUU hold still ~0 (expected); watch `eval/near_target/at_goal/UUU` + hang meters toward u80–150 before retune. No NaNs / no plant patch / no restart this fire. Stage-gate still UUU hold ≳0.80 before multi-eq.
+
+**Watch next:** progress reward + flip should lift near-target UUU vs prior plateau; if flat past u150, probe energy/force.
 
 ## Overnight fire — status (2026-09-19 ~14:20 CT)
 
