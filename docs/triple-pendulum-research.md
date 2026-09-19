@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~15:14 CT.
+Last updated: 2026-09-19 ~15:32 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -31,6 +31,21 @@ NUM_ENVS=8192 FORCE_LIMIT=40 PROGRESS_W=1.0 FLIP_AUGMENT=1 bash scripts/next-tra
 # A/B/C on VM: continue-triple-{a,b,c}.sh
 ```
 
+
+## Overnight fire — status (2026-09-19 ~15:32 CT)
+
+**VM:** `cartpole-train-od` RUNNING us-east1-b L4 ~99%/15.7GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~36.6h ≈ **~$26** @~$0.70–0.71/hr (≤$30; ~4–5h headroom to u400). continue-triple-a/b/c armed since ~14:36 CT. GPU healthy.
+
+**Jobs (alive, progress+flip v5):**
+| Slot | Recipe | ~u | rollout_r | entropy | goal_frac/UUU | near_target at_goal/UUU | near_target align/UUU | hang align/UUU |
+|---|---|---|---|---|---|---|---|---|
+| A | swing hang+near f50 bar10 e0.5 prog1+flip | ~100 | ~0.45 | **~−0.12** ↓ | ~0.93 | ~0.039 | ~+0.153 (was +0.18@u80) | ~−0.089 |
+| B | hold near_target f40 bar10 e0.15 prog1+flip | ~100 | ~0.51 | ~+0.011 | ~0.92 | ~0.043 | ~+0.088↑ | ~−0.34↑ |
+| C | combo hang0.3 f40 bar10 e0.35 prog1+flip | ~90–98 | ~0.50 | ~+0.072 | ~0.93 | ~0.045 | ~+0.135↑ | ~−0.22 |
+
+**Diagnosis:** Mid v5 stretch. **A entropy crossed negative** (u50 +0.32 → u80 +0.04 → u101 **−0.12**) — same class of collapse that previously hit B on hot-lr; A is already lr3e-4 so not the same lever. near_target UUU align on A dipped slightly u80→u100. **B/C entropy still non-negative**; B/C near_target UUU align still climbing slowly. Harsh `eval/at_goal/UUU` still ~0 (expected). oob≈0. No NaNs / no plant patch / no restart this fire. Force 40–50 + barrier10 still OK vs Glück/Lim (no rail-slide). Stage-gate still UUU hold ≳0.80 before multi-eq.
+
+**Watch next:** If A entropy stays ≤−0.1 past u150 with flat near_target at_goal, plan cooler/explore retune at u400 (not mid-run kill). u400 ETA ~18:20 CT (~$28). NEED_USER_PING no.
 
 ## Overnight fire — status (2026-09-19 ~15:06 CT)
 
