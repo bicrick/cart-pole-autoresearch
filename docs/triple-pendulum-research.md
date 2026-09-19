@@ -37,6 +37,21 @@ NUM_ENVS=8192 FORCE_LIMIT=40 bash scripts/next-train-triple.sh
 ```
 
 
+## Overnight fire — status (2026-09-19 ~13:36 CT)
+
+**VM:** `cartpole-train-od` RUNNING L4 ~99%/5.4GB; TB up; **no double/xonly**. Spend ~35h up ≈ **~$24–28** (≤$30; ~5h headroom @~$0.75/hr).
+
+**Jobs (all alive + continue-a/b/c):**
+| Slot | Recipe | ~u | reward | align/UUU | at_goal/UUU |
+|---|---|---|---|---|---|
+| A | UUU-only bottom f40 bar10 e05 hang1.0 | ~165 | ~214 | ~+0.015 | ~0.004 |
+| B | UUU-only wide f60 bar10 e035 lr5e-4 | ~163 | ~220 | ~−0.030 | ~0.002 |
+| C | UUU swing near_target hang0.3 f40 | ~214 | ~219 | ~−0.017 | ~0.001 |
+
+**Diagnosis:** UUU-only cold starts (~12:53 CT) still early. `train/goal_frac/UUU`≈0.93 (curriculum OK). Eval `at_goal/UUU` flat is **expected**: `rollout_eval` uses `random_states(mild=False)`, not train init — so it understates near-basin progress. `train/rollout_reward` slowly climbing (~0.46–0.51). **No restart/patch this fire** — let A/B/C cook toward u400; stage-gate still UUU hold ≳0.80 before multi-eq.
+
+**Watch next:** A align/UUU staying non-negative; C train reward vs eval gap; budget before u400 finishes.
+
 ## Overnight fire — A/B stage-gate restart (2026-09-19 ~12:50 CT)
 
 **Diagnosis (~12:48 CT):** A (f40 bar50) ~u190–200 reward~215 at_goal/UUU≈0.0001 align/UUU≈−0.27 (DDD preferred). B (f40 bar10) ~u200 reward~226 at_goal/UUU≈0.0006 align/UUU≈−0.22. Both left UUU warmup at u80 with **zero hold** — violates fawraw stage gate ≥0.80. force40 alone did not unlock UUU; soft barrier on B insufficient. C (UUU swing retune) ~u40 at_goal/UUU≈0.004 — left alone.
