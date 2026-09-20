@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~09:40 CT
+Last updated: 2026-09-20 ~10:08 CT (HALTED — square-one locked)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -12,6 +12,19 @@ Ship a cracked cart-**triple**-pendulum policy that can:
 3. Eventually cover all **56** directed transitions for the interactive demo,
 
 on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mirroring to the user's local demo. Budget: **no hard $30 cap** — keep training until UUU works; prefer one L4 on-demand, don't stack GPU VMs.
+
+
+## Square-one deal (user 2026-09-20 — LOCKED)
+
+Training + overnight paused until user green-lights restart. When live again, implement **exactly** this — not the old entropy/ATRPO ladder.
+
+1. **One goal:** walls-on **UUU hold** only. No S1 swing slot, no handoff, no void FT, no 8/56 until hold gate clears.
+2. **One recipe:** walls on; near-upright ICs only (noise ≲0.05, hang=0); Lim product; **PPO ENT=0**; no MaxEnt/gSDE/RPO/ERA/ATRPO/AVC crank on this stretch; force ~40N. One (or twin identical) H1 slot only.
+3. **Hard kill:** after **100–150** updates, if `near_target/at_goal/UUU` ≲ **0.15** and reward↑ → **STOP**. Ping user. No next paper lever same day.
+4. **Prove stay:** basin / near-UUU rollouts, not just mean reward. visit≠hold = fail.
+5. **Only after** nt ≳ 0.80 and align ≳ 0.90: S1 swing → X1 handoff → void FT → E8 → T56.
+
+Old H1/S1 training-breakup table below is **deferred** until square-one hold clears.
 
 ## Think out loud (user 2026-09-20)
 
@@ -60,17 +73,11 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **P5 — Demo polish** | Best ckpt → local + web triple demo | After a keeper exists |
 
 ## Current phase + next micro-task
-- **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~09:40 CT):** VM `cartpole-train-od` RUNNING us-east1-b L4 ~99%/15.5GB; TB http://34.148.138.48:6006/. Watchers continue-a/b/c. TRACK_WALLS=1 all slots.
-  - **A = S1 anti-DDD** — pid **174599** ~**u20** (marker `.triple-a-s1-antidd-v2`). hang_align/UUU **−0.97→−0.71↑**, hang_at_goal/DDD **0.70→0.23↓**, nt_DDD **0.87→0.39**, ent~1.79 OOB=0 — anti-DDD early win; leave alone. If DDD farm returns by ~u80 → height-line bonus (Acrobot 2312.11311) — **not** W_DOWN=1.
-  - **B = H1 ATRPO+AVC ν=0.2** — pid **172580** ~**u76**. nt_UUU **0.039→0.054 flat**, nt_align **−0.08→+0.178↑** (plateau u60–70), nt_rew 232→254→249, H **0.517 hard-pin since u56**, avc_bias **~−0.6..−1.1**, ρ~0.49, nt_DDD **0.84→0.05**, ckpt log_std **≈−5**, OOB=0. FAIL meters already (H≲0.55∧nt≲0.10∧align↑) but **babysit through u80–100** (ban mid-kill). FAIL even if |bias|≪1.
-  - **C = H1-var** — pid **173060** ~**u60** nt_UUU **~0.046** ent **~0.72** OOB=0 — leave alone. Marker `.triple-c-h1var-walls-v1`.
-- **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire (overnight):** B still visit≠hold under healthy AVC-lite — leave alone until u80–100. A anti-DDD healthy early (DDD hang collapsing). No mid-kill / no marker arm.
-- **Next micro-task:** (1) Next fire (~u95–110): if H≲0.55 ∧ nt≲0.10 ∧ (align↑∨rew↑) → touch `.triple-b-h1-atrpo-avc-ema-v1` + mid-kill into **EMA-AVC α=0.1** (staged) — **even if |avc_bias|≪1**. Else if γ-free family exhausted → **Naik ρ-center+keep-γ**. (2) Keep watching A hang_align/UUU + hang_at_goal/DDD. (3) C leave as H1-var control. (4) H1 nt≳0.2 → handoff smoke; gate nt≳0.80 align≳0.90 → P1b void FT.
-- **Kill list:** no double/xonly; no void TQC; slots = **A S1 anti-DDD** / **B H1 ATRPO+AVC LIVE** / **C H1-var**
-- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENERGY_W-only; relaunch plain ATRPO after AVC live; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN before Naik**; **skip Naik and jump to short-ep**; **re-arm ENERGY_W-only**; **mid-kill AVC before u80–100 FAIL confirm**; **arm EMA-AVC marker while AVC-lite still live**; **relaunch A with W_DOWN=1 after anti-DDD**
-- **NEED_USER_PING:** **yes** — think-out-loud (B pre-gate babysit; A anti-DDD early green)
+
+- **Status:** **HALTED** (2026-09-20 ~09:50 CT). Routines paused. VM `cartpole-train-od` STOPPED.
+- **Phase when resumed:** Square-one — walls-on UUU hold only (see Square-one deal).
+- **Next micro-task when user says go:** start ONE H1 PPO ENT=0 walls near-only run; arm hard kill @u100–150; basin checks; think-out-loud. Do **not** resume ATRPO/gSDE/ENT ladder.
+- **Do not:** swing slot, paper-lever roulette, mid-kill into new algos, stack GPU VMs.
 
 
 ## Ranked backlog (pull from top when a stretch ends)
