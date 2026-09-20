@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~21:10 CT.
+Last updated: 2026-09-19 ~21:31 CT.
 
 
 ## Overnight fire — status (2026-09-19 ~21:10 CT)
@@ -1430,3 +1430,119 @@ Same Inha/POSTECH lineage as Baek TIP (EAAI 2024). First model-free **quadruple*
 81. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented.
 
 **No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
+
+## Fresh approach audit (2026-09-19 ~21:30 CT)
+
+**User ask:** PPO UUU stuck (~0.04–0.06 near_target); want a **non-PPO** path grounded in what actually worked for others. Live A/B/C PPO left running.
+
+### Who succeeded (primary sources)
+
+| Who | Algo | Reward / curriculum | Force / budget | Outcome |
+|---|---|---|---|---|
+| **Lim / Ju / Lee KIEE 2025** ([PDF](http://ecsl.inha.ac.kr/publication/KIEE2025_b.pdf), [YouTube](https://youtu.be/vVx3ffGo2mk)) | **TQC** (Kuznetsov); **8 separate policies** (one per EP) — **not** UVFA | Product of [0,1] terms \(R_u R_y R_{\theta1..3} R_{\dot\theta1..3}\); wide random ICs; train until return ~700–800/1000 | Cart accel early-stop 2.5 m/s², \|y\|≤0.48 m; lr 3e-4, γ 0.99, τ 0.005, buffer 1e6, 3 critics, 25 atoms, policy 400→300, critic 3×512, batch 256 | **All 56 transitions on hardware** (sim→real) |
+| **Baek et al. EAAI 2024** | Off-policy actor-critic (**SAC-class**) + **VER** (left↔right mirror) | Product with α floors; dense height/center/vel; **trained on hardware** | Their plant ~±10 N | **DDD→UUU swing-up on real TIP** (1 EP, not 56) |
+| **fawraw/triple-pendulum-sim2real** | **TQC** (sb3-contrib); M2 UUU hold → M3 8 EPs → M4 handoff | Additive + barrier + progress; M2 `near_target` ~150k; M3 hard-EP weight schedule | MuJoCo; A5000 ~$0.27/hr; M3 ~1.1M steps | **8 EPs 72.5% in sim**; 56 still blocked on catch basin → building **two-stage handoff** |
+| **Glück Automatica 2013** | Classical: nonlinear feedforward (BVP) + time-varying Riccati | Precomputed swing trajectory | Accel ≤~22 m/s² | Experimental **DDD→UUU** (not RL, not 56) |
+| **Graichen / Spong / DiffSwing** | Energy swing → **LQR** handoff | Energy error + local RoA switch (~0.1–0.2 rad) | DiffSwing peak ~12 N on m_c=1, m=0.1, ℓ=0.5 (our mass scale) | Single/double proven; serial **cart-triple** energy coeffs still unpublished |
+
+### Why single-policy PPO fails UUU on 3-link
+
+1. **Mode conflict:** swing needs bang-bang energy injection; hold needs small precise forces — one on-policy Gaussian collapses to neither.
+2. **Credit assignment:** rare UUU captures are washed out by on-policy batch noise; off-policy (TQC/SAC) replays them.
+3. **Entropy collapse:** our overnight slots repeatedly hit negative / saturated entropy before `near_target/at_goal/UUU` rises (see 21:10 CT table).
+4. **Literature mismatch:** every hardware 56 / TIP swing success used **TQC or SAC**, not PPO; Lim explicitly chose TQC for high-variance tail rewards.
+
+### Ranked fresh approaches for OUR repo
+
+| Rank | Approach | Effort (1–2 days) | Expected upside | Notes |
+|---|---|---|---|---|
+| **1** | **TQC UUU specialist** (Lim EP7) via sb3-contrib + Gym wrapper | Low–med | **Highest** — exact algo that got 56 | Product reward already in `goals_triple`; forceLimit 40 OK |
+| 2 | Two-policy handoff (TQC/energy swing → TQC or LQR hold) | Med | High once hold exists | fawraw M4 + DiffSwing/Spong template |
+| 3 | Lim **8×TQC** (all EPs) after UUU holds | Med–high compute | Required for 56 | Specialists, not UVFA |
+| 4 | Energy E→E_UUU + LQR catch | Med | Good classical fallback | Need measured E_UUU + linearize plant |
+| 5 | Keep PPO cool-ent / ent-boost | Low | **Low** — already flat ~0.04–0.06 | Do not expand; leave A/B cooking until C swap |
+
+### Top pick (next 1–2 days) — LOCKED
+
+**Ship TQC UUU specialist (Lim path), then swap L4 slot C.**
+
+Implemented on box (2026-09-19):
+- `train/envs/triple_gym.py` — Gymnasium wrapper, 11-D obs, product reward, near_target+wide+hang ICs
+- `train/train_triple_tqc.py` — sb3-contrib TQC with Lim Table-1 hypers
+- `scripts/next-train-triple-tqc-uuu.sh` / `continue-triple-tqc-uuu.sh`
+- `.venv-tqc` with torch+gymnasium+sb3+sb3-contrib
+- **Smoke:** 2500 steps CPU, `n_updates>0`, ckpt written — PASSED
+
+### How to launch (box smoke / VM slot C later)
+
+```bash
+# Box smoke
+cd /workspace/double-cart-pole
+SMOKE=1 bash scripts/next-train-triple-tqc-uuu.sh
+
+# Full UUU specialist (VM when swapping slot C — do not kill A/B)
+FORCE_LIMIT=40 TOTAL_STEPS=300000 \
+  INIT_MODE=near_target HANG_FRAC=0.05 WIDE_FRAC=0.25 \
+  bash scripts/next-train-triple-tqc-uuu.sh
+```
+
+### Citations (primary)
+
+- Lim, Ju, Lee — KIEE 74(8):1363–1372, 2025 — TQC, 8 policies, product reward, all 56
+- Baek et al. — EAAI 128:107518, 2024 — SAC+VER, product+floors, hardware UUU
+- Kuznetsov et al. — TQC, arXiv:2005.04269
+- Glück, Eder, Kugi — Automatica 2013 — feedforward+TV-Riccati DDD→UUU
+- fawraw/triple-pendulum-sim2real — open TQC MuJoCo attempt; M3 72.5%, M4 handoff
+- DiffSwing / Spong — energy→LQR handoff pattern (single-pole mass scale matches ours)
+
+
+### Research pass (2026-09-19 ~21:31 CT) — BaRC reverse curriculum + hold-reward integral + handoff defaults
+
+Digged StanfordASL BaRC (arXiv:1806.06161; Florensa reverse-curriculum cousin), re-read Fu/Guo/Li et al. *Robotica* 44(2):698–722 (2026) CSAC-QI abstract, and re-fetched live `fawraw/triple-pendulum-sim2real` `sim/handoff.py` + `docs/m4_findings.md` (still last *code* **2026-06-25**). Macro loop (21:30 CT) already pivoted **Next micro-task → TQC UUU specialist (Lim)** on slot C — overnight owns scp/swap; **do not mid-kill A/B PPO**. **Direction unchanged** (P1 UUU hold). This pass fills **TQC hold-net curriculum + steady-state reward** under that live task; does **not** displace TQC as #1 or rewrite Next micro-task. No user ping.
+
+#### BaRC (arXiv:1806.06161) — formal reverse curriculum for sparse-goal hold
+
+Missing from prior notes. Model-free wrapper that **starts ρ₀ inside the goal basin** and expands the initial-state set via approximate **backward reachable sets** once mastery clears a threshold — exactly the hold-specialist path fawraw M4 wants (“widen catcher before soft-landing”), with dynamics-aware frontiers instead of isotropic `init_noise` alone.
+
+| Knob | Steal |
+|---|---|
+| Start | Sample ICs from a tiny set around UUU (goal / near_target) |
+| Expand | Once success rate ≥ \(C_{\mathrm{pass}}\) (paper default **0.5**), grow ρ₀ by short-horizon BRS (paper \(T{=}0.1\,\mathrm{s}\)) or a cheap proxy |
+| Mix | Keep \(N_{\mathrm{old}}\) mastered starts + \(N_{\mathrm{new}}\) frontier (paper **100 / 200**) to avoid forgetting |
+| Mastery select | Keep starts with success ≥ \(C_{\mathrm{select}}\) (**0.5**) |
+| PPO inner | Any model-free algo; paper used PPO — fits our stack |
+| Vs isotropic noise | BRS expands in **dynamically feasible** directions (angles + ω + \(x\)); random-action reverse curricula (Florensa CoRL'17) break on unstable underactuated plants |
+
+**Practical proxy without HJ PDE (overnight-feasible):** stage hold-net `init_noise` / nonzero ω / off-centre \(x\) in **ladder steps** (e.g. 0.05 → 0.10 → 0.15 → 0.20 rad) only after `eval/near_target/at_goal/UUU` clears a gate on the current rung — same spirit as BaRC \(C_{\mathrm{pass}}\), matches fawraw catch-basin table (reliable only ≤**0.1 rad** + near-zero vel). Do **not** jump straight to hang_start on the hold net.
+
+#### CSAC-QI (Fu et al., Robotica 2026) — hold steady-state term
+
+Already noted at a high level; this pass locks the **steal for the hold half**:
+
+1. Reward = **quadratic** angle/state costs + **integral of cumulative joint-angle error** (QI) — cuts steady-state bias that pure product/progress leaves on the table.
+2. **Adaptive curriculum** easy→hard initial joint deviations (same direction as BaRC / fawraw widen-basin).
+3. Plant is **UTPR** (passive-first joint, not cart-actuated) — retune; steal structure only. No open numeric coefs this pass (Cambridge Core paywall).
+
+**Steal when coding hold net:** add a small running \(\int e_\theta\,dt\) (or discrete sum of link angle errors vs UUU) gated after product is already high near target; pair with Baek \(e(\dot\theta)\) soft-landing. Defer to **hold-net-only / phase-2** per 2603.05113 staging (20:15) — do not stack on live single-policy A/B/C.
+
+#### fawraw handoff defaults (re-confirmed live)
+
+`HandoffController(..., capture_tol_rad=0.3, capture_vel_rad_s=None, latch=True)` — **default 0.3 rad is unsafe**. M4 basin table still: success only at **~0.1 rad / ~0 ω**. Soft-landing implementation still **absent** upstream. When overnight codes handoff: ship **tol ≤ measured basin (≤0.1)**, optional vel gate, **latch=True**, never the 0.3 default (already in amend #38 / #52; restate because it is the #1 footgun).
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing **implementation**: still absent (19:40 starter pack stands).
+- Serial **cart-triple** classical energy bang-bang coeffs: still none.
+- Force 80–100: still demoted.
+- Baek VER: no new multi-link on-policy paper.
+- Rank: live #1 is **TQC UUU specialist (Lim)** (macro 21:30); **BaRC / ladder init expand** + **CSAC-QI ∫θ** are cookbooks *inside* that TQC hold stretch. Two-policy handoff stays #2 after UUU holds. Cool-ent stays A/B-only until C swap.
+
+#### Amend recommended redesign (additions only)
+
+82. Hold-net curriculum: BaRC-style **near-UUU → expand** (ladder `init_noise`/ω/\(x\) with mastery gates) before hang mixture; prefer over a single hot near_target distribution.
+83. Hold-net reward (phase-2 / hold only): optional **∫ cumulative link-angle error** (CSAC-QI) on top of product + Baek rate floors — after near_target at_goal is moving.
+84. Handoff footgun reminder: `capture_tol_rad` ≤ **measured** basin (≤0.1), never fawraw default 0.3; latch on; vel gate recommended.
+85. Rank: live Next micro-task (**TQC UUU on C**) still correct — do not preempt. BaRC ladder + CSAC-QI ∫θ are **implementation details for the TQC hold recipe**, not a competing micro-task. Two-policy remains #2 after hold works.
+
+**No code this fire** (overnight owns train / slots). NEED_USER_PING no.
+

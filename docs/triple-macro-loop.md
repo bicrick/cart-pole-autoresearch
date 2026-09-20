@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~21:10 CT  
+Last updated: 2026-09-19 ~21:31 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -27,18 +27,19 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Current phase + next micro-task
 
 - **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Next micro-task:** let **A** cool-ent v6 (~u80) and **C** entboost v7 (~u70) finish their stretches; **B** v7b (~u249) entropy-saturated at ~3.42 — already staged **v8 cool-from-boost** (ENT0.05 cold wipe via `.triple-b-cool-from-boost-v8`) for natural u400 restart (~55m). If after those full stretches `near_target/at_goal/UUU` still ≲ 0.15 → ship **two-policy handoff** (swing→hold) as the next code experiment
+- **Next micro-task:** **build & smoke TQC UUU specialist (Lim 8×TQC path)** — `train/envs/triple_gym.py` + `train/train_triple_tqc.py` + `scripts/next-train-triple-tqc-uuu.sh` are on main; smoke passed on box. Next: scp `.venv-tqc` recipe to VM and **swap L4 slot C** onto TQC UUU (near_target + wide IC mix, product reward, Lim hypers). Do **not** mid-kill A/B PPO until C handoff is staged. Gate: TQC `eval/near_target/at_goal/UUU` ≳ 0.50 within ~300k steps, then promote.
 - **Kill list:** no double/xonly on the L4; all 3 slots = triple-a/b/c
 - **Do not:** mid-kill improving runs; rewrite plant without a paper-backed reason; stack a second GPU VM
 
 ## Ranked backlog (pull from top when a stretch ends)
 
-1. Cool-ent / entropy floor so PPO does not collapse before UUU appears
-2. Two-policy handoff (literature: swing-up then LQR/local balance; Baek/Spong/Xin style)
-3. Energy-to-goal (true E→E_UUU) if product+progress plateaus
-4. Force probe 40→60 only if OOB≈0 and plant feels underpowered
-5. SAC/TQC spike only after PPO handoff fails a full stretch
-6. Progressive/adapters from double — deferred; fresh triple policy first
+1. **TQC UUU specialist (Lim)** — off-policy; swap slot C when smoke+scp ready (CURRENT). Hold recipe: BaRC/ladder widen near_target ICs (mastery-gated) + optional CSAC-QI ∫θ steady-state; keep product+progress as task
+2. Two-policy handoff (TQC/energy swing → TQC/LQR hold) once UUU hold works — capture_tol ≤ measured ≤0.1 rad (never fawraw 0.3 default); latch+vel gate
+3. Remaining 7 EP specialists (Lim 8×TQC) after UUU holds
+4. Cool-ent / entropy floor on leftover PPO slots (A/B) until C swap — do not expand PPO
+5. True E→E_UUU energy swing only if TQC hold still flat after full stretch
+6. Force probe 40→60 only if OOB≈0 and plant feels underpowered
+
 
 ## 15-minute cadence (what "adapt" means)
 
