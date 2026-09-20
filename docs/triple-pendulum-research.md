@@ -1,6 +1,60 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~00:55 CT.
+Last updated: 2026-09-20 ~01:28 CT.
+
+## Research pass (2026-09-20 ~01:28 CT) — P1a early walls: Spong visit≠hold branch + catcher RoA leftovers
+
+**Sources checked (this fire):** overnight/macro @01:25 (A/B/C walls LIVE); prior research 00:55 / 00:34; `docs/paper-training-lessons.md` Spong visit≠hold (o/y/z/ab) + Turcato short-horizon + Xin `center_hold_w`; fawraw `docs/m4_findings.md` (CDN — catch basin 0.1@ω=0, soft-land plan); Glück Automatica 2013 (~22 m/s² rail-bound); arXiv:2606.28627 V_aug ẋ→0 handoff ⊆ RoA; Baek EAAI 2024 product+VER (already live flip). Skimmed box: `continue-triple-b.sh` walls-v1; `train_triple.py` has `--vel-cost-coef` but **no** `--init-noise`; **no** `scripts/handoff_eval.py`. Overnight owns slots — no train start.
+
+**Phase focus:** **P1a walls-on UUU**. Live meters (~01:25): A ~u50–56 nt~0.036 **align~+0.123↑** ent~1.94 oob=0; B PPO-balance walls ~u10; C walls combo early. Gate ≪0.80.
+
+### Q1 — A's align↑ / nt flat: Spong visit≠hold, not TQC-style hack
+
+| Signal | Live A | Interpretation | Action now |
+|---|---|---|---|
+| align_UUU climbing (−0.07→+0.12) while nt~0.036 | Yes | **Visit / approach without stay** (Spong 1995; double lessons o/y) — early walls product is teaching orientation | Leave mid-run (<u100) |
+| Reward peak then settle (~229→~155) | Yes | Double walls FT lesson (g): reward dip OK while align holds/climbs | **Do not** mid-kill |
+| oob=0, ent~1.94 | Yes | Walls plant healthy; not void-center farm; not cool-ent collapse | No plant flip |
+| TQC pattern (rew↑ success≈0, align flat/−) | No | A's align **positive climbing** ≠ reward-hack flopping | Do not treat as TQC |
+
+**Flat-eval ladder sharpen (natural exit only, past ~u150)** — branch on meters, not a single knob:
+
+1. Confirm plant still walls (`track_walls=True`, oob≈0).
+2. **If align plateaued AND mean \|x\| parks near trackLimit** while angles flop → **bar 10→50** (fawraw rail-slide killer).
+3. **If align still climbing / mid but nt flat** (visit≠hold) → **ENERGY_W 0.2→0.35** first (Spong capture-stay / energy-to-goal pressure); keep hang=0.
+4. **Third rung** only if (3) stalls: Turcato short-horizon — `EPISODE_LEN` 1200→**600–800** so dense product cannot score late-episode neighborhood visits without early hold (paper-lessons y). Orthogonal to HER (triple UUU-first has no multi-eq HER yet).
+5. Optional after first nt>0.1: tighten IC `INIT_NOISE→0.05` (needs PPO CLI — still gap).
+6. Banned mid-P1a: hang curriculum, force60, void, elastic walls, mid-kill, TQC relaunch.
+
+Glück: rail length is the binding constraint (~22 m/s² benches) — walls-on is correct; force probe stays backlog #4.
+
+### Q2 — B PPO-balance walls: RoA widen leftovers (still open from 00:34)
+
+Catcher is correctly **walls-on** now (void mis-arm closed @0979eb7). Gaps that still block a *useful* catch basin once B has signal:
+
+| Leftover | Status | Concrete |
+|---|---|---|
+| PPO `--init-noise` | **Still missing** in `train_triple.py` — gym default **0.15**; shell `INIT_NOISE=` is a no-op for PPO | Wire CLI; balance start **0.05**, then BaRC/fawraw **expand-with-ω** after nt moves |
+| `--vel-cost-coef` | Exists (default 0); `continue-triple-b` does **not** set it | Natural restart: **0.01–0.02** (Thiru2006 / SARS −ẋ² drift-kill) on balance only |
+| `handoff_eval.py` | **Still absent** | Port fawraw smoke; `capture_tol=0.1` (not 0.35); pin reset options |
+| Soft delivery on A | Not trained yet | fawraw M4 + 2606.28627: −w_ω / cart-centre when \(\bar c>0.9\) / V_aug ẋ→0 so handoff lands inside B's RoA — **after** A has hold signal |
+| LQI ∫x | Staged classical only if B basin stays 0.1-only | Q_ξ≈0.1; already backlog |
+
+Do **not** mid-kill B to apply init-noise/vel-cost — stage on natural exit / next stretch only.
+
+### Q3 — Beats live Next / backlog?
+
+| Candidate | Beats live Next? | Beats / sharpens backlog? |
+|---|---|---|
+| Babysit A+B+C walls through ~u100 | — | Status quo (Next @01:25) |
+| Branched flat-eval ladder (rail-park→bar50 vs visit≠hold→ENERGY_W→optional short ep) | No | **Sharpens #2** / Next item (2) ops |
+| Wire PPO `--init-noise` + vel-cost on B natural restart | No | **Sharpens #2** cold-start (still open) |
+| Soft-land A delivery / handoff_eval | No | **Sharpens #2** handoff prep |
+| Treat A as reward-hack / mid-kill / force60 / void now | No | Banned |
+
+**Nothing clearly beats** the live Next micro-task. Stay the course: babysit through ~u100; ladder only on natural exit if A flat past ~u150.
+
+**Promote?** Macro **Ranked backlog #2** only — branched Spong/Turcato flat-eval ladder + reaffirm B `--init-noise`/vel-cost leftovers. **Do not** rewrite Next / Live slot lines. NEED_USER_PING no.
 
 
 ## Research pass (2026-09-20 ~00:55 CT) — P1a walls-on hold + PPO-balance under walls + center-farm checklist
