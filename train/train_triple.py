@@ -106,6 +106,14 @@ def parse_args():
         help="ATRPO-lite (Zhang–Ross 2106.07329 Alg.2/App.G): ρ-center rewards + "
         "γ-free GAE (λ=--gae). Keep EPISODE_LEN≥1200. Pair with --ent 0.",
     )
+    parser.add_argument(
+        "--avc-nu",
+        type=float,
+        default=0.0,
+        help="APO Average Value Constraint (2106.03442 §4.1): after GAE returns, "
+        "subtract ν·mean(ret) from ret so E[V]≈0 under γ-free. 0=off; try 0.1–0.3 "
+        "with --avg-reward. Logs train/avc_bias.",
+    )
     parser.add_argument("--clip", type=float, default=0.2)
     parser.add_argument("--ent", type=float, default=0.01)
     parser.add_argument(
@@ -1238,6 +1246,12 @@ def main():
             adv[t] = last_adv
             next_value = val_t[t]
         ret = adv + val_t
+        # APO AVC (2106.03442): pin differential-value offset via ν·mean(ret).
+        avc_nu = float(getattr(args, "avc_nu", 0.0) or 0.0)
+        avc_bias = ret.new_zeros(())
+        if avc_nu > 0.0:
+            avc_bias = ret.mean().detach()
+            ret = ret - avc_nu * avc_bias
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
 
         # Baek VER / left–right flip augment (on-policy): duplicate PPO batch.
@@ -1305,6 +1319,9 @@ def main():
             writer.add_scalar("train/entropy", last_ent, update)
             if args.avg_reward:
                 writer.add_scalar("train/avg_reward_rho", float(rho_hat.detach()), update)
+            if float(getattr(args, "avc_nu", 0.0) or 0.0) > 0.0:
+                writer.add_scalar("train/avc_bias", float(avc_bias.detach()), update)
+                writer.add_scalar("train/avc_nu", float(args.avc_nu), update)
             writer.add_scalar("train/loss", last_loss, update)
         else:
             writer.add_scalar("train/skipped_all_minibatches", 1.0, update)

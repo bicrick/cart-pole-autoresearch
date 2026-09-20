@@ -42,6 +42,7 @@ RESET_LOG_STD="${RESET_LOG_STD:-}"
 USE_SDE="${USE_SDE:-0}"
 SDE_SAMPLE_FREQ="${SDE_SAMPLE_FREQ:-4}"
 AVG_REWARD="${AVG_REWARD:-0}"
+AVC_NU="${AVC_NU:-0}"
 FORCE_LIMIT="${FORCE_LIMIT:-40}"
 PROGRESS_W="${PROGRESS_W:-}"
 FLIP_AUGMENT="${FLIP_AUGMENT:-1}"
@@ -75,6 +76,10 @@ fi
 # ATRPO-lite (Zhang–Ross): ρ-center + γ-free GAE. Keep EPISODE_LEN≥1200.
 if [[ "${AVG_REWARD}" == "1" || "${AVG_REWARD}" == "true" || "${AVG_REWARD}" == "on" ]]; then
   FORCE_ARGS+=(--avg-reward)
+fi
+# APO AVC ν (2106.03442). Only meaningful with AVG_REWARD=1; 0=off.
+if [[ -n "${AVC_NU}" && "${AVC_NU}" != "0" && "${AVC_NU}" != "0.0" ]]; then
+  FORCE_ARGS+=(--avc-nu "${AVC_NU}")
 fi
 
 if [[ "${TRACK_WALLS}" == "1" || "${TRACK_WALLS}" == "true" || "${TRACK_WALLS}" == "on" ]]; then
