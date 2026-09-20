@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~02:17 CT
+Last updated: 2026-09-20 ~02:28 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -62,16 +62,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 ## Current phase + next micro-task
 
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~02:15 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~97%/15.6GB). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c (B=147599 ENT=0.035 staged). Train PIDs **undisturbed** (~u70–78). Stretch ETA ~05:15 CT (~u400).
-  - **A = S1 walls-swing** — pid **145281** / w **146715** — bottom hang_p=0.85, near_goal_p=0.10, progress_w=1, product, walls, ENT=0.05 LR=3e-4. Marker `.triple-a-s1-walls-v1`. ~**u76** hang_align/UUU **-0.98→-0.036** hang_at_goal~0.003 nt_align/UUU→**0.19** nt_UUU~0.035 OOB=0 ent **1.45→1.93** (peaked ~2.02). **Healthy S1 climb — leave alone.**
-  - **B = H1 walls-hold (tight)** — pid **145275** / w **147599** — near_goal_p=1.0, hang=0, `INIT_NOISE=0.05`, product, walls, **live ENT=0.02** (next restart **ENT=0.035** + VEL_COST=0.015). Marker `.triple-b-h1-noise05-v1`. ~**u78** reward~209 nt_UUU **flat ~0.035** nt_align/UUU **-0.068→+0.040** (slow) OOB=0 ent **1.45→0.59↓** (~0.005/u) rollout_rew **↑0.45**. **Entropy collapse + reward↑/hold≈0 confirmed; do not mid-kill** — ENT bump already staged.
-  - **C = H1-var walls-hold** — pid **145280** / w **146717** — LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1`. ~**u71** reward 221→142 nt_align/UUU **-0.063→+0.108** nt_UUU **0.032→0.045** OOB=0 ent **1.46→2.30↑**. Best H1 signal so far (higher ENT) — leave alone as control.
-- **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2 (B still cold; C closest). Soft-land `VEL_COST_COEF=0.015` already in continue-b/c.
-- **Diagnosis / actions this fire:** A hang_align climb real. B entropy still collapsing past u80 with nt flat — confirms ENT=0.02 too cool for hold; continue-from-ckpt with ENT=0.035 on natural exit still the plan (first try before cold wipe). C contrast validates higher-ENT H1 recipe. **GO:** no mid-kill; no new code; babysit + refresh meters. If B ent035 stretch still flat nt after ~u80, cold-wipe new marker (delete ckpt + retouch) rather than another continue.
+- **Live (2026-09-20 ~02:28 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/15.6GB). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c (B=147599 ENT=0.035 staged). Train PIDs **undisturbed** (~u98). Stretch ETA ~05:15 CT (~u400).
+  - **A = S1 walls-swing** — pid **145281** / w **146715** — bottom hang_p=0.85, near_goal_p=0.10, progress_w=1, product, walls, ENT=0.05 LR=3e-4. Marker `.triple-a-s1-walls-v1`. ~**u98** hang_align/UUU **-0.98→-0.044** hang_at_goal~0.003 nt_align/UUU→**0.20** nt_UUU~0.037 ent **1.45→1.82** (peak~2.03). **Healthy S1 climb — leave alone.**
+  - **B = H1 walls-hold (tight)** — pid **145275** / w **147599** — near_goal_p=1.0, hang=0, `INIT_NOISE=0.05`, product, walls, **live ENT=0.02** (next restart **ENT=0.035** + VEL_COST=0.015). Marker `.triple-b-h1-noise05-v1`. ~**u98** reward~202 nt_UUU **flat ~0.037** nt_align/UUU **-0.068→+0.065** (slow) ent **1.45→0.48↓** (~0.005/u). **Entropy collapse + reward↑/hold≈0 still; do not mid-kill** — ENT bump already staged.
+  - **C = H1-var walls-hold** — pid **145280** / w **146717** — LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1`. ~**u92** reward→133 nt_align/UUU **-0.063→+0.116** nt_UUU **0.032→0.043** ent **1.46→2.22↑**. Best H1 signal so far (higher ENT) — leave alone as control.
+- **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2 (B still cold; C closest @0.043). Soft-land `VEL_COST_COEF=0.015` already in continue-b/c.
+- **Diagnosis / actions this fire:** A hang_align climb real and holding. B entropy still collapsing (~0.48 @u98) with nt flat — ENT=0.02 too cool; continue-from-ckpt ENT=0.035 on natural exit still the plan. C contrast validates higher-ENT H1. **GO:** no mid-kill; no new code; babysit + refresh meters. If B ent035 stretch still flat nt after ~u80, cold-wipe rather than another continue.
 - **Next micro-task:** (1) Babysit to stretch end (~u400 / ~05:15 CT): confirm B watcher fires ENT=0.035 continue (`RUN_NAME` …`-ent035`…); watch B ent floor — if <0.3 before exit, still no mid-kill. (2) After ent035 restart: if nt still flat ~u80 of new stretch → cold wipe `.triple-b-h1-noise05-v1` + wipe ckpt (or promote C recipe onto B). (3) A hang_align toward 0 / hang_at_goal↑ → when any H1 nt≳0.2 run `eval-handoff-uuu.sh`. (4) C keep as H1-var control / promote candidate. (5) H1 gate nt≳0.80 align≳0.90 → keep H1, then P1b void FT. Never void-FT before walls hold. Never mid-kill A/C; finish B stretch.
 - **Kill list:** no double/xonly; no void TQC; slots = **A S1 swing** / **B H1 hold** / **C H1-var hold**
 - **Do not:** mid-kill A/C/B for ENT (already staged); relaunch wide TQC; stack GPU; run void during P1a
-- **NEED_USER_PING:** **no** — B ENT staged; A/C climbing; no gate clear
+- **NEED_USER_PING:** **yes** — standing think-out-loud every fire (user 2026-09-20)
 
 
 ## Ranked backlog (pull from top when a stretch ends)
