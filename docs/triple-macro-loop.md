@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~06:27 CT
+Last updated: 2026-09-20 ~06:30 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~06:27 CT):** **A = S1** walls-swing (~u290 hang_align **−0.027**, clean); **B = H1 RPO+ERA LIVE** (cold @11:19Z after ENT035 mid-kill; **ENT=0.02** RPO α=0.01 ERA H₀=0.5 — cookbook mismatch, see Next); **C = H1-var** (~u118 ent~0.99). Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ.
+**Live mapping (2026-09-20 ~06:30 CT):** **A = S1** walls-swing (~u295 hang_align **−0.027**, clean); **B = H1 RPO+ERA LIVE** (~u20 cold @11:19Z; ent 1.78→1.37 healthy, nt_UUU~0.035, reward↑/hold≈0 early; still ENT=0.02 mismatch — ENT=0 staged for next arm); **C = H1-var** (~u120 ent~0.98). Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,16 +61,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~06:27 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
-  - **A = S1 walls-swing** — LR=1e-4 ~**u290** hang_align/UUU **−0.027**, nt~0.063, ent **~1.34**, policy_loss ±0.04, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
-  - **B = H1 RPO+ERA ENT=0.02** — **LIVE** pid 161566 @11:19Z (~**u16**): ent **1.78→1.53**, nt_UUU **0.041→0.035**, eval reward **129→226↑** (reward↑/hold≈0 early). Recipe still ENT=0.02 (mismatch). Marker `.triple-b-h1-rpo01-era05-v1`.
-  - **C = H1-var** — ~**u118** ENT=0.05 ent **~0.99** nt~0.052 — leave alone. Marker `.triple-c-h1var-walls-v1`.
+- **Live (2026-09-20 ~06:30 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
+  - **A = S1 walls-swing** — LR=1e-4 ~**u295**/400 hang_align/UUU **−0.027**, hang_at_goal~0.0075, nt_UUU~0.063, ent **~1.33**, policy_loss ±0.02, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`. ETA ~0.6h.
+  - **B = H1 RPO+ERA ENT=0.02** — **LIVE** pid 161566 ~**u20**: ent **1.78→1.37** (healthy), nt_UUU **~0.035**, nt_align~0.25, eval reward **~222↑** (reward↑/hold≈0 early), OOB=0. Recipe still ENT=0.02 (mismatch). Marker `.triple-b-h1-rpo01-era05-v1`. ETA ~2.3h.
+  - **C = H1-var** — ~**u120** ENT=0.05 ent **~0.98** nt~0.052 — leave alone. Marker `.triple-c-h1var-walls-v1`. ETA ~1.7h.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire (research):** CleanRL RPO + Zoo Pendulum + Raffin gSDE all use **`ent_coef=0`** with RPO/gSDE. Live B stacks ENT=0.02 on RPO+ERA — reorder fail ladder. Staged continue-b next arm **ENT=0** (marker `.triple-b-h1-rpo01-era05-ent0-v1`). No mid-kill.
+- **Diagnosis / actions this fire (overnight):** Nothing acute @u20 — σ healthy, no mid-kill. Research already staged next B arm **RPO+ERA ENT=0** (CleanRL/Zoo). Left A/B/C alone.
 - **Next micro-task:** (1) Babysit live B RPO+ERA (ENT=0.02): if σ-dies / nt flat / reward↑-hold≈0 by ~u80–100 → natural-exit or overnight mid-kill into **RPO+ERA ENT=0** (staged; CleanRL/Zoo). (2) Only after ENT=0 RPO+ERA fails → gSDE/Zoo `use_sde` + ENT=0. Never ENT crank / AR-EAPO / blind-resume floor-σ. (3) Watch A (policy_loss explode → mid-kill + LR/grad clip). (4) C = H1-var control. (5) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
 - **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1** / **C H1-var**
 - **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**
-- **NEED_USER_PING:** **yes** — research material (ENT=0.02 on RPO is cookbook-wrong; staged ENT=0 next)
+- **NEED_USER_PING:** **yes** — standing think-out-loud (B RPO+ERA @u20 healthy; ENT=0 staged next)
 
 
 ## Ranked backlog (pull from top when a stretch ends)
