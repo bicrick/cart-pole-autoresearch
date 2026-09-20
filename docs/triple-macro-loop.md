@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~12:30 CT (LIVE sq1b in002 — tighter ICs)
+Last updated: 2026-09-20 ~12:30 CT (continuous cart-pole loop — not overnight)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -17,7 +17,7 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 
 ## Auto-research loop (routine ownership)
 
-Overnight (`Cart-pole auto-research`) owns the full cycle every 15m: observe → hypothesize → KEEP/KILL/ADVANCE → act → log → narrate.
+The cart-pole loop (`Cart-pole loop`) owns the full cycle every 15m: observe → hypothesize → KEEP/KILL/ADVANCE → act → log → narrate.
 After a hard kill it **must** launch the next one-change / easier-wheel experiment — never idle waiting on Patrick.
 Research feeder digs for the current wheel’s next delta only.
 
