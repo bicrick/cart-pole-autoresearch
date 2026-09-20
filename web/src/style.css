@@ -42,12 +42,14 @@ html.is-dark body {
 
 .theme {
   position: absolute;
-  top: 1.15rem;
-  right: 1.25rem;
-  z-index: 3;
+  top: max(1.15rem, env(safe-area-inset-top));
+  right: max(1.15rem, env(safe-area-inset-right));
+  z-index: 4;
   pointer-events: auto;
-  width: 1.1em;
+  min-width: 1.25em;
   text-align: center;
+  font-size: 1.05rem;
+  line-height: 1;
 }
 
 .start {
@@ -78,6 +80,10 @@ html.is-dark body {
   visibility: hidden;
 }
 
+.nav {
+  padding-right: max(3rem, calc(1.15rem + env(safe-area-inset-right) + 1.4em));
+}
+
 .page.is-started .nav,
 .page.is-started .bar {
   opacity: 1;
@@ -94,7 +100,8 @@ html.is-dark body {
 
 .nav .text-btn,
 #policy-toggle,
-#plant-toggle {
+#plant-toggle,
+#theme-toggle {
   pointer-events: auto;
 }
 
@@ -191,6 +198,10 @@ html.is-dark body {
   .nav,
   .bar {
     padding: 0.85rem 1rem;
+  }
+
+  .nav {
+    padding-right: max(2.75rem, calc(1rem + env(safe-area-inset-right) + 1.4em));
   }
 
   .meta {
