@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~12:29 CT (auto-research loop)
+Last updated: 2026-09-20 ~12:30 CT (LIVE sq1b in002 — tighter ICs)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -25,11 +25,11 @@ Wheels: W0 hold → W1 swing → W2 handoff → W3 void → W4 multi-eq → W5 t
 
 ## Square-one deal (user 2026-09-20 — LOCKED)
 
-Training + overnight paused until user green-lights restart. When live again, implement **exactly** this — not the old entropy/ATRPO ladder.
+Implement **exactly** this locked hold recipe — not the old entropy/ATRPO ladder. After hard kill, auto-research iterates the next one-change / simpler wheel (do **not** idle waiting on Patrick). Current wheel: **sq1b** `INIT_NOISE=0.02`.
 
 1. **One goal:** walls-on **UUU hold** only. No S1 swing slot, no handoff, no void FT, no 8/56 until hold gate clears.
 2. **One recipe:** walls on; near-upright ICs only (noise ≲0.05, hang=0); Lim product; **PPO ENT=0**; no MaxEnt/gSDE/RPO/ERA/ATRPO/AVC crank on this stretch; force ~40N. One (or twin identical) H1 slot only.
-3. **Hard kill:** after **100–150** updates, if `near_target/at_goal/UUU` ≲ **0.15** and reward↑ → **STOP**. Ping user. No next paper lever same day.
+3. **Hard kill:** after **100–150** updates, if `near_target/at_goal/UUU` ≲ **0.15** and reward↑ → **STOP**, then agent launches next simpler wheel (one change). No paper-lever crank / ATRPO/gSDE/ENT>0 on this stretch.
 4. **Prove stay:** basin / near-UUU rollouts, not just mean reward. visit≠hold = fail.
 5. **Only after** nt ≳ 0.80 and align ≳ 0.90: S1 swing → X1 handoff → void FT → E8 → T56.
 
@@ -83,12 +83,11 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 
-- **Status:** **HARD KILL** (2026-09-20 ~11:57 CT). Square-one recipe `sq1-h1-walls-ent0-nt1-in005` **FAILED** at the u100 gate. Train STOPPED; ckpt+policy quarantined; `scripts/continue-sq1-h1.sh` DISARMED. VM still RUNNING (TB only) — waiting on user. No same-day paper lever.
-- **Archive:** TB runs at `runs_archive/20260920-pre-squareone`. Failed run kept for inspect: `runs/20260920-162321_sq1-h1-walls-ent0-nt1-in005`. Quarantine: `policies/quarantine/checkpoint-sq1-h1-FAIL-u100-20260920-165701.pt`.
-- **Phase:** Square-one hold gate — **blocked**. Locked recipe (walls, near-only, PPO ENT=0, f40) did not produce stay.
-- **Fail meters (@u100):** nt_UUU **0.030** (was ~0.036@u67, flat ≪0.15), nt_align/UUU **~0.008**, eval/reward **~225** (not dying), train H **1.44→−0.53** (collapse), OOB=0. Near-target still farms **DDD** (at_goal~0.20, align~0.72). Classic **visit≠hold** / reward-hack.
-- **Next micro-task:** **WAIT ON USER.** Do not invent next lever today. Overnight stays enabled but idle (no train restart) until Patrick green-lights a new recipe.
-- **Do not:** auto-restart sq1, swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT ladder, mid-kill into new algos, stack GPU VMs.
+- **Status:** **LIVE sq1b** (2026-09-20 ~12:30 CT). After hard kill of in005 @u100, agent iterates **one simpler wheel** (no wait-on-user): same locked hold recipe with **tighter ICs** `INIT_NOISE=0.02` (was 0.05). Run `sq1b-h1-walls-ent0-nt1-in002` via `scripts/continue-sq1-h1.sh` → `next-train-triple-hold-sq1.sh`. A/C remain DISARMED. Cold start (`.sq1b-h1-cold-v1`; **no** FAIL quarantine ckpt).
+- **Prior fail (in005 @u100):** nt_UUU **~0.03**, visit≠hold, DDD farm, reward↑. Archive: `runs_archive/20260920-pre-squareone`; failed run `runs/20260920-162321_sq1-h1-walls-ent0-nt1-in005`; quarantine `policies/quarantine/checkpoint-sq1-h1-FAIL-u100-20260920-165701.pt`.
+- **Phase:** Square-one hold gate — **retry with tighter basin** (walls, near-only, PPO ENT=0, f40, hang=0, product). Kill rule unchanged: u100–150 nt≲0.15 ∧ reward↑ → STOP → next simpler wheel.
+- **Next micro-task:** **Babysit sq1b in002** to u100–150. Hard kill if `near_target/at_goal/UUU` ≲ **0.15** ∧ reward↑; then iterate next wheel. Gate to leave still nt ≳ 0.80 / align ≳ 0.90.
+- **Do not:** swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT>0, resume FAIL quarantine, stack GPU VMs, Mac.
 
 
 ## Ranked backlog (pull from top when a stretch ends)

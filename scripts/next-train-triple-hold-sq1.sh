@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Square-one H1 hold ONLY — LOCKED recipe (user 2026-09-20).
-# Walls-on UUU near-target hold; PPO ENT=0; NO gSDE/RPO/ERA/ATRPO/AVC/ENERGY crank.
-# Do not invent levers. Hard kill later owned by overnight @u100–150 if nt_UUU≲0.15 ∧ reward↑.
+# Square-one H1 hold ONLY — LOCKED recipe (user 2026-09-20), sq1b increment.
+# ONE change vs sq1: INIT_NOISE=0.02 (was 0.05). Walls-on UUU near-target hold;
+# PPO ENT=0; NO gSDE/RPO/ERA/ATRPO/AVC/ENERGY crank.
+# Hard kill @u100–150 if nt_UUU≲0.15 ∧ reward↑ (overnight).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -24,7 +25,7 @@ export CART_BARRIER_COEF="${CART_BARRIER_COEF:-10}"
 # Baseline energy term only (no crank — locked). Default train script is 0.15.
 export ENERGY_W="${ENERGY_W:-0.15}"
 export INIT_MODE=near_target
-export INIT_NOISE="${INIT_NOISE:-0.05}"
+export INIT_NOISE="${INIT_NOISE:-0.02}"
 export FALL_GRACE_STEPS=20
 export START_GRACE_STEPS=40
 export LR="${LR:-1e-4}"
@@ -41,8 +42,8 @@ export RESET_LOG_STD=""
 export NUM_ENVS="${NUM_ENVS:-8192}"
 export ROLLOUT="${ROLLOUT:-256}"
 export EPISODE_LEN="${EPISODE_LEN:-1200}"
-export CHECKPOINT="${CHECKPOINT:-policies/checkpoint-sq1-h1.pt}"
-export OUT="${OUT:-policies/policy-sq1-h1.json}"
-export RUN_NAME="${RUN_NAME:-sq1-h1-walls-ent0-nt1-in005}"
+export CHECKPOINT="${CHECKPOINT:-policies/checkpoint-sq1b-h1.pt}"
+export OUT="${OUT:-policies/policy-sq1b-h1.json}"
+export RUN_NAME="${RUN_NAME:-sq1b-h1-walls-ent0-nt1-in002}"
 
 exec bash scripts/next-train-triple.sh "$@"
