@@ -1,6 +1,50 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~02:33 CT.
+Last updated: 2026-09-20 ~02:58 CT.
+
+## Research pass (2026-09-20 ~02:58 CT) — B H→0.20 collapse deepening + AR-EAPO average-reward hold
+
+**Sources checked (this fire):** live TB `runs/20260920-063349_*` (~u150–154); overnight/macro @02:44; prior research 02:33 (RPO α); **AR-EAPO** arXiv:2409.08938 (full ar5iv — average-reward + entropy advantage for acrobot/pendubot swing-up+stabilize); RPO 2212.07536 Alg.1 reconfirm (IsaacGym Cartpole PPO degrades with more data). Skimmed VM `continue-triple-b.sh` — ENT=0.035 + VEL_COST=0.015 + `RUN_NAME` …`-ent035`… still staged. Overnight owns slots — no train start / no mid-kill.
+
+**Phase focus:** P1a walls-on UUU via role split. Fresh meters (~u150, ~02:58 CT / ~85 min post cold):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** | 150–154 | 1.45→**1.60** | 0.034 | **0.22** | hang_align **−0.98→−0.030** hang_at_goal~0.004 — healthy swing |
+| **B H1** | 154 | 1.45→**0.197↓** | **flat 0.041** | −0.07→+0.091 | rollout_rew **↑0.476** — **collapse past tripwire hard** (σ≈0.30) |
+| **C H1-var** | 150 | 1.46→**1.91** (from peak~2.17) | 0.044 | **0.136↑** | visit≠hold (align↑ / nt flat); still best H1 contrast |
+
+### Q1 — Collapse trajectory: 0.42@u110 → 0.32@u130 → **0.20@u154**
+
+Tripwire H≈0.30 fired; rate still ~0.005/u. σ decode (1-D latent Gaussian): H=0.197 ⇒ σ≈**0.30** — behavioral point-mass, not f32 underflow. Pair with rollout_reward↑ / nt hold≈0 = product visit/farm under near_target ICs (same class as dead TQC basin, milder). Mean still inching (align +0.09) while σ dies — exactly the RPO failure mode (Pendulum / Isaac Cartpole: PPO entropy↓ then return stalls or degrades under abundant samples; we run 8192 envs).
+
+**Do not mid-kill.** ENT=0.035 continue-from-ckpt on natural exit remains correct first lever (already staged).
+
+### Q2 — New lever: AR-EAPO average-reward for *stay* after entropy tools
+
+arXiv:2409.08938 (IROS 2024 AI Olympics acrobot/pendubot): formulates swing-up+**stabilize** as a **continuing** MDP with average-reward optimality + separate entropy GAE (EAPO soft bias advantage). Steal for H1 *after* ENT035 / RPO / ERA:
+
+1. **Discount bias → visit≠hold:** episodic discounted product rewards early neighborhood visits; average-reward / soft bias pushes long-horizon upright stay (their §I challenge #2: keep exploring after a suboptimal stable point). Matches B/C: align climbing, nt flat, reward not zero.
+2. **MaxEnt as first-class objective** (τ≈2.0, separate entropy GAE λ_e=0.6) — orthogonal to cool-ent β crank and to RPO μ-perturb; pairs with ERA soft floor on our global `log_std`.
+3. **Practical cheap proxies (no full AR-EAPO port yet):** (a) Turcato-style shorter `EPISODE_LEN` 600–800 on H1 so product cannot bank late visits without early hold; (b) Spong ENERGY_W / denser stay term on H1 only; (c) optional average-reward / differential advantage later if those stall. Quadratic-only reward in the paper is *not* a reason to rip product — keep product+progress; steal the *horizon / optimality criterion*.
+4. **Not for live stretch** — code cost high; rank behind RPO α (tiny patch on update log-prob) and ERA soft floor.
+
+### Q3 — Beats live Next / backlog?
+
+| Candidate | Beats live Next? | Beats / sharpens backlog? |
+|---|---|---|
+| Babysit; B auto-restart ENT=0.035 | — | Status quo |
+| Collapse H=0.20 (past 0.30 hard) | No (already staged ENT035) | Confirms tripwire + urgency |
+| If ENT035 fails → RPO / ERA first | No (already Next @02:44) | — |
+| If still align↑/nt flat after entropy tools → **AR-EAPO-inspired stay pressure** (short ep / ENERGY_W / later avg-reward) | **Sharpens** fail branch tertiary | **Sharpens #2** (viii) |
+| Mid-kill B / ENT=0.05 / void / TQC | No | Banned |
+
+**Nothing displaces** babysit + ENT035 natural restart. **Sharpen** post-entropy fail path: RPO/ERA first; if visit≠hold persists, AR-EAPO-style stay pressure before cold wipe / C-recipe promote.
+
+**Promote?** Macro Ranked backlog **#2** (viii) + Next item (2) tertiary. Do **not** rewrite Live slot lines (overnight owns). NEED_USER_PING **yes** — H→0.20 confirmed + new hold lever.
+
+**No code this fire** (overnight owns train; ENT035 already staged).
+
 
 ## Research pass (2026-09-20 ~02:33 CT) — B H1 entropy collapse confirmed + RPO α-perturb
 
