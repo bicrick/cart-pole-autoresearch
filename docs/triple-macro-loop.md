@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~23:57 CT  
+Last updated: 2026-09-19 ~23:57 CT (backlog #2 sharpened ~00:00 CT research)  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -39,7 +39,7 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Ranked backlog (pull from top when a stretch ends)
 
 1. **Lim TQC UUU specialist** (**LIVE on slot B** since 22:37 CT; **≥150k / success 0 @23:57 CT** — hold dead for this stretch; do not mid-kill, handoff staged). Hold mirror ladder leftovers (post-stretch only): (a) M2 tighten `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0`; (b) `ry_scale=1.0` Lim cart term; (c) **∫x obs** (Lim x₉ / LQI) + curriculum `eval/near_target/*` meters on TQC; (d) Baek VER replay flip (TQC-native); (e) optional fawraw M2 arch `[128,128]` / buffer 200k / 150k; (f) **`n_steps=3`** (SB3 NStepReplay / Raffin) after tighten; (g) **`use_sde=True sde_sample_freq=4`** (Zoo PyBullet TQC / Raffin) after n_steps, before M2-arch shrink / dead call (research 23:27). After nt mastery: BaRC **expand-with-ω** (nonzero link vel + off-centre x), not angle-noise alone (fawraw M4 basin)
-2. **Two-policy handoff** (**STAGED @23:57 CT** — TQC ≥150k flat on hold; implement when B stretch ends / next free slot) — hold: TQC-UUU ckpt or LQR \(Q_\theta\sim100,R\sim0.01\) (or IC_ASET 2025 PI/VI-in-LQR catcher) / PPO-balance near_target≤0.1 rad; swing: separate net (slot A / energy); enter: \(\|\phi_i\|<0.1\) rad **and** \(\|\omega\|_\infty<1\) rad/s (+ optional \(\bar c>0.9\) / E-gate), **never** tol=0.3; latch + hysteresis exit ~0.25 rad; swing soft-landing + LPF τ≈0.3 before handoff (fawraw/DiffSwing/ResearchSquare; research 21:56)
+2. **Two-policy handoff** (**STAGED @23:57 CT** — TQC ≥150k flat on hold; implement when B stretch ends / next free slot) — **order:** (1) measure catch basin on TQC@150k (offsets 0.1–0.5 × vels 0–3, success≥0.8×budget) → (2) if basin dead/tiny prefer **LQR** \(Q_\theta\sim100,R\sim0.01\) (+∫x LQI / IC_ASET PI; stiffen Q_θ~10³ only if soft RoA fails) → (3) PPO-balance near_target≤0.1 → (4) TQC ckpt only if basin widens; swing: separate net (slot A / energy); enter: \(\|\phi_i\|<0.1\) **and** \(\|\omega\|_\infty<1\) (+ opt \(\bar c>0.9\) / \(E\lesssim1.08 E_{UUU}\)), **never** tol=0.3; latch=True + **hysteresis exit** \(\|\phi\|_\infty>0.25\) + dwell N≥5–10 (fawraw latch is one-way only); soft-landing + LPF τ≈0.3 (fawraw/DiffSwing/ResearchSquare/2606.28627; research 00:00). Repo still missing `handoff.py` / catch-basin / LQR module.
 3. Energy-to-goal (true E→E_UUU) if product+progress plateaus
 4. Force probe 40→60 only if OOB≈0 and plant feels underpowered
 5. 8×TQC specialists (Lim full set) after UUU TQC proves hold

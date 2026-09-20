@@ -1,8 +1,46 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~23:27 CT.
+Last updated: 2026-09-20 ~00:00 CT.
 
 
+## Research pass (2026-09-20 ~00:00 CT) — P1 UUU-hold: two-policy handoff staging (catcher order / basin measure / latch+exit / LQR fallback)
+
+**Sources checked (this fire):** fawraw raw `sim/handoff.py` + `docs/m4_findings.md` + `scripts/measure_catch_basin.py` (CDN); DiffSwing NN→LQR @12°; arXiv:2606.28627 reachability energy→LQR (handoff ⊆ RoA); FIP CBA2022 hysteresis (θ_bc=0.35 / θ_sc=1.00); Furuta TECS enter |α|<0.2 rad; IIETA JESA 55(1) GA-LQR TLIP Q/R; IC_ASET 2025 PI/VI-in-LQR (already #2); ResearchSquare 2026 Q_θ~100,R~0.01 (19:40); arXiv:2606.22145 LPF τ≈0.3 / hysteresis (already). Skimmed box `train/` — **no** `handoff.py`, **no** catch-basin script; `export.py` is PPO `.pt→json` only; TQC saves SB3 `.zip`.
+
+**Phase focus:** P1 UUU **hold**. Live Next @23:57 = **stage two-policy handoff** (do not mid-kill TQC B → ~300k). Gate ≪0.80. Overnight owns slots — no train start.
+
+### Q1 — Staging recipe sharpeners (concrete numbers)
+
+| Piece | Concrete default | Why / source | Overnight note |
+|---|---|---|---|
+| **Catcher choice order** (TQC success **0** @≥150k) | (1) **measure** TQC@150k basin → (2) if basin dead/tiny: **LQR** \(Q_\theta\sim100,R\sim0.01\) (+ optional ∫x LQI / IC_ASET PI) → (3) PPO-balance near_target≤0.1 rad short-horizon → (4) TQC ckpt only if basin widens after expand-with-ω | Live B flat on hold; fawraw: never hand off into unmeasured basin | Prefer classical catcher over a success=0 TQC zip until basin proves ≥0.1@ω≈0 |
+| **Catch-basin measure first** | Port fawraw grid: offsets `{0.1,0.2,0.3,0.4,0.5}`, vels `{0,1,2,3}`, success = survive ≥**0.8** of max_steps | `measure_catch_basin.py` + M4 table (1.0 only at 0.1/0; 0 at vel≥2) | **First code artifact** before wiring switch; decide catcher from data |
+| **Enter gate** | \(\|\phi_i\|<\mathbf{0.1}\) **and** \(\|\omega\|_\infty<\mathbf{1}\) (+ opt \(\bar c>0.9\) / \(E\lesssim 1.08 E_{UUU}\)) | fawraw basin; 2606.28627: handoff set ⊆ RoA; never tol=**0.3** | Angle-only is insufficient |
+| **Latch + hysteresis exit** | `latch=True`; **exit** only if \(\|\phi\|_\infty>\mathbf{0.25}\) (or dwell **N≥5–10** steps before commit) | fawraw latch is **one-way only** (no exit); FIP 0.35/1.00 proves band pattern; our 0.1/0.25 tighter for triple | Implement **exit threshold** on top of fawraw latch — do not copy latch-alone |
+| **Soft-landing + LPF** | Swing: −w_ω\|ω\|^2 / Baek c_e=0.09 / cart-centre when \(\bar c>0.9\); force LPF **τ≈0.3** before handoff | fawraw plan (no coefs shipped); 2606.22145 | Soft-land swing delivery; optional DiffSwing blend if bangy |
+| **LQR fallback stiffening** | If soft ResearchSquare RoA too small: try GA-LQR-style heavier \(Q_\theta\sim 10^3\) (IIETA Q_θ=2500, Q_x=750, R≈1) **retuned** on our plant — or IC_ASET PI | IIETA JESA; plant-dependent — do not copy K | Escalation only after soft LQR fails basin |
+
+### Q2 — Repo gaps overnight must implement (no train start)
+
+1. **No** `train/handoff.py` / `scripts/handoff_eval.py` / `scripts/measure_catch_basin.py` — port fawraw API (swing+stab `predict`, `capture_tol_rad`, `capture_vel_rad_s`, latch) **plus** hysteresis exit + dwell.
+2. TQC catcher load path = SB3 `.zip` (`policies/tqc-triple-uuu.zip` / `*_150000_steps.zip`); `export.py` is PPO-only — do not expect policy.json for TQC.
+3. No Riccati / LQR module yet — stage a small `train/lqr_uuu.py` (linearize plant @UUU, solve DARE, act = −Kx) as catcher #2.
+4. Leave A/C alone until stretches end; leave B TQC running to ~300k (abort handoff staging → EP specialist only if success>0 mid-stretch).
+
+### Q3 — Beats live Next / backlog?
+
+| Candidate | Beats live Next (stage handoff)? | Beats / sharpens backlog? |
+|---|---|---|
+| Keep staging two-policy (catcher+swing+gate+latch+LPF) | — | Status quo (Next) |
+| Catch-basin measure → catcher order (LQR before dead TQC) | No | **Sharpens #2** |
+| Latch + **exit 0.25** + dwell N≥5–10 (beyond fawraw one-way) | No | **Sharpens #2** |
+| Soft-land + LPF τ≈0.3 / E-gate / GA-LQR stiff fallback | No | Sharpens #2 |
+| gSDE / n_steps / M2 tighten on TQC | No | Stay #1 leftovers post-stretch |
+| Force 40→60 / energy E→E_UUU / mid-kill B | No | Stay #4 / #3 / banned |
+
+**Nothing clearly beats** the live Next micro-task. Stay the course: stage handoff in-doc/code while B finishes; do not mid-kill; do not rewrite Next.
+
+**Promote?** Macro backlog **#2** wording only (concrete catcher-order + basin-measure + latch/exit/dwell). **Do not** rewrite Next (overnight wrote it @23:57). NEED_USER_PING no.
 
 ## Research pass (2026-09-19 ~23:27 CT) — P1 UUU-hold: gSDE / zoo TQC + BaRC expand-with-ω + trainer CLI gaps
 
