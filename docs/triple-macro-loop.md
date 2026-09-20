@@ -13,6 +13,17 @@ Ship a cracked cart-**triple**-pendulum policy that can:
 
 on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mirroring to the user's local demo. Budget: **no hard $30 cap** — keep training until UUU works; prefer one L4 on-demand, don't stack GPU VMs.
 
+## Standing duty — self-debug (user 2026-09-20)
+
+Patrick should not have to poke the demo to find our bugs. Every overnight/research fire must hunt failure modes and stage fixes:
+
+- Reward↑ while hold/success≈0 → reward hacking / flopping
+- Tiny |x| + thrashing angles → center / void-death farming (nowalls)
+- Entropy collapse or saturation; weird OOB; dead catch basin
+- Wrong plant phase (nowalls before walls-on worked — same lesson as double)
+
+When found: name root cause, update Next micro-task, implement carefully, push, arm natural restart. Harden the checklist so that class of miss does not repeat.
+
 ## Macro phases (advance only when the gate clears)
 
 | Phase | Gate to leave | What "done" looks like |
