@@ -1,6 +1,79 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~04:37 CT.
+Last updated: 2026-09-20 ~04:59 CT.
+
+## Research pass (2026-09-20 ~04:59 CT) — H1: **EVAL** non-MaxEnt avg-reward (2501.09770) + **PPO-BR** clip-contract under visit≠hold
+
+**Sources checked (this fire):** live TB fresher ~04:58 CT (parent steer); overnight/macro @04:55; prior research 04:37 (ERA D=1 pin / 2506 AdaEnt) + 04:02 (MaxEnt ban / C ENT null) + 03:28 (RPO α≈0.01); **EVAL** arXiv:2501.09770 (EigenVector Average-reward Learning + Posterior Policy Iteration — avg-reward *without* entropy); **PPO-BR** arXiv:2505.17714 (dual-signal ε adapt: entropy expand / reward-plateau contract); skimming ATRPO Zhang–Ross arXiv:2106.07329 (on-policy avg-reward, no MaxEnt) as cousin. Confirmed box `scripts/continue-triple-b.sh`: **ENT=0.035** + `VEL_COST_COEF=0.015` + `INIT_NOISE=0.05` + RUN_NAME `…-ent035-…` staged for natural restart. Overnight owns slots — no train start / no mid-kill.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (~04:58 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** (LR1e-4) | ~128 | **~1.87** | ~0.042 | ~0.206 | hang_align/UUU **−0.05→−0.03** (was −0.97); hang_at_goal~0.003; policy_loss ~0.005 (was +0.019@u122) — **past u120 clean; entering prior NaN window ~u150–228** |
+| **B H1** | 366–370 | **−0.649→−0.665↓↓** | **flat 0.041→0.052** | ~0.15–0.17 | rollout_reward≈**0.50** flat; policy_loss~+0.02; OOB=0; ~30 upd left → ENT035 ~05:07 CT |
+| **C H1-var** | ~360 | **~1.22** (healthy) | **~0.049** flat | ~0.15 | ENT=0.05 **null reconfirmed**; policy_loss spike 0.45@u360 (watch one-off) |
+
+### Q1 — NEW paper: EVAL (2501.09770) fills the **non-MaxEnt stay** hole
+
+Prior fail-stack said “avg-reward soft bias / AR-EAPO half without MaxEnt” but cited only AR-EAPO (2409.08938), which **couples** average-reward **with** MaxEnt. EVAL is the missing cookbook:
+
+- Learns entropy-regularized average-reward rate θ + differential value via tilted-eigenvector TD (off-policy DQN-style).
+- **Posterior Policy Iteration (PPI / Alg.2):** iteratively replace prior π₀ ← current soft-optimal π; Rawlik theorem → recovers **greedy average-reward optimum as β→∞**, i.e. **avg-reward without entropy regularization**.
+- Classic-control suite includes **CartPole continuing balance**: after 5k train steps, EVAL+PPI holds ≥1e5 (claimed ≥1e10) steps while Soft Q-Learning rarely matches — direct *stay upright forever* evidence.
+- Acrobot-v1 also in suite (underactuated cousin). Discrete-action / value-based today; continuous actor port is future work in the paper — still steals the **objective**, not the DQN nets.
+
+**Steal for H1 (post-ENT035 / RPO / ERA, visit≠hold branch — never lead):**
+
+1. Prefer **EVAL-PPI spirit** over AR-EAPO: differential / average-reward advantage **with ENT annealed→0** (or no entropy term), not MaxEnt+avg-reward.
+2. Cheap on-policy cousins already closer to our PPO stack: **ATRPO** (Zhang–Ross arXiv:2106.07329) / APO trust-region avg-reward — same “continuing stay” objective, no MaxEnt. Port later if short-ep / ENERGY_W stall.
+3. Immediate proxies unchanged and still first: Turcato `EPISODE_LEN` 600–800; Spong `ENERGY_W` 0.2→0.35; optional ρ / differential-advantage soft bias once coded.
+4. **Ban** shipping EVAL’s *ERAR* (entropy-regularized) half or ASAC-style avg-reward+MaxEnt on H1 — same MaxEnt-vs-hold footgun (2503 / 2506).
+
+### Q2 — NEW recipe: PPO-BR (2505.17714) clip-**contract** when reward flat under σ death
+
+Live B = textbook dual failure: entropy **dead** (H≈−0.65) **and** reward **plateau** (~0.50) with nt flat — visit≠hold. PPO-BR adapts the PPO clip ε from **both** signals:
+
+```text
+ε_t = ε₀ · [1 + λ₁·tanh(φ(H_t)) − λ₂·tanh(ψ(ΔR_t))]
+ε_t ← clip(ε_t, ε_min, ε_max)
+```
+
+Paper defaults: ε₀=**0.2**, λ₁=**0.5**, λ₂=**0.3**, reward window k=**10**. Ablation: entropy drives ~70% of *early* gains; **reward-guided contraction** dominates late stability / variance cut.
+
+**Steal for H1 (orthogonal to RPO μ-perturb + ERA log_std floor):**
+
+1. After σ is restored (ENT035 / RPO / ERA) but **reward still flat + nt flat**: **contract clip** ε 0.2→**0.1** (or apply PPO-BR contraction term only — λ₂>0, do **not** expand on low H). Prevents large ratio steps from locking a “visit once then flop” mean while σ is still recovering.
+2. Do **not** use PPO-BR entropy-*expansion* while H is negative/dead on H1 — that fights the catcher (same class as ENT≥0.05 / MaxEnt). Expansion is for S1 swing if ever needed.
+3. Caveat: single-author TNNLS-submission claims are aggressive; treat numbers as a **cookbook sketch**, not gospel. Still the only open recipe that jointly says “reward plateau → tighten trust region” for our exact B meters.
+4. Tiny patch (clip scalar only) — after RPO α≈0.01 / ERA soft floor in the ladder, before cold wipe.
+
+### Q3 — Locked stack reconfirm (nothing displaces babysit)
+
+| Rank | Lever | Status this fire |
+|---|---|---|
+| 0 | Babysit B → **ENT=0.035** + VEL_COST=0.015 natural (~05:07) | **Confirmed staged** in continue-b; do not mid-kill |
+| 1 | RPO α≈0.01 (ladder 0.01→0.05→0.1; never 0.5) | Unchanged (03:28 / 04:37) |
+| 2 | ERA soft log_std floor H₀≈0.5–0.8 softplus/detached — **not** Listing-2 D=1 pin | Unchanged (04:37) |
+| 3 | Non-MaxEnt stay: ENERGY_W / short ep / **EVAL-PPI or ATRPO spirit** (not AR-EAPO MaxEnt) | **Sharpened** — EVAL fills citation hole |
+| 3b | Optional **PPO-BR ε contract** (λ₂) if reward flat after σ tools | **New** orthogonal clip lever |
+| 4 | ENT anneal→0 once nt moves (AdaEnt / 2506) | Unchanged |
+| — | AR-EAPO MaxEnt / ENT≥0.05 / hard log_std clamp / Listing-2 D=1 | **Banned** — C null + 2503/2506 |
+
+C ENT=0.05 remains a **natural null** for nt (H healthy ~1.22, nt~0.049≈B). A hang_align still climbing into the old NaN window — overnight watch only.
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| EVAL-PPI / ATRPO as concrete **non-MaxEnt** avg-reward stay | No (post-ENT035 branch only) | **Yes** — #2 (viii) sharpen |
+| PPO-BR ε contract when reward flat after σ tools | No (after RPO/ERA) | **Yes** — #2 (viii) optional |
+| Babysit + ENT035 / mid-kill / ENT≥0.05 / MaxEnt on H1 | No (already Next / banned) | — |
+
+**Nothing displaces** babysit → ENT=0.035. **Material:** first open **avg-reward-without-MaxEnt** citation (EVAL+PPI) for the stay branch + clip-contract recipe matched to live B (H↓ + reward flat). NEED_USER_PING **yes** — new paper + new orthogonal lever on the fail stack (not a Next rewrite).
+
+**No code this fire** (overnight owns train; ENT035 already staged).
+
 
 ## Research pass (2026-09-20 ~04:37 CT) — H1: ERA **1-D Listing-2 pin** footgun + MaxEnt-misleads (2506.05615) + RPO α ladder for *hold*
 
