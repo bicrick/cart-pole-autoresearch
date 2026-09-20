@@ -1,6 +1,51 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~01:58 CT.
+Last updated: 2026-09-20 ~02:33 CT.
+
+## Research pass (2026-09-20 ~02:33 CT) — B H1 entropy collapse confirmed + RPO α-perturb
+
+**Sources checked (this fire):** live TB on VM `runs/20260920-063349_*` (~u110); overnight/macro @02:28; prior research 01:58 (H1 cool→tripwire); **RPO** arXiv:2212.07536 (full ar5iv — Algorithm 1 + ent_coef ablation Fig.6 / §4.2.2); rsl_rl PR #190 / rlevo gaussian docs (hard `log_std` clamp zeros grad on global param); ERA arXiv:2510.08549 (already named). Skimmed box: Actor = **global** `nn.Parameter log_std` clamp −5…2 (`train/ppo.py`); continue-b already stages **ENT=0.035** + `VEL_COST=0.015` on natural restart. Overnight owns slots — no train start / no mid-kill.
+
+**Phase focus:** P1a walls-on UUU via role split. Fresh meters (~u100–110, ~02:33 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** | 110 | 1.45→**1.76** | 0.039 | **0.21↑** | hang_align **−0.98→−0.032** — healthy swing |
+| **B H1** | 110 | 1.45→**0.42↓** | **flat 0.039** | −0.07→+0.054 | rollout_rew **↑0.47** — **collapse confirmed** |
+| **C H1-var** | 104 | 1.46→**2.16↑** | 0.044 | **0.12↑** | best H1 signal (ENT=0.05) |
+
+### Q1 — Upgrade vs 01:58: cool → collapse
+
+01:58 table: H=1.12 = early cool; tripwire H≈**0.30** with nt flat. Live B now **H=0.42** and still dropping ~0.005/u → will be ≤0.3 well before stretch end. Pair with reward↑ / hold≈0 (product visit/farm under near_target ICs, milder than dead TQC basin but same class). **Do not mid-kill** — ENT=0.035 continue already staged.
+
+σ decode (1-D latent Gaussian before tanh·forceLimit): H≈0.42 ⇒ σ≈**0.37** — behavioral collapse, not f32 underflow (rsl_rl −20 floor irrelevant here).
+
+### Q2 — RPO mechanism we had only half-stolen
+
+Prior notes used RPO only for the **ent_coef band** (0.01 helps; ≥0.05 can unbound). Full paper steal:
+
+1. **Algorithm (CleanRL-style):** collect with standard \(a\sim\mathcal{N}(\mu,\sigma)\); on the **PPO update**, set \(\mu'=\mu+z\), \(z\sim\mathcal{U}(-\alpha,\alpha)\), evaluate log-prob under \(\mathcal{N}(\mu',\sigma)\). Default **\(\alpha=0.5\)** on normalized action; ablation sweet spot **0.1–3**.
+2. Effect: entropy rises early then **holds a floor** without cranking \(\beta\); PPO alone collapses then plateaus/degrades (Pendulum fail; Isaac Cartpole return drop with more data).
+3. Ent-coef ablation: 0.01 often helps; **≥0.05** → unbounded entropy / worse return on many envs — validates **not** jumping H1 live to 0.05 (C already owns that band as the explore control).
+4. Orthogonal to ERA: RPO perturbs **mean at update**; ERA constrains **log_std activation**. Both beat “another cool-ent wipe.”
+
+**rsl_rl caveat for our Actor:** hard `log_std.clamp(min=floor)` on a **single global** Parameter **zeros the entropy gradient** and pins σ forever. Prefer ERA soft activation / RPO α / soft `max(log_std, log σ_min)` with detached target — not a hard floor at H₀.
+
+### Q3 — Beats live Next / backlog?
+
+| Candidate | Beats live Next? | Beats / sharpens backlog? |
+|---|---|---|
+| Babysit to stretch end; B auto-restart ENT=0.035 | — | Status quo (Next @02:28) |
+| Collapse diagnosis upgrade (H=0.42 past tripwire) | No (already staged ENT035) | Confirms tripwire fired |
+| If ENT035 stretch still H↓ + nt flat ~u80 → **RPO α≈0.3–0.5** (or ERA soft floor) **before** cold wipe / C-recipe promote | **Sharpens** fail branch | **Sharpens #2** entropy leftover |
+| Jump B live to ENT=0.05 / mid-kill / void / TQC | No | Banned (RPO ≥0.05 risk; C is the 0.05 control) |
+
+**Nothing displaces** babysit + ENT035 natural restart. **Sharpen** the post-ENT035 fail path: prefer RPO α-perturb or ERA soft `log_std` floor over another ENT crank or immediate cold wipe of B weights (mean may still be learning slowly — align +0.05).
+
+**Promote?** Macro Ranked backlog **#2** (viii) + Next item (2) fail branch — add RPO \(\alpha\) as concrete entropy-fail leftover. Do **not** rewrite Live slot lines / kill list. NEED_USER_PING **yes** — confirmed collapse + new lever (RPO mechanism).
+
+**No code this fire** (overnight owns train; ENT035 already staged).
+
 
 ## Research pass (2026-09-20 ~01:58 CT) — H1 entropy floor under ENT=0.02 + BaRC widen-after-mastery
 
