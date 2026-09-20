@@ -319,8 +319,9 @@ def parse_args():
         type=float,
         default=0.3,
         help=(
-            "Near-target / near-goal angle half-range (rad). H1 hold uses ~0.05; "
-            "default 0.3 matches legacy ±0.3. Also scales cart/rate noise for near_target."
+            "Near-target / near-goal angle half-range (rad). Also scales cart (×2) and "
+            "ω (×5) proportionally with only 1e-3 absolute floors (quiet-basin; was "
+            "cart≥0.05 / ω≥0.1 which nulled small INIT_NOISE). M2 hold uses 0.05."
         ),
     )
     parser.add_argument(
@@ -495,7 +496,8 @@ def random_states(
       near_target — near assigned goal; hang_start_p overlays hang ICs for swing-up
       wide        — Lim-style wide random ICs (full angle, larger rates)
 
-    init_noise: angle half-range (rad) for near_target / near-goal spawns (default 0.3).
+    init_noise: angle half-range (rad) for near_target / near-goal; also scales
+                x/xd (×2) and ω (×5) with 1e-3 absolute floors only (quiet-basin).
     """
     mode = (init_mode or "mixed").lower()
 
@@ -524,11 +526,13 @@ def random_states(
 
     if mode == "near_target" and goals is not None:
         # Hold prior near assigned goal; optional hang_start_p overlays swing-up ICs.
-        # init_noise = angle half-range (H1 ~0.05; legacy default 0.3).
-        n_ang = max(float(init_noise), 1e-4)
-        n_x = min(0.5, max(0.05, n_ang * 2.0))
-        n_xd = min(0.5, max(0.05, n_ang * 2.0))
-        n_w = min(0.8, max(0.1, n_ang * 5.0))
+        # Quiet-basin (fawraw M2 / sq1c): init_noise scales angle AND ω AND x/xd
+        # proportionally. Legacy floors max(0.05) cart / max(0.1) ω made INIT_NOISE≤0.02
+        # a no-op on rates/cart — only tiny absolute floors (1e-3) remain.
+        n_ang = max(float(init_noise), 1e-3)
+        n_x = min(0.5, max(1e-3, n_ang * 2.0))
+        n_xd = min(0.5, max(1e-3, n_ang * 2.0))
+        n_w = min(0.8, max(1e-3, n_ang * 5.0))
         angles = goal_angles(goals, device=device, dtype=torch.float32)
         x = torch.empty(n, device=device).uniform_(-n_x, n_x)
         xd = torch.empty(n, device=device).uniform_(-n_xd, n_xd)
@@ -601,10 +605,11 @@ def random_states(
         if hit.any():
             angles = goal_angles(goals, device=device, dtype=torch.float32)
             n_hit = int(hit.sum())
-            n_ang = max(float(init_noise), 1e-4)
-            n_x = min(0.5, max(0.05, n_ang * 2.0))
-            n_xd = min(0.5, max(0.05, n_ang * 2.0))
-            n_w = min(0.8, max(0.1, n_ang * 5.0))
+            # Quiet-basin: proportional scales (same as near_target mode).
+            n_ang = max(float(init_noise), 1e-3)
+            n_x = min(0.5, max(1e-3, n_ang * 2.0))
+            n_xd = min(0.5, max(1e-3, n_ang * 2.0))
+            n_w = min(0.8, max(1e-3, n_ang * 5.0))
             x[hit] = torch.empty(n_hit, device=device).uniform_(-n_x, n_x)
             xd[hit] = torch.empty(n_hit, device=device).uniform_(-n_xd, n_xd)
             th1[hit] = angles[hit, 0] + torch.empty(n_hit, device=device).uniform_(-n_ang, n_ang)

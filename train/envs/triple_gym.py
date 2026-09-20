@@ -1,8 +1,10 @@
-"""Gymnasium wrapper: cart-triple plant, UUU specialist (Lim 8×TQC path).
+"""Gymnasium wrapper: cart-triple plant, UUU specialist (Lim / fawraw M2 path).
 
 Observation: 11-D state features (no goal one-hot; goal fixed UUU).
 Action: Box(-1, 1) scaled by forceLimit (N).
 Reward: Lim/Baek product_reward toward UUU.
+ICs: quiet-basin near_target — init_noise scales θ, ω, x/xd (floors 1e-3 only).
+Walls default ON for our plant (Lim/fawraw use rail limits; we use inelastic walls).
 """
 
 from __future__ import annotations
@@ -63,15 +65,21 @@ def _sample_state(
         th2d = torch.empty((), device=device).uniform_(-20.0, 20.0)
         th3d = torch.empty((), device=device).uniform_(-30.0, 30.0)
     else:
-        n = max(float(noise), 1e-3)
-        x = torch.empty((), device=device).uniform_(-0.5, 0.5)
-        xd = torch.empty((), device=device).uniform_(-0.5, 0.5)
-        th1 = torch.empty((), device=device).uniform_(-n, n)
-        th2 = torch.empty((), device=device).uniform_(-n, n)
-        th3 = torch.empty((), device=device).uniform_(-n, n)
-        th1d = torch.empty((), device=device).uniform_(-0.8, 0.8)
-        th2d = torch.empty((), device=device).uniform_(-0.8, 0.8)
-        th3d = torch.empty((), device=device).uniform_(-0.8, 0.8)
+        # Quiet-basin (fawraw M2): noise scales angle AND ω AND x/xd proportionally.
+        # Legacy fixed ±0.5 cart / ±0.8 ω ignored init_noise — made "tighten" a no-op.
+        # Tiny absolute floors 1e-3 only (see train_triple.random_states near_target).
+        n_ang = max(float(noise), 1e-3)
+        n_x = min(0.5, max(1e-3, n_ang * 2.0))
+        n_xd = min(0.5, max(1e-3, n_ang * 2.0))
+        n_w = min(0.8, max(1e-3, n_ang * 5.0))
+        x = torch.empty((), device=device).uniform_(-n_x, n_x)
+        xd = torch.empty((), device=device).uniform_(-n_xd, n_xd)
+        th1 = torch.empty((), device=device).uniform_(-n_ang, n_ang)
+        th2 = torch.empty((), device=device).uniform_(-n_ang, n_ang)
+        th3 = torch.empty((), device=device).uniform_(-n_ang, n_ang)
+        th1d = torch.empty((), device=device).uniform_(-n_w, n_w)
+        th2d = torch.empty((), device=device).uniform_(-n_w, n_w)
+        th3d = torch.empty((), device=device).uniform_(-n_w, n_w)
     return torch.stack((x, xd, th1, th1d, th2, th2d, th3, th3d))
 
 
@@ -85,11 +93,11 @@ class TriplePendulumUUUEnv(gym.Env):
         force_limit: float = 40.0,
         max_steps: int = 1000,
         track_limit: float = 2.4,
-        track_walls: bool = False,
+        track_walls: bool = True,
         init_mode: str = "near_target",
-        init_noise: float = 0.15,
+        init_noise: float = 0.05,
         hang_frac: float = 0.0,
-        wide_frac: float = 0.25,
+        wide_frac: float = 0.0,
         progress_w: float = 1.0,
         cart_barrier_coef: float = 10.0,
         alpha_th: float = 0.5,

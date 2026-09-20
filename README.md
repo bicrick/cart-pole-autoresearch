@@ -72,7 +72,10 @@ python3 -m pip install -r requirements.txt
 python3 train/train.py --smoke                 # double
 python3 train/train_triple.py --smoke          # triple PPO
 SMOKE=1 bash scripts/next-train-triple-tqc-uuu.sh   # triple TQC (needs sb3-contrib)
+SMOKE=1 bash scripts/next-train-triple-m2-hold.sh   # fawraw M2 UUU hold (quiet-basin)
 ```
+
+**M2 UUU hold (copy-what-works):** see [`docs/working-impls-reverse-eng.md`](docs/working-impls-reverse-eng.md). Launch: `scripts/next-train-triple-m2-hold.sh` (walls ON, `init_noise=0.05`, TQC `[128,128]`, 150k). Do not start GCP VM until green-lit.
 
 GPU recipes: `scripts/next-train.sh`, `next-train-transitions.sh`, `next-train-triple*.sh`. Watch: [TensorBoard](http://34.148.138.48:6006/) on the training VM (static IP) or `tensorboard --logdir runs`.
 
