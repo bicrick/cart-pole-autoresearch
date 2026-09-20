@@ -38,6 +38,7 @@ INIT_NOISE="${INIT_NOISE:-0.3}"
 VEL_COST_COEF="${VEL_COST_COEF:-0}"
 RPO_ALPHA="${RPO_ALPHA:-0}"
 LOG_STD_FLOOR="${LOG_STD_FLOOR:-0}"
+RESET_LOG_STD="${RESET_LOG_STD:-}"
 FORCE_LIMIT="${FORCE_LIMIT:-40}"
 PROGRESS_W="${PROGRESS_W:-}"
 FLIP_AUGMENT="${FLIP_AUGMENT:-1}"
@@ -60,6 +61,11 @@ fi
 # Optional hard inelastic track walls (P1a curriculum). Default off (void plant).
 # TRACK_WALLS=1/--track-walls enables; TRACK_WALLS=0/--no-track-walls disables.
 TRACK_WALLS="${TRACK_WALLS:-0}"
+# Optional: reset global log_std after ckpt load (SB3 #155). Empty=off; 0=fill 0.0.
+if [[ -n "${RESET_LOG_STD}" ]]; then
+  FORCE_ARGS+=(--reset-log-std "${RESET_LOG_STD}")
+fi
+
 if [[ "${TRACK_WALLS}" == "1" || "${TRACK_WALLS}" == "true" || "${TRACK_WALLS}" == "on" ]]; then
   FORCE_ARGS+=(--track-walls)
 elif [[ "${TRACK_WALLS}" == "0" || "${TRACK_WALLS}" == "false" || "${TRACK_WALLS}" == "off" ]]; then

@@ -113,6 +113,13 @@ def parse_args():
         default=0.0,
         help="ERA soft entropy floor H₀ for 1-D Normal (0=off). Softplus/detached; try 0.5–0.8. Not a hard clamp.",
     )
+    parser.add_argument(
+        "--reset-log-std",
+        type=float,
+        default=None,
+        help="After checkpoint load, fill_ global log_std to this value and rebuild Adam "
+        "(SB3 #155 curriculum resume). Omit=off. Use 0.0 when resuming a collapsed-σ H1 into RPO/ERA.",
+    )
     parser.add_argument("--episode-len", type=int, default=800)
     parser.add_argument("--impulse-p", type=float, default=0.005)
     parser.add_argument(
@@ -996,7 +1003,6 @@ def main():
     # ERA soft floor applies on rollout+update; RPO α is evaluate-only (passed to evaluate).
     _floor = float(getattr(args, "log_std_floor", 0.0) or 0.0)
     model.log_std_floor = _floor if _floor > 0 else None
-    opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     print(
         f"explore: ent={args.ent} rpo_alpha={getattr(args, 'rpo_alpha', 0.0)} "
         f"log_std_floor={model.log_std_floor}",
@@ -1012,8 +1018,19 @@ def main():
             + (f" (saved at update={prev})" if prev is not None else ""),
             flush=True,
         )
+        # SB3 #155: fill_ in-place (do NOT replace nn.Parameter — that orphans Adam state).
+        if getattr(args, "reset_log_std", None) is not None:
+            with torch.no_grad():
+                model.log_std.fill_(float(args.reset_log_std))
+            print(
+                f"reset log_std → {float(args.reset_log_std)} "
+                f"(in-place fill_; Adam rebuilt below)",
+                flush=True,
+            )
     else:
         print(f"no checkpoint at {args.checkpoint}; cold start", flush=True)
+    # Adam after load/reset so momentum matches current log_std (critical after σ collapse).
+    opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     _probs, _allowed = goal_probs_for_update(args, 1)
     goals = sample_goals(args.num_envs, device, allowed=_allowed, probs=_probs)
     state = random_states(

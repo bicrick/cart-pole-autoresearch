@@ -1,6 +1,74 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~05:31 CT.
+Last updated: 2026-09-20 ~06:06 CT.
+
+## Research pass (2026-09-20 ~06:06 CT) — H1 ENT035 **dead past babysit**: σ death + **policy_loss explode** + **reset-log_std** before RPO+ERA
+
+**Sources checked (this fire):** live TB `20260920-084629_*a` / `20260920-101634_*b-ent035` / `20260920-102255_*c` (~06:06 CT); overnight/macro @05:51 (RPO+ERA staged, babysit B→u80); prior research 05:31 (Zoo ENT=0+gSDE) + 04:59 (EVAL-PPI/PPO-BR) + 03:28 (RPO α≈0.01); **SB3 #155** (reset `log_std` on curriculum resume — `fill_` in-place + keep/rebuild Adam; **replacing** `nn.Parameter` orphans optimizer → frozen σ); CleanRL RPO docs (α=**0.01** on InvertedDoublePendulum); ERA 2510.08549 soft floor; Raffin/Zoo Pendulum ENT=0+gSDE (already ladder). Overnight owns slots — **no mid-kill this fire**.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (~06:06 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** (LR1e-4) | ~255 | **~1.42** (slow cool) | ~0.053 | ~0.23 | hang_align/UUU **−0.027→−0.014** @u250; hang_at_goal~0.006; policy_loss ±0.01 — **past prior NaN u228, still clean** |
+| **B H1 ENT035** | **~75–100** | **−1.25→−1.47↓↓** | **0.05→0.035↓** | **+0.18→−0.05** | **policy_loss 8×10²⁶ @u75**; eval/reward **~168→−619 @u80** (then −669 @u100); OOB=0 — **babysit gate FAILED** |
+| **C H1-var** | ~80 | **~1.03** | ~0.056 | ~0.19 | healthy σ; nt still flat — leave as control |
+
+### Q1 — ENT=0.035 is a confirmed dead path (not a "needs more updates" path)
+
+Overnight babysit rule was: watch ENT035 to ~**u80**; if H still ↓ + nt flat → natural-exit into RPO+ERA. Live B at the gate:
+
+1. H still diving (~−0.007/u) with no floor bounce.
+2. nt_at_goal never left ~0.05, then **worsened** at u80.
+3. **New failure mode:** `train/policy_loss` detonated to **~8e26** at u75 — same class as A's prior NaN crash, but on the hold net under ENT crank + dead σ. Eval reward/align collapsed in the same window.
+
+**Do not** extend ENT035 babysit. **Do not** bump ENT again. Path is dead; RPO+ERA (already staged) is the correct next stretch.
+
+### Q2 — NEW footgun: blind-resume floor-σ into RPO+ERA
+
+`continue-triple-b` previously said "Resume ckpt — no cold wipe." That is wrong when σ is at the −5 clamp floor (and worse after a loss explode):
+
+| Lever | Alone on floor-σ ckpt? | Why |
+|---|---|---|
+| RPO α=0.01 μ-jitter | Weak | Perturbs **mean** at evaluate; does not revive a dead `log_std` Parameter |
+| ERA soft H₀=0.5 | Partial | Softplus/detached **adds** to sampled std for the dist, but the **learned** Parameter can stay pinned; Adam momentum still points toward the floor |
+| ENT=0.02 crank | Banned-class | Same β-fight that just exploded |
+| **`log_std.fill_(0)` + rebuild Adam** | **Required** | SB3 #155 curriculum cookbook: reset std between stages; **fill_ in-place** (replacing Parameter orphans Adam → frozen σ) |
+
+Quarantine-nan still applies: if the exploded update wrote NaN/Inf weights, ckpt is moved aside → true cold start (fine). If weights are finite but σ collapsed, **reset log_std** then RPO+ERA.
+
+**Steal / staged this fire (research, not mid-kill):**
+
+1. `train_triple --reset-log-std 0` — after load, `log_std.fill_(0.0)`, Adam created **after** load/reset.
+2. `RESET_LOG_STD=0` wired in `next-train-triple.sh` + **armed on continue-b** RPO+ERA recipe.
+3. Optional later: `target_kl` early-stop (SB3/CleanRL) — we still don't log `approx_kl`; oversized epochs can shove σ into the floor. Defer behind RPO+ERA+reset.
+
+### Q3 — Locked stack (updated)
+
+| Rank | Lever | Status this fire |
+|---|---|---|
+| 0 | Babysit B ENT035 → u80 | **DONE / FAILED** @u75–100 (explode + reward crash) |
+| 1 | Natural-exit → **RPO α=0.01 + ERA H₀=0.5 + ENT=0.02 + RESET_LOG_STD=0** | **STAGED** (code + continue-b); overnight owns exit |
+| 2 | gSDE / Zoo Pendulum ENT→0 (after 1) | Unchanged (05:31) |
+| 3 | Non-MaxEnt stay: ENERGY_W / short ep / EVAL-PPI / ATRPO | Unchanged |
+| 3b | PPO-BR ε contract if reward flat after σ tools | Unchanged |
+| — | ENT≥0.035 crank / AR-EAPO MaxEnt / Listing-2 D=1 pin / blind-resume floor-σ | **Banned** |
+
+A leave alone (past NaN zone). C leave as H1-var control. X1 still deferred until any H1 nt≳0.2.
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| ENT035 dead; allow natural-exit now | **Yes** | Confirm in #2 (viii) |
+| RPO+ERA **must** reset log_std (SB3 #155); no blind-resume floor-σ | **Yes** | **Yes** — #2 (viii) footgun |
+| target_kl companion | No (defer) | Optional leftover |
+| Mid-kill B from research | **No** — overnight owns | — |
+
+**Material:** babysit gate cleared with a bang (loss explode + reward −619); RPO+ERA resume recipe corrected with `RESET_LOG_STD`. NEED_USER_PING **yes**.
+
+**Code this fire (staging only):** `--reset-log-std` + continue-b `RESET_LOG_STD=0`. No train start / no mid-kill.
+
 
 ## Research pass (2026-09-20 ~05:31 CT) — H1: **Zoo Pendulum = ENT=0 + gSDE** (move gSDE into hold fail ladder)
 

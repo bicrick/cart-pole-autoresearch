@@ -38,8 +38,10 @@ start_tqc_wide() {
 start_ppo_h1() {
   bash scripts/quarantine-nan-ckpt.sh policies/checkpoint-triple-b.pt logs/continue-triple-b.log
   # H1 hold catcher: near_target only, no hang, noise=0.05, UUU-biased, force40, walls-on.
-  # ENT=0.035 alone failed (σ→dead, nt flat) — next stretch: RPO α=0.01 + ERA H₀=0.5 soft floor
-  # (CleanRL 2212.07536 / ERA 2510.08549). Keep ENT=0.02 (not ≥0.05). Resume ckpt — no cold wipe.
+  # ENT=0.035 alone failed (σ→dead, nt flat, then policy_loss explode @~u75) — next stretch:
+  # RPO α=0.01 + ERA H₀=0.5 soft floor (CleanRL 2212.07536 / ERA 2510.08549). Keep ENT=0.02.
+  # Resume actor mean weights BUT reset log_std→0 + rebuild Adam (SB3 #155) — do NOT blind-resume
+  # floor-σ; quarantine-nan still drops NaN ckpts → cold. Never AR-EAPO MaxEnt on H1.
   if [[ ! -f policies/.triple-b-h1-noise05-v1 ]]; then
     rm -f policies/checkpoint-triple-b.pt
     touch policies/.triple-b-h1-noise05-v1
@@ -58,7 +60,7 @@ start_ppo_h1() {
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
     INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.2 LR=1e-4 ENT=0.02 \
-    VEL_COST_COEF=0.015 RPO_ALPHA=0.01 LOG_STD_FLOOR=0.5 \
+    VEL_COST_COEF=0.015 RPO_ALPHA=0.01 LOG_STD_FLOOR=0.5 RESET_LOG_STD=0 \
     RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-rpo01-era05-ent02-bar10-prog1-flip \
     CHECKPOINT=policies/checkpoint-triple-b.pt \
     OUT=policies/policy-triple-b.json \
