@@ -20,6 +20,7 @@ while true; do
     sleep 30
     continue
   fi
+  bash scripts/quarantine-nan-ckpt.sh policies/checkpoint-triple-c.pt logs/continue-triple-c.log
   if [[ "${TRIPLE_C_COLD:-1}" == "1" && ! -f policies/.triple-c-h1var-walls-v1 ]]; then
     rm -f policies/checkpoint-triple-c.pt
     touch policies/.triple-c-h1var-walls-v1

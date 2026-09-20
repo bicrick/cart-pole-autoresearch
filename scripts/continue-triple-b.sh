@@ -36,6 +36,7 @@ start_tqc_wide() {
 }
 
 start_ppo_h1() {
+  bash scripts/quarantine-nan-ckpt.sh policies/checkpoint-triple-b.pt logs/continue-triple-b.log
   # H1 hold catcher: near_target only, no hang, noise=0.05, ENT=0.035 (bumped from 0.02 — entropy collapse @u48), UUU-biased, force40, walls-on.
   if [[ ! -f policies/.triple-b-h1-noise05-v1 ]]; then
     rm -f policies/checkpoint-triple-b.pt
