@@ -1,6 +1,51 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~09:00 CT.
+Last updated: 2026-09-20 ~09:34 CT.
+
+
+## Research pass (2026-09-20 ~09:34 CT) — AVC-lite **bias settling** but **H@ERA + nt flat**: FAIL gate must not wait for |bias|≳5; ret.mean≠V_φ; Acrobot height-line for S1 anti-DDD
+
+**Sources checked (this fire):** live TB `20260920-135858_*b-…-atrpo-avc02…` / `20260920-142955_*a-…-antidd…` / `20260920-140731_*c` (~09:34 CT); overnight/macro @09:25 (A NaN+DDD mid-kill → anti-DDD; B AVC babysit); prior research 09:00 (APO Alg.1 fidelity) + 08:33 (AVC named); **APO** Ma et al. arXiv:2106.03442 Alg.1 / Prop.3 / Fig.2 (EMA-η̂ + EMA-V_φ bias; E[V]=0); **Acrobot/Pendubot SAC→LQR** Zhang/Sathuluri/Zimmermann arXiv:2312.11311 §III Eq.4 (3-stage: quadratic + **height-line** h≥0.8(ℓ₁+ℓ₂) + LQR-RoA bonus + |ω|≥8 spin penalty); Lucas-Nülle cartpole arXiv:2412.02264 (priority regions: ω / cart only after |θ|<θ_thresh). Box `train_triple.py` confirms EMA-AVC path exists (`--avc-ema-alpha`); continue-b already stages `.triple-b-h1-atrpo-avc-ema-v1`. Overnight owns slots — **no mid-kill / no train start**.
+
+**Phase focus:** P1a walls-on role split; B = H1 ATRPO+AVC ν=0.2 @u60; A = S1 anti-DDD cold ~u4.
+
+| Slot | ~u | entropy | nt_at_goal/UUU | other |
+|---|---|---|---|---|
+| **A S1 anti-DDD** | ~**u4** (cold 14:29Z) | early | 1 eval only | hang_align/UUU **~−0.97**, hang_at_goal/DDD **~0.70** — expected cold; watch to ~u80 |
+| **B H1 ATRPO+AVC ν=0.2** | ~**u60** | **1.77→0.517 (=ERA pin)** | **0.039→0.041 flat** (peak 0.046@u50) | nt_align/UUU **−0.076→+0.176↑↑**; nt_DDD **0.84→0.063↓↓**; **avc_bias −3→+25@u8→−0.41@u60** (settling); ρ −1.03→**0.493**; V_loss→~9; **train/critic_mean MISSING** on live TB |
+| **C H1-var** | ~**u43** | **~0.73** | **~0.052 flat** | nt_align/UUU~0.20, OOB=0 — leave alone |
+
+### Q1 — Live failure mode: visit≠hold **with AVC-lite looking healthy**
+
+Same Spong class as ATRPO-lite, but the 09:00 “|avc_bias|≳5 after V settles ⇒ AVC-lite FAIL” **does not match this stretch**. Bias spiked early then collapsed toward 0; ρ/value healthy; yet H pinned ERA by **u60** and nt still ~0.04 while align climbs. **Do not mid-kill** — babysit to u80–100 stands — but rewrite the FAIL read:
+
+- Through u80–100: if H≲0.55 **and** nt≲0.10 (reward↑ / align↑ OK) → **ATRPO+AVC-lite FAIL** even when **|avc_bias|≪1**.
+- Healthy avc_bias ≠ stay. Cheap ret-shift can zero the logged bias while the policy still only *visits* UUU.
+
+### Q2 — MATERIAL: ret.mean AVC ≠ APO V_φ AVC; live TB cannot even check critic drift
+
+APO Alg.1 step 6: \(b ← (1-α)b + α·\mathrm{mean}_n V_\phi(s_n)\); targets \(Ṽ = V̂ − ν b\). Live AVC-lite (`avc_ema_alpha=0`): `avc_bias = ret.mean()` after GAE — **returns**, not critic. Box already has EMA-V path + `train/critic_mean` log when `avc_nu>0`, but **live B TB has no `train/critic_mean`** (VM likely behind box / old binary). So overnight cannot tell whether V_φ mean drifts while ret.mean sits near 0.
+
+**Implication for post-FAIL order (unchanged rank, sharper reason):** EMA-AVC α≈0.1 is not “same AVC again” — it switches bias source to **EMA of V_φ** (true Alg.1) + EMA-η̂. That is the correct harden when AVC-lite FAIL shows **healthy ret-bias**. Naik keep-γ remains the orthogonal twin if EMA-AVC also fails the same gate. Demote: waiting for |bias|≳5; mid-kill AVC early; AR-EAPO / MaxEnt (still banned for H1).
+
+### Q3 — S1 anti-DDD backup (A too early to judge): Acrobot **height-line** escapes hang basin
+
+A just cold-started anti-DDD (W_DOWN=0 UU_BIAS=2 ENERGY_W=0.6). Prior death = hang_align/UUU→−0.99 + hang_at_goal/DDD→0.82 (wrong-eq local opt). Zhang 2312.11311 §III: after quadratic swing, add fixed bonus when tip height \(h≥0.8(ℓ_1+ℓ_2)\), plus |ω|≥8 spin kill — steers off hang / spin-farm without asking swing to hold. Lucas-Nülle: only enable cart/ω costs after |θ|<θ_thresh. **Do not** change live A yet. If hang_at_goal/DDD climbs again by ~u80 → stage height-line / tip-height gate on next S1 natural restart (not W_DOWN=1).
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Mid-kill B AVC @u60 (H@ERA, bias≈0) | **No** — babysit to u80–100 | — |
+| Sharpen AVC FAIL: H≲0.55 ∧ nt≲0.10 **even if \|avc_bias\|≪1** | **Yes** — watch criteria | **Yes** — #2 (viii) |
+| EMA-AVC as harden when ret-bias healthy | already staged | **Yes** — reason sharpened (V_φ vs ret) |
+| Sync/log `train/critic_mean` on VM at next B restart | **Ops note** | — |
+| A height-line bonus if DDD farm returns | **No** until A fails ~u80 | **Yes** — S1 anti-DDD backup |
+| Displace EMA-AVC / Naik order | **No** | — |
+
+**Material:** yes — live counterexample to “wait for bias drift” FAIL read + ret≠V_φ gap confirmed on meters + Acrobot height-line cookbook for A. Does **not** beat live babysit Next. NEED_USER_PING **yes**.
+
+**Code this fire:** docs only (research + macro FAIL-gate sharpen). No train start / no mid-kill.
 
 
 ## Research pass (2026-09-20 ~09:00 CT) — live **ATRPO+AVC ν=0.2** early babysit + **APO Alg.1 fidelity gap** (EMA-η̂ + EMA-V bias)
