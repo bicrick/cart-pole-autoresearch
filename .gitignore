@@ -51,3 +51,6 @@ policies/tqc-triple-uuu_ckpts/
 policies/tqc-triple-uuu_best/
 policies/tqc-triple-uuu-smoke_ckpts/
 policies/tqc-triple-uuu-smoke_best/
+
+# Local TB archives (never commit)
+runs_archive/
