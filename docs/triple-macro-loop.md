@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~21:30 CT  
+Last updated: 2026-09-19 ~21:54 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -27,9 +27,14 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Current phase + next micro-task
 
 - **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Next micro-task:** **leave PPO entropy roulette.** Live A cool-ent v6 (~u120, nt~0.045) and C entboost v7 (~u105, nt~0.053) finish their stretches undisturbed. **B** PPO v7b (~u283, entropy saturated 3.42, nt~0.05) → on natural exit, `continue-triple-b` now launches **Lim TQC UUU specialist** (marker `.triple-b-tqc-uuu-v1`). If TQC still flat after ~150k steps → implement two-policy swing→hold handoff next.
+- **Live (~21:54 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/15.6GB, up ~43h). TB http://34.148.138.48:6006/
+  - **A** PPO cool-ent v6 swing f50 ~**u160** nt_at_goal/UUU~**0.035** (continue-a waiting)
+  - **B** PPO entboost v7b hold f40 ~**u320**/400 nt~**0.049** align_UUU~0.22 — flat; continue-b already TQC-staged, waiting natural exit → Lim TQC UUU (~**ETA ~22:40 CT**, ~80u×~34s)
+  - **C** PPO entboost v7 combo f40 ~**u020** (cold-started 02:38Z) nt~**0.03** early
+- **Next micro-task:** **do not touch A/C.** Leave B PPO undisturbed until exit; `continue-triple-b` launches TQC UUU (marker `.triple-b-tqc-uuu-v1`, venv `.venv-tqc` deps OK). Once TQC is live, track timesteps/`ep_rew_mean` + any UUU hold eval. If TQC flat after ~150k steps → two-policy handoff. Empty `runs/tqc-uuu-f40-hold-wide*` dirs from 02:38Z are stale meta-only (no training log) — real run starts on B exit.
 - **Kill list:** no double/xonly on the L4; slots = A PPO / B→TQC / C PPO (until C stretch ends)
 - **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM
+- **NEED_USER_PING:** no (B not yet on TQC; gate ≪0.80; no failure)
 
 ## Ranked backlog (pull from top when a stretch ends)
 
