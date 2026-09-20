@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~01:25 CT
+Last updated: 2026-09-20 ~01:28 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -23,6 +23,24 @@ Patrick should not have to poke the demo to find our bugs. Every overnight/resea
 - Wrong plant phase (nowalls before walls-on worked — same lesson as double)
 
 When found: name root cause, update Next micro-task, implement carefully, push, arm natural restart. Harden the checklist so that class of miss does not repeat.
+
+
+## Training breakup (how we actually ship UUU)
+
+Do **not** train one mega-policy to swing + hold + recover. Split by **role**, plant phase, then compose.
+
+| Stage | Who trains | Plant | ICs / recipe | Gate to leave | Slot bias |
+|---|---|---|---|---|---|
+| **H1 — Hold specialist** | Balance-only policy (PPO or tight TQC) | **Walls on** | Near-upright only (`near_goal_p≈1`, noise≲0.05–0.15, **no hang**). Product reward, center OK. | `near_target/at_goal/UUU` ≳ **0.80**, align ≳ **0.90** | **B** (live) |
+| **S1 — Swing specialist** | Swing-only policy | **Walls on** | Hang / bottom heavy; progress reward; deliver toward UUU (align↑), not required to hold forever | Hang align climbing; can reach enter-gate often | **A** |
+| **X1 — Handoff** | Glue S1→H1 | Walls on | Enter \|φ\|≲0.1 & ω small; latch; exit 0.25; dwell; optional LPF. Eval `handoff_eval` smoke | Hang→hold success rate useful (e.g. ≳0.3 then chase) | CPU eval + one GPU slot when ready |
+| **H2 / S2 — Void FT** | Fine-tune H1 then S1+X1 from walls keepers | **Walls off** | Same roles; hard oob_penalty; no center-only farming | Same meters on void plant | After H1 (hold first!) |
+| **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
+| **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
+
+**Live mapping (2026-09-20):** B = H1 walls-balance; A = walls-hold (treat as H1 sibling until hold gate, then retarget to S1); C = walls-combo exploration (kill/repurpose if it stays flat past ~u150). Do not relaunch wide void TQC.
+
+**Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
 ## Macro phases (advance only when the gate clears)
 
