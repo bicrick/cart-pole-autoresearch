@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~06:45 CT
+Last updated: 2026-09-20 ~07:05 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -61,16 +61,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~06:45 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
-  - **A = S1 walls-swing** — LR=1e-4 ~**u322**/400 hang_align/UUU **−0.029**, nt_UUU~0.055, ent **~1.28**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`. ETA ~0.5h.
-  - **B = H1 RPO+ERA ENT=0** — **LIVE** pid 163610 ~**u1** (mid-kill @11:43Z from ENT=0.02 @u40): ent **1.70** after reset log_std→0, nt_UUU **0.039**, policy_loss −0.01, OOB=0. Marker `.triple-b-h1-rpo01-era05-ent0-v1`. ETA ~2.4h.
-  - **C = H1-var** — ~**u148** ENT=0.05 ent **~0.95** nt~0.055 — leave alone. Marker `.triple-c-h1var-walls-v1`. ETA ~1.5h.
+- **Live (2026-09-20 ~07:05 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
+  - **A = S1 walls-swing** — LR=1e-4 ~**u360**/400 hang_align/UUU **−0.037**, nt_UUU~0.056, ent **~1.22**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`. ETA ~0.3h.
+  - **B = H1 RPO+ERA+gSDE ENT=0** — **LIVE** pid 164727 ~**u1** (mid-kill @12:03Z from ENT=0 @u30): ent **1.59**, nt_UUU **0.045**, `--use-sde --sde-sample-freq 4`, OOB=0. Marker `.triple-b-h1-gsde-ent0-v1`. Commit `a7a764f`. ETA ~2.4h.
+  - **C = H1-var** — ~**u183** ENT=0.05 ent **~0.92** nt~0.055 — leave alone. Marker `.triple-c-h1var-walls-v1`. ETA ~1.3h.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire (overnight):** B ENT=0.02 failed early (ent 1.78→0.97 @u40, nt flat↓, reward↑/hold≈0). **Mid-killed** into staged **RPO+ERA ENT=0 + RESET_LOG_STD=0** (CleanRL/Zoo). Left A/C alone.
-- **Next micro-task:** (1) Babysit live B RPO+ERA **ENT=0**: watch σ stay ≳1.0 through ~u80; if σ-dies / nt flat / reward↑-hold≈0 by ~u100 → next is **gSDE/Zoo `use_sde` + ENT=0** (not another ENT crank). (2) Never ENT≥0.02 on RPO / AR-EAPO / blind-resume floor-σ. (3) Watch A (policy_loss explode → mid-kill + LR/grad clip; stretch ends ~0.5h). (4) C = H1-var control. (5) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
-- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1** / **C H1-var**
-- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**
-- **NEED_USER_PING:** **yes** — standing think-out-loud (mid-killed B ENT=0.02 → ENT=0 live @u1)
+- **Diagnosis / actions this fire (overnight):** B ENT=0 failed *faster* than ENT=0.02 (ent 1.70→0.61 @u30, nt flat, rollout_reward↑). ERA soft floor ≠ exploration. **Shipped gSDE** (Zoo use_sde sf=4) + mid-killed B cold. Left A/C alone.
+- **Next micro-task:** (1) Babysit live B **gSDE**: watch entropy stay ≳1.0 through ~u80 and nt_UUU trend; if σ-dies again / nt flat / reward↑-hold≈0 by ~u100 → next is **non-MaxEnt stay pressure** (Turcato short ep / Spong ENERGY_W↑ / EVAL-PPI) — **not** another ENT crank. (2) Never ENT≥0.02 on RPO / AR-EAPO / blind-resume floor-σ / re-arm ENT=0-no-gSDE. (3) Watch A stretch end (~0.3h): if policy_loss explode mid-kill+LR; else natural → flat-eval ladder branch. (4) C = H1-var control. (5) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
+- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1+gSDE** / **C H1-var**
+- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch ENT=0 without gSDE; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**
+- **NEED_USER_PING:** **yes** — standing think-out-loud (mid-killed B ENT=0 → gSDE live @u1)
 
 
 ## Ranked backlog (pull from top when a stretch ends)
