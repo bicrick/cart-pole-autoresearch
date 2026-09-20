@@ -1,7 +1,72 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~00:34 CT.
+Last updated: 2026-09-20 ~00:55 CT.
 
+
+## Research pass (2026-09-20 ~00:55 CT) — P1a walls-on hold + PPO-balance under walls + center-farm checklist
+
+**Sources checked (this fire):** local `docs/paper-training-lessons.md` Track walls / (h–j) hardwalls / (ai–aj) void / **(ap) walls-first**; `docs/triple-macro-loop.md` @00:53; `train/train_triple.py` `--track-walls` / product / barrier; `scripts/continue-triple-{a,b,c}.sh` + `next-train-triple-walls.sh`; fawraw `m4_findings.md` + barrier commit (bar50 / (x/L)^8); Baek EAAI 2024 product+VER; Glück Automatica 2013 rail-constrained ~22 m/s²; double inelastic walls history (`wallRestitution=0`, center_w/hold). **Did not redo** 00:34 handoff_eval / LQI / `--init-noise` pass.
+
+**Phase focus:** **P1a walls-on UUU** (A LIVE cold-start ~05:53Z). Prior void A/C dead on hold (nt_UUU ~0.039 / 0.056). B TQC reward-hack finishing → PPO-balance. Overnight owns slots — no train start.
+
+### Q1 — Walls-on UUU hold (P1a): what papers + double say; knobs if A's first evals stay flat
+
+| Claim | Concrete default / evidence | Live A vs gap |
+|---|---|---|
+| **Walls-first then void** | Double: hard inelastic cart-only walls → upright → strip walls (lessons Track walls / ap). Glück/Graichen: rail length is the binding constraint — train *with* bounded rail, not void-death. | **Correct plant** now on A (`TRACK_WALLS=1`); P1b nowalls FT only after gate nt≳0.80 / align≳0.90 |
+| **Inelastic, not bounce-explore** | `wallRestitution=0`: clamp \(x\), kill \(\dot x\), **no pole impulse**. Elastic 0.3 let UU prop at rail (paper-lessons Walls are cart-only). | Do **not** raise restitution for "exploration" |
+| **Product under walls** | Lim/Baek product on world angles; walls remove OOB-death as competing "stay mid" teacher so product can teach upright (user+ap diagnosis). | Live: product + progress1 + flip — keep |
+| **Barrier under walls** | Soft mid→edge pressure still useful (rail-park ≠ OOB). fawraw swing probe **bar=50** `(x/L)^8`; live hold recipes use **bar=10**. Double rail-park fix was `center_w=0.06` + `center_hold_w=0.18→0.30` (Xin/Spong stay). | A already gets center defaults via `next-train-triple.sh` (`CENTER_W=0.06`, `CENTER_HOLD_W=0.30`) + `CART_BARRIER_COEF=10` |
+| **Force** | Glück ~**22 m/s²** cart accel; our benches ~f40–50. Prior void force40 did not unlock UUU — plant phase was the miss, not force. | Stay **f40**; probe 40→60 only if OOB≈0 **and** plant feels underpowered after walls have evals |
+| **near_target / hang** | fawraw M2 / BaRC: hold from near_target, hang=0 until hold moves. | Live hang=0 / near_target — keep |
+| **Entropy for hold** | Prior triple A cool-ent collapse (ent→negative) killed explore. Catcher later uses ENT=0.02; early walls hold wants **≥0.05**. | Live ENT=**0.05** / lr1e-4 — leave mid-run |
+| **Early reward dip OK** | Double walls FT: reward→0/−150 while align/UU held ~0.6–0.68 through warmup, then recovered (lesson g). | Do **not** mid-kill on first flat reward if nt_align climbing |
+
+**If A's first evals (~u10–80) stay flat** (nt_at_goal/UUU ≲0.05 and align not climbing) — natural-exit ladder only, **never mid-kill**:
+
+1. Confirm plant: `track_walls=True` in run name / log; `train/oob_rate≈0` (walls suppress void OOB).
+2. **bar 10→50** (fawraw rail-slide killer) if mean `|x|` parks near trackLimit while angles flop.
+3. **ENERGY_W 0.2→0.35** + optional shorter episode only if visit≠hold (Spong) after u150.
+4. Tighten IC after first nt signal: `INIT_NOISE→0.05` (needs PPO CLI — still gap from 00:34); keep hang=0.
+5. Cool-ent only if entropy collapsed ≤−0.1 with flat nt (prior A pattern) — else leave ENT=0.05.
+6. Do **not** flip to hang curriculum / force60 / void mid-P1a.
+
+### Q2 — TQC reward↑/hold=0 → PPO-balance (slot B): confirm + sharpeners beyond 00:34
+
+**Confirm do-not-extend TQC:** ep_rew~567 / success≈0 @~273k is classic product flopping (reward hacking). Basin @150k already **0/9**. Natural exit → PPO-balance; no TQC extend / no wide TQC relaunch.
+
+| Sharpener | Concrete | vs 00:34 |
+|---|---|---|
+| **Plant for catcher** | During **P1a**, PPO-balance must start with **`TRACK_WALLS=1`** (same plant as A/C swing/hold). Live `continue-triple-b.sh` `start_ppo_balance` calls `next-train-triple.sh` with default **`TRACK_WALLS=0`** → **void catcher while walls-on is the phase**. | **New gap** (not in 00:34) |
+| Walls vs void | Catcher plant must match the swing policy it will hand off from. P1a → walls catcher; after P1b strip walls on both. | New |
+| init-noise / vel-cost | Still: wire PPO `--init-noise=0.05`; `--vel-cost-coef` **0.01–0.02** on balance only | Already 00:34 — do not redo |
+| ENERGY_W / ENT | Armed ENERGY_W=0.2 / ENT=0.02 / hang=0 / near_goal=1 — good. Optional ENERGY_W→0.25 only if balance also flops upright | Minor |
+| Barrier on catcher | Keep bar10 under walls; bump 50 only if rail-park | Ops |
+
+### Q3 — Center / void-death farming checklist (walls → P1b void later) — document only
+
+Trigger symptoms after walls-off FT starts (do **not** act on walls plant yet):
+
+1. **Tiny mean `|x|`** + thrashing link angles while `ep_rew` / product climbs.
+2. `eval/near_target/at_goal/UUU` flat / ≪ align (visit≠hold / flop).
+3. `train/oob_rate` near 0 early then spikes as policy learns "suicide for reset" or stays 0 while never erecting.
+4. Demo look: cart glued mid-track, poles windmilling — user "not upright" report.
+
+Mitigations (P1b only): keep `oob_penalty≥20` **after** clip; FT from P1a ckpt (do not cold void); retain `center_w≥0.06` / `center_hold_w≥0.30` + barrier during transfer; gate leave-P1a only at nt≳0.80 / align≳0.90; watch `|x|` histogram + oob_rate every fire.
+
+### Q4 — Beats live Next / backlog?
+
+| Candidate | Beats live Next? | Beats / sharpens backlog? |
+|---|---|---|
+| Babysit A walls; C→walls; B→PPO-balance; then P1b | — | Status quo (Next @00:53) |
+| P1a flat-eval retune ladder (bar50 / ENERGY_W / no mid-kill) | No | **Sharpens** ops for A babysit |
+| **TRACK_WALLS=1 on PPO-balance start** (script gap) | No (overnight owns B exit) | **Sharpens #2** cold-start — must-fix before/as B flips |
+| Center-farm checklist for P1b | No | Doc-only; watch list |
+| Extend TQC / mid-kill A / elastic walls / force60 now | No | Banned |
+
+**Nothing clearly beats** the live Next micro-task. Stay the course.
+
+**Promote?** Macro **Ranked backlog #2** only — add `TRACK_WALLS=1` on PPO-balance during P1a + note flat-eval ladder. **Do not** rewrite Next / Live slot lines. NEED_USER_PING no (overnight already pinged first walls-on).
 
 ## Research pass (2026-09-20 ~00:34 CT) — P1 UUU-hold: handoff_eval smoke + LQI widen + PPO-balance cold-start gaps
 
