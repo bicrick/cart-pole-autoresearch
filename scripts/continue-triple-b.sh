@@ -36,7 +36,7 @@ start_tqc_wide() {
 }
 
 start_ppo_h1() {
-  # H1 hold catcher: near_target only, no hang, noise=0.05, UUU-biased, force40, walls-on.
+  # H1 hold catcher: near_target only, no hang, noise=0.05, ENT=0.035 (bumped from 0.02 — entropy collapse @u48), UUU-biased, force40, walls-on.
   if [[ ! -f policies/.triple-b-h1-noise05-v1 ]]; then
     rm -f policies/checkpoint-triple-b.pt
     touch policies/.triple-b-h1-noise05-v1
@@ -50,9 +50,9 @@ start_ppo_h1() {
     GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
-    INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.2 LR=1e-4 ENT=0.02 \
+    INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.2 LR=1e-4 ENT=0.035 \
     VEL_COST_COEF=0.015 \
-    RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-bar10-prog1-flip \
+    RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-ent035-bar10-prog1-flip \
     CHECKPOINT=policies/checkpoint-triple-b.pt \
     OUT=policies/policy-triple-b.json \
     bash scripts/next-train-triple.sh \

@@ -38,7 +38,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~01:44 CT):** **A = S1** walls-swing; **B = H1** walls-hold (tight `INIT_NOISE=0.05`); **C = H1-var** walls-hold (lr/ent/noise variant). Combo mush retired. X1 handoff_eval staged. `VEL_COST` staged for next H1 restart. Do not relaunch wide void TQC.
+**Live mapping (2026-09-20 ~02:02 CT):** **A = S1** walls-swing; **B = H1** walls-hold (tight `INIT_NOISE=0.05`, **ENT staged 0.035** for next restart); **C = H1-var** walls-hold (lr/ent/noise variant). Combo mush retired. X1 handoff_eval staged. `VEL_COST=0.015` + B `ENT=0.035` apply on **natural restart only**. Do not relaunch wide void TQC.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -58,16 +58,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 ## Current phase + next micro-task
 
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~01:44 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/15.6GB). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c. Commit `0eab823` stages `VEL_COST_COEF` for next natural H1 restart. **Roles confirmed healthy cold.**
-  - **A = S1 walls-swing** — pid **145281** / watcher **146715** — `INIT_MODE=bottom`, hang_p=0.85, near_goal_p=0.10, warmup=0, progress_w=1, product, `TRACK_WALLS=1`, ENT=0.05 LR=3e-4. Marker `.triple-a-s1-walls-v1`. Run `…-walls-swing-s1-…`. ~**u16** reward~222 hang_align/UUU **-0.80→improving from -0.98** nt_UUU~0.035 OOB=0 ent~1.69↑. Healthy early.
-  - **B = H1 walls-hold (tight)** — pid **145275** / watcher **146716** — `INIT_MODE=near_target`, near_goal_p=1.0, hang=0, warmup=0, **`INIT_NOISE=0.05`**, product, `TRACK_WALLS=1`, ENT=0.02 LR=1e-4. Marker `.triple-b-h1-noise05-v1`. Run `…-walls-hold-h1-…-in005-…`. ~**u18** reward~225 nt_UUU~0.034 nt_align/UUU **-0.03** (still cold) OOB=0 ent **1.45→1.12** (watch — ENT=0.02 intentional, not collapsed). Healthy early; **do not mid-kill**.
-  - **C = H1-var walls-hold** — pid **145280** / watcher **146717** — same near-only as B but LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1`. ~**u16** reward~221 nt_UUU~0.033 OOB=0 ent~1.74. Healthy early.
-- **X1 handoff:** staged. Smoke deferred until H1 shows nt/align signal (ckpts exist but ~u15 cold — not informative). `VEL_COST_COEF=0.015` now wired in `next-train-triple.sh` + continue-b/c for **next natural restart only** (soft-land leftover from backlog).
-- **Diagnosis / actions this fire:** Roles match S1/H1/H1-var (cmdline + markers + TB run names). Reward↑/hold≈0 is **cold-start product reward**, not yet diagnosed as hacking. No center-farm signal (OOB=0). No void/TQC. Staged vel-cost wire; left live stretches alone.
-- **Next micro-task:** (1) Babysit to ~u50–100: B/C `eval/near_target/at_goal/UUU` + align; A `eval/hang/align*` climbing. (2) Watch B entropy floor — if <0.3 with nt still flat past ~u80, plan ENT 0.02→0.03–0.04 on natural exit only. (3) When B nt≳0.2 or align climbing clearly, run `eval-handoff-uuu.sh` smoke. (4) H1 gate nt≳0.80 align≳0.90 → keep H1, then P1b void FT. Never void-FT before walls hold works. Never mid-kill healthy stretch.
+- **Live (2026-09-20 ~02:02 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/15.6GB). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c (B rearmed this fire). Commit pending `ENT=0.035` stage. **Train PIDs undisturbed** (~u45–50).
+  - **A = S1 walls-swing** — pid **145281** — `INIT_MODE=bottom`, hang_p=0.85, near_goal_p=0.10, warmup=0, progress_w=1, product, `TRACK_WALLS=1`, ENT=0.05 LR=3e-4. Marker `.triple-a-s1-walls-v1`. ~**u40** reward 222→137 hang_align/UUU **-0.98→-0.11** hang_at_goal~0.002 nt_UUU~0.03 OOB=0 ent **1.45→2.01↑**. Healthy swing climb — leave alone.
+  - **B = H1 walls-hold (tight)** — pid **145275** — near_goal_p=1.0, hang=0, **`INIT_NOISE=0.05`**, product, walls, **live ENT=0.02** (next restart **ENT=0.035** + VEL_COST=0.015). Marker `.triple-b-h1-noise05-v1`. ~**u48** reward~220 nt_UUU~0.034 nt_align **-0.07→-0.007** OOB=0 ent **1.45→0.73↓** (~0.01/u) rollout_rew↑. **Entropy collapse + reward↑/hold≈0** — do **not** mid-kill; ENT bump staged for natural exit.
+  - **C = H1-var walls-hold** — pid **145280** — LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1`. ~**u40** reward 221→186 nt_align **-0.06→0.05** nt_UUU~0.036 OOB=0 ent **1.46→2.01↑**. Healthier hold exploration than B — leave alone.
+- **X1 handoff:** staged. Smoke deferred until H1 shows nt/align signal (B still cold on hold). Soft-land `VEL_COST_COEF=0.015` already in continue-b/c.
+- **Diagnosis / actions this fire:** A hang_align climb is real S1 progress (not hacking). B shows early entropy collapse under ENT=0.02 with flat nt_UUU — classic reward↑/hold≈0; C contrast (higher ENT) explores better. **GO:** stage B ENT 0.02→0.035 for next natural restart (continue from ckpt; new RUN_NAME `-ent035`); rearm watcher B; no mid-kill; no void/TQC.
+- **Next micro-task:** (1) Babysit to stretch end (~u400) or natural exit: watch B ent floor — if <0.3 with nt still flat, confirm ENT=0.035 restart fired; if still flat after ~u80 of ent035 stretch, consider cold wipe new marker. (2) A hang_align toward 0 / hang_at_goal↑ → when B nt≳0.2 run `eval-handoff-uuu.sh`. (3) C keep as H1-var control. (4) H1 gate nt≳0.80 align≳0.90 → keep H1, then P1b void FT. Never void-FT before walls hold. Never mid-kill healthy/climbing stretch (A/C healthy; B collapsing but finish stretch).
 - **Kill list:** no double/xonly; no void TQC; slots = **A S1 swing** / **B H1 hold** / **C H1-var hold**
-- **Do not:** mid-kill healthy H1/S1 stretches; relaunch wide TQC; stack GPU; treat TQC zip as catcher; run void during P1a
-- **NEED_USER_PING:** **no** — early healthy cold; vel-cost staged for next restart
+- **Do not:** mid-kill A/C; kill B mid-stretch for ENT bump (already staged); relaunch wide TQC; stack GPU; run void during P1a
+- **NEED_USER_PING:** **no** — B ENT bump staged; A climbing; no gate clear yet
 
 
 ## Ranked backlog (pull from top when a stretch ends)
