@@ -1,6 +1,51 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~02:58 CT.
+Last updated: 2026-09-20 ~03:28 CT.
+
+## Research pass (2026-09-20 ~03:28 CT) — RPO α footgun: pendulum needs **0.01**, not 0.3–0.5
+
+**Sources checked (this fire):** live TB `runs/20260920-063349_*` (~u200–209); overnight/macro @03:21; prior research 02:58 (AR-EAPO) + 02:33 (RPO α≈0.3–0.5); **CleanRL RPO docs** (https://docs.cleanrl.dev/rl-algorithms/rpo/) + arXiv:2212.07536 Alg.1 / §4.2.5 α ablation; ERA 2510.08549 reconfirm (soft floor still #2). Overnight owns slots — no train start / no mid-kill.
+
+**Phase focus:** P1a walls-on UUU via role split. Fresh meters (~u200–209, ~03:28 CT / ~115 min post cold @01:33 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** | 208 | **1.47** (stable) | 0.035 | **0.23** | hang path still healthy; leave alone |
+| **B H1** | 209 | **−0.05↓↓↓** (past 0; σ≈e^(H−0.5ln2πe) ≈ **0.24**) | **flat ~0.046** | **0.163↑** (was +0.15@u197) | reward↑ / hold≈0; visit≠hold; ENT035 still staged |
+| **C H1-var** | 201 | **1.67** | **0.053** (slight↑) | 0.139 | still best H1 contrast; leave alone |
+
+### Q1 — Confirmed dead path: RPO α≈0.3–0.5 on inverted-pendulum plants
+
+Prior Next / backlog #2 (viii) said **RPO α≈0.3–0.5**. CleanRL + paper numbers **kill that band** for our plant class:
+
+| Env | PPO | RPO α=**0.5** | RPO α=**0.01** |
+|---|---|---|---|
+| **InvertedDoublePendulum-v4** | ~5644 | **~297** (catastrophic) | ~5409 (recovers) |
+| InvertedDoublePendulum-v2 | ~5675 | **~275** | ~5661 |
+| Ant / Reacher / Pusher | OK-ish / mixed | often worse | recommended |
+
+CleanRL explicit note: *“we recommend using `--rpo-alpha 0.01` for Ant, Hopper, **InvertedDoublePendulum**, Reacher, Pusher.”* Paper §4.2.5: α∈[0.1, 3] often fine in general; **α=0.5 is the default that fails on IDP**. Cart-**triple** inverted is *harder* than double — defaulting to 0.3–0.5 would likely thrash the catcher, not fix entropy.
+
+**Mechanism reminder (Alg.1):** sample with unperturbed \(N(\mu,\sigma)\); on the **update** pass only, \(z\sim U(-\alpha,\alpha)\), \(\mu'=\mu+z\), recompute log-prob under \(N(\mu',\sigma)\). Orthogonal to ERA (mean vs log_std). Our Actor: global `log_std` + `tanh(raw)*forceLimit` — perturb **raw pre-tanh mean** (same units as CleanRL continuous Box / latent), so **α≈0.01** is the right first try, not Newtons.
+
+**Also confirmed this fire:** IsaacGym Cartpole + Gym Pendulum still support *that RPO helps when PPO entropy dies under abundant samples* (we run 8192 envs) — the lever stays; only the **α band** was wrong.
+
+### Q2 — Corrected fail stack after ENT035
+
+1. Babysit → natural ENT=0.035 + VEL_COST (already staged) — unchanged.
+2. If H↓ + nt flat ~u80 on that stretch → **RPO α≈0.01** (pendulum-class) **or** ERA soft `log_std` floor (H₀≈0.5–0.8). **Do not** ship α=0.3–0.5.
+3. If visit≠hold persists (align↑ / nt flat) → AR-EAPO-style stay pressure (short ep / ENERGY_W / later avg-reward) before cold wipe / C-recipe promote.
+4. Optional α ladder only if 0.01 is a no-op: 0.01 → 0.05 → 0.1 (stop well below IDP-fail 0.5).
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Correct RPO α **0.3–0.5 → ≈0.01** (pendulum / IDP CleanRL) | **Yes** — fail branch (2) | **Yes** — #2 (viii) |
+| Mid-kill B / jump ENT=0.05 / void / TQC | No | Banned |
+| Babysit + ENT035 natural restart | No (already Next) | — |
+
+**Nothing displaces** babysit + ENT035. **Corrects a dangerous wrong number** before overnight codes RPO. NEED_USER_PING **yes** — material α footgun + live B H≈−0.05 @u209.
 
 ## Research pass (2026-09-20 ~02:58 CT) — B H→0.20 collapse deepening + AR-EAPO average-reward hold
 
