@@ -1,6 +1,66 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~01:28 CT.
+Last updated: 2026-09-20 ~01:58 CT.
+
+## Research pass (2026-09-20 ~01:58 CT) — H1 entropy floor under ENT=0.02 + BaRC widen-after-mastery
+
+**Sources checked (this fire):** overnight/macro @01:44–01:46 (S1/H1/H1-var role split LIVE); prior research 01:28; fawraw `docs/m4_findings.md` (CDN reconfirm — catch 0.1@ω≈0, widen catcher **before** soft delivery); ERA arXiv:2510.08549 (+ Listing 2 / PPO H₀≈−0.3A); RPO arXiv:2212.07536 (ent_coef 0.01 helps, ≥0.05 can unbound); arXiv:2606.28627 V_aug ẋ→0 handoff ⊆ RoA; BaRC arXiv:1806.06161; airo7 MPC↔PPO soft-land (−ω² / −ẋ²). Skimmed box: `--init-noise` **wired**; `handoff_eval.py` + `eval-handoff-uuu.sh` **staged**; `VEL_COST_COEF=0.015` on continue-b/c for **next** restart; Actor is **global** `log_std` (`train/ppo.py`, clamp −5…2) not state-dep MLP. Overnight owns slots — no train start / no mid-kill.
+
+**Phase focus:** **P1a walls-on UUU via role split**. Live (~01:46, ~10 min post cold @01:33 CT): A S1 ~u16 hang_align −0.98→−0.80 nt~0.035 ent~1.69↑; B H1 ~u18 nt~0.034 align~−0.03 ent **1.45→1.12** (watch) ENT=0.02; C H1-var ~u16 ent~1.74. Reward↑/hold≈0 = cold product, not hacking. OOB=0. Gate ≪0.80.
+
+### Gap close vs 01:28 leftovers
+
+| Leftover @01:28 | Status @01:58 |
+|---|---|
+| PPO `--init-noise` missing | **DONE** — LIVE B=0.05 / C=0.08 |
+| `handoff_eval.py` absent | **STAGED** (`scripts/handoff_eval.py` + `eval-handoff-uuu.sh`, tol=0.1) |
+| B vel-cost unset | **STAGED** `VEL_COST_COEF=0.015` on continue-b/c — applies on **natural restart only**; live stretch undisturbed |
+| Role split unimplemented | **LIVE** A=S1 / B=H1 / C=H1-var |
+
+Highest *unimplemented* lever is no longer “split swing vs hold” — it is **H1 widen-after-mastery → soft S1 delivery → X1 smoke**.
+
+### Q1 — B entropy 1.45→1.12 under ENT=0.02: cool, not collapse (yet)
+
+1-D Gaussian decode (our Actor logs `Normal.entropy()` on latent force before tanh·forceLimit):
+
+| Logged H | σ ≈ | Read |
+|---|---|---|
+| 1.45 → 1.12 | 1.03 → 0.74 | Early cool under tight ENT — healthy |
+| 0.30 (Next tripwire) | ~0.33 | Floor with nt still flat → act |
+| ≤0 (prior cool-ent collapses) | ≲0.24 | True collapse class — avoid |
+
+**Paper steals for the watch (natural restart only if tripwire hits):**
+
+1. **Mild ENT bump first** (already in Next): 0.02→**0.03–0.04**. RPO: 0.01 helps Pendulum/Bipedal; **≥0.05** risk unbounded entropy / worse return — do **not** jump H1 to 0.05 (C already explores at 0.05).
+2. **ERA floor on global `log_std`** (arXiv:2510.08549) if ENT crank fails or distorts product hold: our Actor is a **single** `nn.Parameter` `log_std`, so steal the *idea* not the multi-dim softmax Listing 2 — clamp `log_std ≥ log(σ_min)` so H≥H₀ (e.g. H₀≈0.5–0.8 ⇒ σ≳0.4–0.54) and keep `--ent` small / zero. Decouples explore floor from reward objective (ERA’s whole point vs cool-ent β crank). Prefer over another cool-ent wipe.
+3. Do **not** mid-kill for entropy alone while nt cold and H≳1.0.
+
+### Q2 — After H1 shows signal: BaRC widen **before** soft-land A (fawraw order)
+
+fawraw M4 + BaRC: catcher basin is the binding constraint; **widen catcher first**, then soft-deliver swing into it.
+
+| Gate | Action (natural restart / post-stretch) |
+|---|---|
+| B `eval/near_target/at_goal/UUU` ≳ **0.5** (BaRC \(C_{\mathrm{pass}}\)) on noise=0.05 | Expand H1 `INIT_NOISE` **0.05→0.10** (then 0.15) + optional nonzero ω / off-centre \(x\); keep hang=0 |
+| B nt ≳ **0.2** or align climbing clearly | Run `eval-handoff-uuu.sh` smoke (already in Next) |
+| A has hold / high-align delivery signal | Soft-land S1: −w_ω / cart-centre / V_aug **ẋ→0** (2606.28627) so handoff ⊆ B RoA — **not** while A is still early hang-align climb |
+| Live vel-cost | Already staged 0.015 for next H1 restart (Baek/airo7 soft-land cousin on ω); leave live stretch |
+
+Banned: soft-land A while A nt flat; expand H1 hang mixture; void FT before walls hold; TQC relaunch.
+
+### Q3 — Beats live Next / backlog?
+
+| Candidate | Beats live Next? | Beats / sharpens backlog? |
+|---|---|---|
+| Babysit A/B/C to ~u50–100 | — | Status quo (Next @01:44) |
+| ENT 0.02→0.03–0.04 if B H<0.3 + nt flat past ~u80 | No (already Next) | Confirmed by RPO band |
+| ERA `log_std` floor if ENT bump fails | No | **Sharpens #2** entropy leftover |
+| BaRC H1 expand 0.05→0.10 after nt≳0.5 | No (premature now) | **Sharpens #2** catcher widen order |
+| Soft-land A / void / mid-kill / TQC now | No | Banned |
+
+**Nothing clearly beats** the live Next micro-task. Stay the course: babysit; entropy tripwire; handoff smoke when B signals; BaRC expand + soft-land only after mastery.
+
+**Promote?** Macro **Ranked backlog #2** only — add BaRC widen-after-mastery + ERA `log_std` floor as post-signal / entropy-fail leftovers. **Do not** rewrite Next / Live. NEED_USER_PING no.
 
 ## Research pass (2026-09-20 ~01:28 CT) — P1a early walls: Spong visit≠hold branch + catcher RoA leftovers
 
