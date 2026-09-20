@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~21:56 CT  
+Last updated: 2026-09-19 ~22:15 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -27,14 +27,14 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Current phase + next micro-task
 
 - **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Live (~21:54 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/15.6GB, up ~43h). TB http://34.148.138.48:6006/
-  - **A** PPO cool-ent v6 swing f50 ~**u160** nt_at_goal/UUU~**0.035** (continue-a waiting)
-  - **B** PPO entboost v7b hold f40 ~**u320**/400 nt~**0.049** align_UUU~0.22 — flat; continue-b already TQC-staged, waiting natural exit → Lim TQC UUU (~**ETA ~22:40 CT**, ~80u×~34s)
-  - **C** PPO entboost v7 combo f40 ~**u020** (cold-started 02:38Z) nt~**0.03** early
-- **Next micro-task:** **do not touch A/C.** Leave B PPO undisturbed until exit; `continue-triple-b` launches TQC UUU (marker `.triple-b-tqc-uuu-v1`, venv `.venv-tqc` deps OK). Once TQC is live, track timesteps/`ep_rew_mean` + any UUU hold eval. If TQC flat after ~150k steps → two-policy handoff. Empty `runs/tqc-uuu-f40-hold-wide*` dirs from 02:38Z are stale meta-only (no training log) — real run starts on B exit.
+- **Live (~22:15 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/13.5–14.5GB, up ~43h). TB http://34.148.138.48:6006/
+  - **A** PPO cool-ent v6 swing f50 — was crash-looping on `last_policy is None` TB log after all-NaN minibatch skip (4× NotImplementedError); fixed in `train_triple.py` this fire; continue-a will restart onto patched code. Prior healthy stretch peaked nt~0.06 @u400 then degraded; current restart early.
+  - **B** PPO entboost v7b hold f40 ~**u360**/400 nt~**0.048** align_UUU~0.23 — still flat; continue-b TQC-staged since 02:37Z, waiting natural exit → Lim TQC UUU (**ETA ~22:38 CT**, ~40u×~34s)
+  - **C** PPO entboost v7 combo f40 ~**u060** nt~**0.03** (cold-started 02:38Z) — leave alone
+- **Next micro-task:** **do not touch B/C.** Leave B PPO undisturbed until exit; `continue-triple-b` launches TQC UUU (marker `.triple-b-tqc-uuu-v1`, venv `.venv-tqc`). Once TQC is live, track timesteps/`ep_rew_mean` + any UUU hold eval. If TQC flat after ~150k steps → two-policy handoff. A: patched NaN-skip TB crash; confirm A stays up after continue restart (do not mid-kill B/C).
 - **Kill list:** no double/xonly on the L4; slots = A PPO / B→TQC / C PPO (until C stretch ends)
-- **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM
-- **NEED_USER_PING:** no (B not yet on TQC; gate ≪0.80; no failure)
+- **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C while B handoff is the plan
+- **NEED_USER_PING:** no (B not yet on TQC; gate ≪0.80; A crash fixed in-flight, not a user decision)
 
 ## Ranked backlog (pull from top when a stretch ends)
 

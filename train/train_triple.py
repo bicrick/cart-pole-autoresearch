@@ -1160,10 +1160,15 @@ def main():
                 last_loss = float(loss.detach())
 
         writer.add_scalar("train/rollout_reward", float(rew_t.mean()), update)
-        writer.add_scalar("train/policy_loss", last_policy, update)
-        writer.add_scalar("train/value_loss", last_value, update)
-        writer.add_scalar("train/entropy", last_ent, update)
-        writer.add_scalar("train/loss", last_loss, update)
+        # If every minibatch was skipped (non-finite loss), last_* stay None —
+        # do not crash TensorBoard logging; mark the skip so we can see it.
+        if last_policy is not None:
+            writer.add_scalar("train/policy_loss", last_policy, update)
+            writer.add_scalar("train/value_loss", last_value, update)
+            writer.add_scalar("train/entropy", last_ent, update)
+            writer.add_scalar("train/loss", last_loss, update)
+        else:
+            writer.add_scalar("train/skipped_all_minibatches", 1.0, update)
 
         # Throughput / hardware efficiency (every update; GPU sample is cheap).
         t_now = time.perf_counter()
