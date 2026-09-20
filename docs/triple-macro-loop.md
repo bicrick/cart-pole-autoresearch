@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~04:42 CT
+Last updated: 2026-09-20 ~04:55 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,8 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~04:42 CT):** **A = S1** walls-swing (**LR=1e-4** cold restart @08:46Z — hang_align **−0.97→−0.039 @u90**, hang_at_goal~0.005, nt~0.050, ent~2.03 @u100, policy_loss sane, **passed u80 clean**); **B = H1** walls-hold (tight `INIT_NOISE=0.05`, live ENT=0.02 **dead≈−0.55 @u340**/400, nt~0.049 flat, **ENT=0.035 staged** natural restart ~05:14 CT); **C = H1-var** walls-hold (ENT=0.05 live, ent~1.29 @u330, **nt~0.053** — ENT null for hold). Combo mush retired. X1 handoff_eval staged. `VEL_COST=0.015` + B `ENT=0.035` apply on **natural restart only**. Do not relaunch wide void TQC. **Do not** put AR-EAPO MaxEnt on H1 (MaxEnt fights upright stay — 2503.15290; Entropy Bifurcation / soft-Q mislead — 2506.05615).
+**Live mapping (2026-09-20 ~04:55 CT):** **A = S1** walls-swing (**LR=1e-4** cold restart @08:46Z — hang_align **−0.97→−0.033 @u120**, hang_at_goal~0.003, nt_align~0.206 nt~0.042, ent~1.91 @u122, policy_loss +0.019 (watch), **passed u80/u120 clean**); **B = H1** walls-hold (tight `INIT_NOISE=0.05`, live ENT=0.02 **dead≈−0.65 @u366**/400, nt~0.052 flat, **ENT=0.035 staged** natural restart ~05:07 CT); **C = H1-var** walls-hold (ENT=0.05 live, ent~1.23 @u356, **nt~0.049** — ENT null for hold). Combo mush retired. X1 handoff_eval staged. `VEL_COST=0.015` + B `ENT=0.035` apply on **natural restart only**. Do not relaunch wide void TQC. **Do not** put AR-EAPO MaxEnt on H1 (MaxEnt fights upright stay — 2503.15290; Entropy Bifurcation / soft-Q mislead — 2506.05615).
+
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,13 +62,13 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~04:42 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/16.6GB, uptime ~2d1h). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
-  - **A = S1 walls-swing** — prior NaN @u228 quarantined; **LR=1e-4 cold restart pid 153439** @08:46Z. ~**u100** hang_align/UUU **−0.97→−0.039** (@u90), hang_at_goal~0.005, nt~0.050, ent **~2.03**, policy_loss sane — **passed u80 clean; keep climbing**. Marker `.triple-a-s1-walls-v1`.
-  - **B = H1 walls-hold (tight)** — pid **145275** / w **147599** — near_goal_p=1.0, hang=0, `INIT_NOISE=0.05`, product, walls, **live ENT=0.02** (next restart **ENT=0.035** + VEL_COST=0.015). Marker `.triple-b-h1-noise05-v1`. ~**u340**/400 nt_UUU **~0.049** nt_align/UUU **~0.169** ent **≈−0.55** (deeper dead). **Entropy dead + visit≠hold; do not mid-kill** — stretch ETA ~**05:14 CT** → ENT bump.
-  - **C = H1-var walls-hold** — pid **145280** / w **146717** — LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1`. ~**u330** nt_align/UUU **~0.152** nt_UUU **~0.053** ent **~1.29**. **ENT=0.05 did not unlock hold** (natural null vs B). Leave alone.
+- **Live (2026-09-20 ~04:55 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~98%/16.6GB, uptime ~2d). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
+  - **A = S1 walls-swing** — prior NaN @u228 quarantined; **LR=1e-4 cold restart pid 153439** @08:46Z. ~**u122** hang_align/UUU **−0.97→−0.033**, hang_at_goal~0.003, nt~0.042 nt_align~0.206, ent **~1.91**, policy_loss **+0.019** @u122 — **passed u80/u120; watch NaN window ~u150–228**. Marker `.triple-a-s1-walls-v1`.
+  - **B = H1 walls-hold (tight)** — pid **145275** / w **147599** — near_goal_p=1.0, hang=0, `INIT_NOISE=0.05`, product, walls, **live ENT=0.02** (next restart **ENT=0.035** + VEL_COST=0.015). Marker `.triple-b-h1-noise05-v1`. ~**u366**/400 nt_UUU **~0.052** nt_align/UUU **~0.166** ent **≈−0.65** (deeper dead). **Entropy dead + visit≠hold; do not mid-kill** — stretch ETA ~**05:07 CT** → ENT bump.
+  - **C = H1-var walls-hold** — pid **145280** / w **146717** — LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1`. ~**u356** nt_align/UUU **~0.150** nt_UUU **~0.049** ent **~1.23**. **ENT=0.05 did not unlock hold** (natural null vs B). Leave alone.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2 (B/C still ~0.05). Soft-land `VEL_COST_COEF=0.015` already in continue-b/c.
-- **Diagnosis / actions this fire:** A hang still climbing (−0.039), healthy σ past u80 — leave alone. B σ deeper dead (−0.55) + nt flat ~0.05 + reward~0.50 — leave to natural end (~60 upd / ~33m); ENT035 continue confirmed staged. C control unchanged. OOB=0. No mid-kills / no train starts / no code.
-- **Next micro-task:** (1) Keep watching A (next NaN risk window ~u150–228; if policy_loss explodes → mid-kill + further LR drop / grad clip). (2) Babysit B to stretch end (~u400 / ~05:14 CT): confirm ENT=0.035 continue; if H still ↓ + nt flat ~u80 post-restart → **RPO α≈0.01** (ladder 0.01→0.05→0.1 if no-op on hold; never 0.5) or **ERA soft log_std floor (H₀≈0.5–0.8 softplus/detached — **not** Listing-2 D=1 pin; not ENT≥0.05); if visit≠hold persists → Spong ENERGY_W / short ep / avg-reward **stay** only — **never AR-EAPO MaxEnt on H1** — before cold wipe / C-recipe promote (lr/noise, not C’s ENT). (3) A hang_align toward 0 / hang_at_goal↑ → when any H1 nt≳0.2 run `eval-handoff-uuu.sh`. (4) C keep as H1-var control. (5) H1 gate nt≳0.80 align≳0.90 → keep H1, then P1b void FT. Never void-FT before walls hold. Never mid-kill B/C.
+- **Diagnosis / actions this fire:** A hang still climbing (−0.033), σ healthy past u120 — leave alone (watch policy_loss sign flip). B σ deeper dead (−0.65) + nt flat ~0.05 + reward~0.50 — leave to natural end (~34 upd / ~12m); ENT035 continue confirmed staged. C control unchanged. OOB=0. No mid-kills / no train starts / no code.
+- **Next micro-task:** (1) Keep watching A (next NaN risk window ~u150–228; if policy_loss explodes → mid-kill + further LR drop / grad clip). (2) Babysit B to stretch end (~u400 / ~05:07 CT): confirm ENT=0.035 continue; if H still ↓ + nt flat ~u80 post-restart → **RPO α≈0.01** (ladder 0.01→0.05→0.1 if no-op on hold; never 0.5) or **ERA soft log_std floor (H₀≈0.5–0.8 softplus/detached — **not** Listing-2 D=1 pin; not ENT≥0.05); if visit≠hold persists → Spong ENERGY_W / short ep / avg-reward **stay** only — **never AR-EAPO MaxEnt on H1** — before cold wipe / C-recipe promote (lr/noise, not C’s ENT). (3) A hang_align toward 0 / hang_at_goal↑ → when any H1 nt≳0.2 run `eval-handoff-uuu.sh`. (4) C keep as H1-var control. (5) H1 gate nt≳0.80 align≳0.90 → keep H1, then P1b void FT. Never void-FT before walls hold. Never mid-kill B/C.
 - **Kill list:** no double/xonly; no void TQC; slots = **A S1 swing** / **B H1 hold** / **C H1-var hold**
 - **Do not:** mid-kill B/C; relaunch wide TQC; stack GPU; run void during P1a; resume from NaN ckpt
 - **NEED_USER_PING:** **yes** — standing think-out-loud every fire
