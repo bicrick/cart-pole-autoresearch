@@ -2,7 +2,8 @@
 """TQC trainer for cart-triple UUU hold — fawraw M2 / Lim product recipe.
 
 Faithful reverse-eng of fawraw training/configs/m2_upright_tqc.yaml on our plant:
-  target UUU only, init_mode near_target, init_noise 0.05 (quiet-basin after IC fix),
+  target UUU only, init_mode near_target, init_noise 0.05,
+  quiet rates ±0.01, fall-kill |θ|>0.6, progress_w=0,
   TQC lr=3e-4 buffer=200k batch=256 tau=0.005 gamma=0.99 net=[128,128]
   n_critics=3 n_quantiles=20 top_drop=2, 150k steps, ep~1000,
   product reward, inelastic walls ON (our plant training wheels).
@@ -64,11 +65,12 @@ def parse_args():
         "--init-noise",
         type=float,
         default=0.05,
-        help="Quiet-basin angle half-range; also scales ω (×5) and x/xd (×2), floors 1e-3 only.",
+        help="Quiet-basin angle/cart half-range; rates xd/ω FIXED ±0.01 (fawraw M2).",
     )
     p.add_argument("--hang-frac", type=float, default=0.0, help="M2 hold: 0 (no hang mix)")
     p.add_argument("--wide-frac", type=float, default=0.0, help="M2 hold: 0 (no wide mix)")
-    p.add_argument("--progress-w", type=float, default=1.0)
+    p.add_argument("--progress-w", type=float, default=0.0,
+                    help="M2 hold: 0 (fawraw progress_reward_coef=0; no swing progress)")
     p.add_argument("--cart-barrier-coef", type=float, default=10.0)
     p.add_argument("--alpha-th", type=float, default=0.5)
     p.add_argument("--w-up", type=float, default=5.0)
@@ -94,32 +96,43 @@ class AtGoalRateCallback:
         from stable_baselines3.common.callbacks import BaseCallback
 
         class _CB(BaseCallback):
-            """Log episode-end success_rate / at_goal prominently (TB + stdout)."""
+            """Log episode-end survival (primary) + at_goal (TB + stdout)."""
 
             def __init__(self):
                 super().__init__(verbose)
-                self._buf: list[float] = []
+                self._surv: list[float] = []
+                self._goal: list[float] = []
                 self._log_every = log_every
 
             def _on_step(self) -> bool:
                 for info in self.locals.get("infos", []):
                     if "episode" not in info:
                         continue
-                    # Prefer is_success (EvalCallback contract); fall back to at_goal.
-                    raw: Any = info.get("is_success", info.get("at_goal"))
-                    if raw is None:
+                    # PRIMARY M2: survival (is_success); also log final at_goal.
+                    surv: Any = info.get("is_success", info.get("survival_success"))
+                    goal: Any = info.get("at_goal_final", info.get("at_goal"))
+                    if surv is None and goal is None:
                         continue
-                    self._buf.append(1.0 if raw else 0.0)
-                    if len(self._buf) >= self._log_every:
-                        rate = sum(self._buf) / len(self._buf)
-                        self.logger.record("rollout/success_rate", rate)
-                        self.logger.record("rollout/at_goal", rate)
+                    if surv is not None:
+                        self._surv.append(1.0 if surv else 0.0)
+                    if goal is not None:
+                        self._goal.append(1.0 if goal else 0.0)
+                    if len(self._surv) >= self._log_every:
+                        srate = sum(self._surv) / len(self._surv)
+                        grate = (
+                            sum(self._goal) / len(self._goal) if self._goal else float("nan")
+                        )
+                        self.logger.record("rollout/success_rate", srate)  # primary=survival
+                        self.logger.record("rollout/survival_success", srate)
+                        self.logger.record("rollout/at_goal", grate)
                         print(
-                            f"[M2 hold] success_rate={rate:.3f} at_goal={rate:.3f} "
-                            f"(last {len(self._buf)} eps, step={self.num_timesteps})",
+                            f"[M2 hold] PRIMARY survival_success={srate:.3f} "
+                            f"at_goal={grate:.3f} "
+                            f"(last {len(self._surv)} eps, step={self.num_timesteps})",
                             flush=True,
                         )
-                        self._buf.clear()
+                        self._surv.clear()
+                        self._goal.clear()
                 return True
 
         return _CB()
@@ -210,9 +223,13 @@ def main() -> None:
             "noise": args.init_noise,
             "hang_frac": args.hang_frac,
             "wide_frac": args.wide_frac,
-            "quiet_basin": "init_noise scales θ, ω×5, x/xd×2; abs floors 1e-3 only",
+            "quiet_basin": "θ,x ±init_noise; xd,ω FIXED ±0.01; fall-kill |θ|>0.6",
+            "progress_w": args.progress_w,
         },
-        "eval_primary": ["success_rate", "at_goal"],
+        "eval_primary": {
+            "m2_hold": "survival_success (ep_len >= 0.8*max_steps, no fall/oob)",
+            "also_log": ["at_goal", "rollout/survival_success", "rollout/at_goal"],
+        },
     }
     (log_path / "run_meta.json").write_text(json.dumps(meta, indent=2))
     print("=== M2 UUU hold (fawraw) ===", flush=True)
@@ -275,7 +292,7 @@ def main() -> None:
         flush=True,
     )
     print(
-        "Check TB: rollout/success_rate, rollout/at_goal, eval/success_rate, eval/mean_reward",
+        "Check TB: rollout/success_rate (=survival PRIMARY), rollout/at_goal, eval/success_rate",
         flush=True,
     )
 

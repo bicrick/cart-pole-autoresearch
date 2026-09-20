@@ -1,6 +1,6 @@
 # Working triple-pendulum implementations — reverse engineering
 
-Last updated: 2026-09-20 ~13:10 CT  
+Last updated: 2026-09-20 ~15:10 CT  
 Purpose: stop circling. Copy what already held UUU / hit 56.
 
 ## Who actually succeeded
@@ -15,14 +15,45 @@ Purpose: stop circling. Copy what already held UUU / hit 56.
 
 ## fawraw M2 hold recipe (copy this first)
 
-From `training/configs/m2_upright_tqc.yaml` (verbatim intent):
+From `training/configs/m2_upright_tqc.yaml` + `sim/envs/triple_pendulum_env.py`:
 
 - **Task:** stabilize EP7 UUU only — “starting state already near upright; policy only rejects perturbations”
 - `init_mode: near_target`, `init_noise: 0.05`
+- **Quiet rates (critical):** `qvel[:] ~ U(±0.01)` fixed — **not** scaled by `init_noise`. Angles/cart `±init_noise`.
+- **Fall-kill:** any UP-target link `|θ_err| > 0.6` → terminate. (DOWN links use 1.5 when multi-EP.)
+- `progress_reward_coef: 0` (hold recipe — no swing progress term)
 - **Algo: TQC** (not PPO), lr 3e-4, γ 0.99, τ 0.005, buffer 200k, batch 256
 - Net `[128,128]`, 3 critics, 20 quantiles, drop top 2
 - 150k timesteps, 1000-step episodes
-- Success = hold metric, not mean reward
+- **Primary success (M2 hold):** survival — `ep_len >= 0.8 * max_steps` without fall/oob. Also log final `at_goal`.
+
+## Why our earlier M2 TQC failed (env mismatch, not “TQC bad”)
+
+| We did | fawraw M2 | Gap |
+|---|---|---|
+| `near_target` with **ω ± init_noise×5**, **xd ± init_noise×2** | rates **fixed ±0.01** | Blew the quiet basin; LQR itself fails there |
+| No angle fall-kill in gym wrapper | `|θ|>0.6` terminate | Episodes wandered; success signal muddy |
+| `progress_w=1` on a hold task | `progress_w=0` | Swing-shaped reward on a stabilize task |
+| PPO / UVFA zoo before this | TQC specialist + staged milestones | Wrong process (secondary) |
+
+**New path (do in order, no GPU until oracle PASS):**
+
+1. **Env contract** — quiet rates ±0.01, fall-kill 0.6, `progress_w=0`, walls ON (`train/envs/triple_gym.py`)
+2. **LQR oracle gate** — ≥95% survival @ `init_noise∈{0.01,0.02}`, N≥50; dump demos
+3. **BC** from `policies/lqr-uuu-demos.npz`
+4. **Short TQC fine-tune** on the same contract (only after BC)
+
+Do **not** resume ATRPO/gSDE/ENT ladder. Do **not** start GCP VM until oracle PASS + user green-light.
+
+## Implemented here
+
+1. **Env contract** — `train/envs/triple_gym.py` (+ matching `train_triple.random_states` near_target). Assert: `python3 train/test_quiet_basin_ics.py`
+2. **LQR oracle** — `train/lqr_oracle_uuu.py` / `scripts/lqr-oracle-uuu.sh`  
+   ```bash
+   bash scripts/lqr-oracle-uuu.sh          # CPU; PASS → policies/lqr-uuu-demos.npz
+   ```
+3. **M2 hold trainer** — `train/train_triple_tqc.py` defaults: quiet basin, `progress_w=0`, survival primary. Launch: `scripts/next-train-triple-m2-hold.sh` (walls ON). Smoke only until oracle PASS + green-light.
+4. **Eval primary (M2):** `rollout/success_rate` = **survival_success**; also `rollout/at_goal`.
 
 ## Lim recipe (for later, after hold)
 
@@ -30,32 +61,6 @@ From `training/configs/m2_upright_tqc.yaml` (verbatim intent):
 - Wide random ICs for transition capability
 - Train until return plateaus ~700–800 / 1000
 - Transitions “for free” by switching specialists — not one UVFA for 56
-
-## Why our 2 days failed (map to their recipe)
-
-| We did | They did | Gap |
-|---|---|---|
-| PPO on-policy hold | **TQC / SAC** off-policy | Wrong algo family for continuous force hold |
-| One UVFA + entropy/ATRPO zoo | **Specialist + staged milestones** | Wrong architecture / process |
-| Optimized TB reward | **Success / at-goal hold** | Reward↑ hold≈0 = visit≠hold |
-| `near_target` with **ω±0.1 and cart floors** | Quiet near-upright basin | Our “tighten INIT_NOISE” was partly a **no-op** |
-| Mixed swing+hold same net | **Handoff** (fawraw M4) / Lim specialists | Need separate catcher |
-
-## Implemented here (faithful reimpl, not knob zoo)
-
-1. **Quiet-basin ICs** — done in `train/train_triple.py` (`random_states` near_target / near_goal) and `train/envs/triple_gym.py`. `init_noise` scales θ, ω (×5), x/xd (×2) with **1e-3 absolute floors only** (legacy cart≥0.05 / ω≥0.1 removed). Assert: `python3 train/test_quiet_basin_ics.py`.
-2. **M2 hold trainer** — `train/train_triple_tqc.py` defaults match fawraw yaml; product reward; walls ON for our plant.
-3. **Launch script:** [`scripts/next-train-triple-m2-hold.sh`](../scripts/next-train-triple-m2-hold.sh)
-   ```bash
-   # smoke (CPU, few steps) — no VM
-   SMOKE=1 bash scripts/next-train-triple-m2-hold.sh
-   # full GPU train — only when user green-lights
-   DEVICE=cuda bash scripts/next-train-triple-m2-hold.sh
-   ```
-4. **Eval primary:** `rollout/success_rate`, `rollout/at_goal`, `eval/success_rate` (logged prominently; not ep_rew_mean alone).
-5. **Only after M2 hold works:** M3 multi-EP / Lim 8 specialists; then swing→handoff (fawraw M4).
-
-Do **not** resume ATRPO/gSDE/ENT ladder.
 
 ## Sources
 

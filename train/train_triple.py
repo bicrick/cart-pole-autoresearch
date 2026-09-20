@@ -496,8 +496,8 @@ def random_states(
       near_target — near assigned goal; hang_start_p overlays hang ICs for swing-up
       wide        — Lim-style wide random ICs (full angle, larger rates)
 
-    init_noise: angle half-range (rad) for near_target / near-goal; also scales
-                x/xd (×2) and ω (×5) with 1e-3 absolute floors only (quiet-basin).
+    init_noise: angle (and cart-x) half-range for near_target / near-goal;
+                rates xd/ω FIXED ±0.01 (fawraw quiet basin — not scaled by noise).
     """
     mode = (init_mode or "mixed").lower()
 
@@ -526,22 +526,20 @@ def random_states(
 
     if mode == "near_target" and goals is not None:
         # Hold prior near assigned goal; optional hang_start_p overlays swing-up ICs.
-        # Quiet-basin (fawraw M2 / sq1c): init_noise scales angle AND ω AND x/xd
-        # proportionally. Legacy floors max(0.05) cart / max(0.1) ω made INIT_NOISE≤0.02
-        # a no-op on rates/cart — only tiny absolute floors (1e-3) remain.
+        # Quiet-basin (fawraw M2): angles/cart ~ ±init_noise; rates xd/ω FIXED ±0.01
+        # (NOT init_noise×5 / ×2 — that blew the true quiet basin and made LQR fail).
         n_ang = max(float(init_noise), 1e-3)
-        n_x = min(0.5, max(1e-3, n_ang * 2.0))
-        n_xd = min(0.5, max(1e-3, n_ang * 2.0))
-        n_w = min(0.8, max(1e-3, n_ang * 5.0))
+        n_x = n_ang
+        n_rate = 0.01
         angles = goal_angles(goals, device=device, dtype=torch.float32)
         x = torch.empty(n, device=device).uniform_(-n_x, n_x)
-        xd = torch.empty(n, device=device).uniform_(-n_xd, n_xd)
+        xd = torch.empty(n, device=device).uniform_(-n_rate, n_rate)
         th1 = angles[:, 0] + torch.empty(n, device=device).uniform_(-n_ang, n_ang)
         th2 = angles[:, 1] + torch.empty(n, device=device).uniform_(-n_ang, n_ang)
         th3 = angles[:, 2] + torch.empty(n, device=device).uniform_(-n_ang, n_ang)
-        th1d = torch.empty(n, device=device).uniform_(-n_w, n_w)
-        th2d = torch.empty(n, device=device).uniform_(-n_w, n_w)
-        th3d = torch.empty(n, device=device).uniform_(-n_w, n_w)
+        th1d = torch.empty(n, device=device).uniform_(-n_rate, n_rate)
+        th2d = torch.empty(n, device=device).uniform_(-n_rate, n_rate)
+        th3d = torch.empty(n, device=device).uniform_(-n_rate, n_rate)
         if hang_start_p > 0:
             hit = torch.rand(n, device=device) < hang_start_p
             if hit.any():
@@ -605,19 +603,18 @@ def random_states(
         if hit.any():
             angles = goal_angles(goals, device=device, dtype=torch.float32)
             n_hit = int(hit.sum())
-            # Quiet-basin: proportional scales (same as near_target mode).
+            # Quiet-basin: same as near_target (angles/cart ±noise; rates ±0.01).
             n_ang = max(float(init_noise), 1e-3)
-            n_x = min(0.5, max(1e-3, n_ang * 2.0))
-            n_xd = min(0.5, max(1e-3, n_ang * 2.0))
-            n_w = min(0.8, max(1e-3, n_ang * 5.0))
+            n_x = n_ang
+            n_rate = 0.01
             x[hit] = torch.empty(n_hit, device=device).uniform_(-n_x, n_x)
-            xd[hit] = torch.empty(n_hit, device=device).uniform_(-n_xd, n_xd)
+            xd[hit] = torch.empty(n_hit, device=device).uniform_(-n_rate, n_rate)
             th1[hit] = angles[hit, 0] + torch.empty(n_hit, device=device).uniform_(-n_ang, n_ang)
             th2[hit] = angles[hit, 1] + torch.empty(n_hit, device=device).uniform_(-n_ang, n_ang)
             th3[hit] = angles[hit, 2] + torch.empty(n_hit, device=device).uniform_(-n_ang, n_ang)
-            th1d[hit] = torch.empty(n_hit, device=device).uniform_(-n_w, n_w)
-            th2d[hit] = torch.empty(n_hit, device=device).uniform_(-n_w, n_w)
-            th3d[hit] = torch.empty(n_hit, device=device).uniform_(-n_w, n_w)
+            th1d[hit] = torch.empty(n_hit, device=device).uniform_(-n_rate, n_rate)
+            th2d[hit] = torch.empty(n_hit, device=device).uniform_(-n_rate, n_rate)
+            th3d[hit] = torch.empty(n_hit, device=device).uniform_(-n_rate, n_rate)
             claimed |= hit
 
     # Hang / near-DDD: forces energy pumping toward whatever goal is assigned.

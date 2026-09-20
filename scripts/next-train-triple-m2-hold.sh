@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # fawraw M2 UUU hold — faithful reimpl on our plant (quiet-basin + TQC + product).
-# Spec: training/configs/m2_upright_tqc.yaml intent + Lim product reward.
+# Spec: fawraw m2_upright_tqc.yaml + env contract (quiet rates ±0.01, fall-kill 0.6,
+#        progress_w=0). Primary success = survival (ep_len >= 0.8*max_steps).
 # Walls ON (our inelastic endstops = training wheels; Lim/fawraw use rail limits).
 # Do NOT start GCP VM / long train unless user green-lights GPU.
 set -euo pipefail
@@ -23,7 +24,7 @@ INIT_MODE="${INIT_MODE:-near_target}"
 INIT_NOISE="${INIT_NOISE:-0.05}"
 HANG_FRAC="${HANG_FRAC:-0.0}"
 WIDE_FRAC="${WIDE_FRAC:-0.0}"
-PROGRESS_W="${PROGRESS_W:-1.0}"
+PROGRESS_W="${PROGRESS_W:-0}"
 CART_BARRIER_COEF="${CART_BARRIER_COEF:-10}"
 ALPHA_TH="${ALPHA_TH:-0.5}"
 W_UP="${W_UP:-5.0}"
@@ -71,7 +72,7 @@ fi
 echo "=== launch M2 UUU hold ===" >&2
 echo "  TOTAL_STEPS=$TOTAL_STEPS INIT_NOISE=$INIT_NOISE walls=$TRACK_WALLS" >&2
 echo "  net=[$POLICY_ARCH] buffer=$BUFFER_SIZE n_quantiles=$N_QUANTILES" >&2
-echo "  PRIMARY METRICS: success_rate / at_goal (not ep_rew_mean alone)" >&2
+echo "  PRIMARY: survival_success (ep_len>=0.8*max); also at_goal; progress_w=$PROGRESS_W" >&2
 echo "  ckpt=$CHECKPOINT run=$RUN_NAME device=$DEVICE" >&2
 
 exec "$PYTHON" train/train_triple_tqc.py \

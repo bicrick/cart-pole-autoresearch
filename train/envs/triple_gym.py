@@ -3,8 +3,15 @@
 Observation: 11-D state features (no goal one-hot; goal fixed UUU).
 Action: Box(-1, 1) scaled by forceLimit (N).
 Reward: Lim/Baek product_reward toward UUU.
-ICs: quiet-basin near_target — init_noise scales θ, ω, x/xd (floors 1e-3 only).
-Walls default ON for our plant (Lim/fawraw use rail limits; we use inelastic walls).
+
+Env contract (mirror fawraw TriplePendulumEnv near_target / M2 hold):
+  - Quiet-basin ICs: angles ~ ±init_noise; cart x ~ ±init_noise;
+    rates (xd, ω) fixed ±0.01 — NOT init_noise×5 / ×2.
+  - Fall-kill: any UP-target link |θ_err| > 0.6 → terminated=True.
+  - progress_w default 0 (hold recipe; no swing progress term).
+  - Primary M2 success = survival (ep_len >= 0.8 * max_steps without fall/oob);
+    also log final at_goal.
+Walls default ON for our plant (inelastic endstops).
 """
 
 from __future__ import annotations
@@ -30,6 +37,13 @@ from gymnasium import spaces
 STATE_DIM = 11
 UUU_ID = int(GOAL_INDEX["UUU"])
 
+# fawraw FALL_THRESHOLD_UP_RAD — all three UUU links are UP.
+FALL_THRESH_UP = 0.6
+# Fixed quiet rates (fawraw: qvel[:] = uniform(-0.01, 0.01)).
+QUIET_RATE = 0.01
+# Survival success fraction of max_steps (primary M2 hold metric).
+SURVIVAL_FRAC = 0.8
+
 
 def _sample_state(
     init_mode: str,
@@ -40,8 +54,8 @@ def _sample_state(
 ) -> torch.Tensor:
     """Single-env IC for UUU specialist.
 
-    Default mass is near-upright (hold basin). With hang_frac spawn near DDD;
-    with wide_frac use Lim-style wide random ICs.
+    Default mass is near-upright quiet basin (fawraw M2):
+      θ ~ U(±init_noise), x ~ U(±init_noise), xd/ω ~ U(±0.01) fixed.
     """
     mode = (init_mode or "near_target").lower()
     u = float(torch.rand((), device=device))
@@ -65,22 +79,27 @@ def _sample_state(
         th2d = torch.empty((), device=device).uniform_(-20.0, 20.0)
         th3d = torch.empty((), device=device).uniform_(-30.0, 30.0)
     else:
-        # Quiet-basin (fawraw M2): noise scales angle AND ω AND x/xd proportionally.
-        # Legacy fixed ±0.5 cart / ±0.8 ω ignored init_noise — made "tighten" a no-op.
-        # Tiny absolute floors 1e-3 only (see train_triple.random_states near_target).
+        # Quiet-basin (fawraw M2 near_target): angles/cart scale with init_noise;
+        # rates FIXED ±QUIET_RATE (was wrongly init_noise×5 / ×2 — blew the basin).
         n_ang = max(float(noise), 1e-3)
-        n_x = min(0.5, max(1e-3, n_ang * 2.0))
-        n_xd = min(0.5, max(1e-3, n_ang * 2.0))
-        n_w = min(0.8, max(1e-3, n_ang * 5.0))
+        n_x = n_ang  # fawraw: qpos[0] = uniform(-n, n)
+        n_rate = float(QUIET_RATE)
         x = torch.empty((), device=device).uniform_(-n_x, n_x)
-        xd = torch.empty((), device=device).uniform_(-n_xd, n_xd)
+        xd = torch.empty((), device=device).uniform_(-n_rate, n_rate)
         th1 = torch.empty((), device=device).uniform_(-n_ang, n_ang)
         th2 = torch.empty((), device=device).uniform_(-n_ang, n_ang)
         th3 = torch.empty((), device=device).uniform_(-n_ang, n_ang)
-        th1d = torch.empty((), device=device).uniform_(-n_w, n_w)
-        th2d = torch.empty((), device=device).uniform_(-n_w, n_w)
-        th3d = torch.empty((), device=device).uniform_(-n_w, n_w)
+        th1d = torch.empty((), device=device).uniform_(-n_rate, n_rate)
+        th2d = torch.empty((), device=device).uniform_(-n_rate, n_rate)
+        th3d = torch.empty((), device=device).uniform_(-n_rate, n_rate)
     return torch.stack((x, xd, th1, th1d, th2, th2d, th3, th3d))
+
+
+def _uuu_angle_fall(state: torch.Tensor, thresh: float = FALL_THRESH_UP) -> bool:
+    """True if any UUU (UP) link |θ| exceeds thresh (wrapped)."""
+    th = state[..., [2, 4, 6]]
+    err = torch.atan2(torch.sin(th), torch.cos(th)).abs()
+    return bool((err > float(thresh)).any().item())
 
 
 class TriplePendulumUUUEnv(gym.Env):
@@ -98,13 +117,16 @@ class TriplePendulumUUUEnv(gym.Env):
         init_noise: float = 0.05,
         hang_frac: float = 0.0,
         wide_frac: float = 0.0,
-        progress_w: float = 1.0,
+        progress_w: float = 0.0,
         cart_barrier_coef: float = 10.0,
         alpha_th: float = 0.5,
         w_up: float = 5.0,
         w_down: float = 1.0,
         energy_w: float = 0.0,
         oob_penalty: float = 20.0,
+        fall_thresh_up: float = FALL_THRESH_UP,
+        survival_frac: float = SURVIVAL_FRAC,
+        angle_fall: bool = True,
         device: str = "cpu",
         seed: Optional[int] = None,
     ):
@@ -121,6 +143,9 @@ class TriplePendulumUUUEnv(gym.Env):
         self.init_noise = float(init_noise)
         self.hang_frac = float(hang_frac)
         self.wide_frac = float(wide_frac)
+        self.fall_thresh_up = float(fall_thresh_up)
+        self.survival_frac = float(survival_frac)
+        self.angle_fall = bool(angle_fall)
         self.device = torch.device(device)
         self._reward_kwargs = dict(
             track_limit=self.track_limit,
@@ -179,6 +204,8 @@ class TriplePendulumUUUEnv(gym.Env):
             "at_goal": bool(
                 at_goal(self._state.unsqueeze(0), self._goal.unsqueeze(0)).item()
             ),
+            "survival_success": False,
+            "is_success": False,
         }
         return self._obs_np(), info
 
@@ -212,20 +239,46 @@ class TriplePendulumUUUEnv(gym.Env):
             oob = abs(x) > (self.track_limit + 1e-4)
         else:
             oob = abs(x) > self.track_limit
+        fell = bool(self.angle_fall and _uuu_angle_fall(nxt, self.fall_thresh_up))
         align = float(
             mean_cos_align(nxt.unsqueeze(0), self._goal.unsqueeze(0)).item()
         )
-        success = bool(at_goal(nxt.unsqueeze(0), self._goal.unsqueeze(0)).item())
+        goal_ok = bool(at_goal(nxt.unsqueeze(0), self._goal.unsqueeze(0)).item())
         truncated = self._step_count >= self.max_steps
-        terminated = bool(oob)
+        terminated = bool(oob or fell)
+        # Primary M2 success = survival hold (fawraw-style); also report at_goal.
+        survival_success = (not terminated) and (
+            self._step_count >= int(self.survival_frac * self.max_steps)
+        )
+        # On early fall/oob, survival is False; on truncate at max_steps, True.
+        if truncated and not terminated:
+            survival_success = True
         info = {
             "align": align,
-            "at_goal": success,
+            "at_goal": goal_ok,
             "oob": oob,
+            "fell": fell,
             "force": force_val,
             "x": x,
-            "is_success": success,
+            "ep_len": self._step_count,
+            "survival_success": bool(survival_success and (truncated or terminated)),
+            # EvalCallback / AtGoalRateCallback primary: survival for M2 hold.
+            "is_success": bool(
+                survival_success if (truncated or terminated) else False
+            ),
         }
+        # Only mark success flags meaningful at episode end.
+        if not (truncated or terminated):
+            info["is_success"] = False
+            info["survival_success"] = False
+        else:
+            # At episode end: survival if lasted long enough without fall/oob.
+            survived = (not oob) and (not fell) and (
+                self._step_count >= int(self.survival_frac * self.max_steps)
+            )
+            info["survival_success"] = survived
+            info["is_success"] = survived  # PRIMARY for M2
+            info["at_goal_final"] = goal_ok
         return self._obs_np(), reward, terminated, truncated, info
 
 

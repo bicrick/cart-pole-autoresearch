@@ -75,7 +75,7 @@ SMOKE=1 bash scripts/next-train-triple-tqc-uuu.sh   # triple TQC (needs sb3-cont
 SMOKE=1 bash scripts/next-train-triple-m2-hold.sh   # fawraw M2 UUU hold (quiet-basin)
 ```
 
-**M2 UUU hold (copy-what-works):** see [`docs/working-impls-reverse-eng.md`](docs/working-impls-reverse-eng.md). Launch: `scripts/next-train-triple-m2-hold.sh` (walls ON, `init_noise=0.05`, TQC `[128,128]`, 150k). Do not start GCP VM until green-lit.
+**M2 UUU hold (copy-what-works):** see [`docs/working-impls-reverse-eng.md`](docs/working-impls-reverse-eng.md). Env contract = quiet rates ±0.01 + fall-kill 0.6 + `progress_w=0`. Gate: `bash scripts/lqr-oracle-uuu.sh` (PASS → demos for BC). TQC launch: `scripts/next-train-triple-m2-hold.sh` — do **not** start GCP / long TQC until oracle PASS + green-lit.
 
 GPU recipes: `scripts/next-train.sh`, `next-train-transitions.sh`, `next-train-triple*.sh`. Watch: [TensorBoard](http://34.148.138.48:6006/) on the training VM (static IP) or `tensorboard --logdir runs`.
 
