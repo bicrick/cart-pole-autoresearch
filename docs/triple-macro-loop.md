@@ -39,19 +39,19 @@ When found: name root cause, update Next micro-task, implement carefully, push, 
 
 ## Current phase + next micro-task
 
-- **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Live (~00:28 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~98%/11.4GB, up ~1d 21h). TB http://34.148.138.48:6006/
-  - **A** PPO swing f50 ~**u340**/400 nt_at_goal/UUU~**0.033** align_UUU~−0.06 ent~0.20 — flat/worse; leave alone (no mid-kill). ETA stretch end ~10–12m.
-  - **B** **TQC UUU live** (`train_triple_tqc.py` pid 133757) since 03:37Z — run `tqc-uuu-f40-hold-wide_2`; ~**221k**/300k steps (ckpts thru 200k + best@150k), `ep_rew_mean`~**568** (flat crawl), rollout success **0.01** (noise), ent_coef~0.0125; eval@200k mean_rew~**577** success **0**. ETA ~30–40m to 300k.
-  - **C** PPO combo f40 ~**u319**/400 nt_at_goal/UUU~**0.048** align_UUU~0.19 ent~3.42 — leave alone. ETA ~25m.
+- **Phase:** P1a — walls-on UUU (priority); void nowalls jobs still finishing their stretches (no mid-kill)
+- **Live (~00:45 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/11.4GB, up ~1d 22h). TB http://34.148.138.48:6006/
+  - **A** PPO swing f50 ~**u380**/400 nt_at_goal/UUU~**0.031** align_UUU~−0.07 — flat/dead; leave alone. ETA stretch end **~5m** → walls-on cold-start via rearmed watcher.
+  - **B** **TQC UUU live** (pid 133757) — ~**253k**/300k; `ep_rew_mean`~**567** flat; eval@250k mean_rew~**566** success **0**; rollout success **0.01**. ETA ~20–25m → PPO-balance.
+  - **C** PPO combo f40 ~**u340**/400 nt_at_goal/UUU~**0.054** align_UUU~0.23 — flat; leave alone. ETA ~20m → walls-on cold-start.
 - **Catch-basin (CPU, staged prior fire):**
   - TQC@150k: **0/9 dead** (`docs/basins/basin-tqc150k.json`) — do **not** use as hold catcher.
   - LQR soft Qθ=100 / stiff Qθ=1e3: only **0.1 rad @ ω=0** survives (`docs/basins/basin-lqr-*.json`). RoA too small for enter-gate 0.1 alone under velocity.
-- **Code staged:** `train/lqr_uuu.py`, `train/handoff.py` (enter 0.1 / exit 0.25 / dwell / LPF τ=0.3), `scripts/measure_catch_basin.py`. `scripts/continue-triple-b.sh` on VM **md5-matches box** (PPO-balance on natural TQC exit; marker `.triple-b-tqc-uuu-v1` present).
-- **Next micro-task:** User insight (Patrick, 2026-09-20 ~00:37 CT): on the no-walls triple demo the policy seems to maximize staying centered / not dying and flopping angles rather than truly getting upright. Same path as double: **train with sidewalls/bumpers first**, get good, then remove bumpers for a void fine-tune. (1) leave B TQC to ~300k (no mid-kill); watcher still auto-starts **PPO-balance** catcher on natural exit (not another wide TQC). (2) On **A or C** next natural exit → pick up **P1a walls-on PPO UUU** (`scripts/continue-triple-a.sh` / `continue-triple-c.sh` now stage walls; markers `.triple-a-walls-v1` / `.triple-c-walls-v1`). Manual launch: `TRACK_WALLS=1 bash scripts/next-train-triple-walls.sh`. (3) After P1a gate → P1b nowalls FT from walls ckpt (`TRACK_WALLS=0`). (4) Next free cycle after B→balance starts: wire `handoff_eval` smoke if still needed. If TQC eval success>0 before stretch end → abort handoff, stage EP specialist instead.
-- **Kill list:** no double/xonly on the L4; slots = A PPO / **B TQC→PPO-balance** / C PPO
-- **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C; relaunch parallel wide TQC on B
-- **NEED_USER_PING:** **no** (quiet; gate ≪0.80; TQC still hold-flat; handoff path armed)
+- **Code staged + VM synced (00:44 CT):** walls physics (`trackWalls` clamp x, xd=0) + `continue-triple-a/c.sh` + `next-train-triple-walls.sh` md5-match box↔VM. **A/C continue watchers rearmed** (pids fresh @05:44Z) waiting on live trainers — next natural exit → P1a walls-on UUU cold-start (markers `.triple-a-walls-v1` / `.triple-c-walls-v1`). B watcher unchanged (TQC→PPO-balance; `.triple-b-tqc-uuu-v1` present). Handoff modules still staged.
+- **Next micro-task:** (1) leave B TQC to ~300k (no mid-kill) → PPO-balance. (2) **A then C** natural exit → **P1a walls-on** (already armed). (3) On first walls-on live → ping user. (4) After P1a gate → P1b nowalls FT. Do not mid-kill current A/C/B.
+- **Kill list:** no double/xonly on the L4; slots = **A walls-on (next)** / **B TQC→PPO-balance** / **C walls-on (next)**
+- **Do not:** mid-kill live A/C/B; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C; relaunch parallel wide TQC on B
+- **NEED_USER_PING:** **no** yet (walls armed but not live; gate ≪0.80; TQC eval success still 0). Ping on walls-on first live after natural start.
 
 ## Ranked backlog (pull from top when a stretch ends)
 
