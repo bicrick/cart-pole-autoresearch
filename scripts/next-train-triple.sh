@@ -39,6 +39,8 @@ VEL_COST_COEF="${VEL_COST_COEF:-0}"
 RPO_ALPHA="${RPO_ALPHA:-0}"
 LOG_STD_FLOOR="${LOG_STD_FLOOR:-0}"
 RESET_LOG_STD="${RESET_LOG_STD:-}"
+USE_SDE="${USE_SDE:-0}"
+SDE_SAMPLE_FREQ="${SDE_SAMPLE_FREQ:-4}"
 FORCE_LIMIT="${FORCE_LIMIT:-40}"
 PROGRESS_W="${PROGRESS_W:-}"
 FLIP_AUGMENT="${FLIP_AUGMENT:-1}"
@@ -64,6 +66,10 @@ TRACK_WALLS="${TRACK_WALLS:-0}"
 # Optional: reset global log_std after ckpt load (SB3 #155). Empty=off; 0=fill 0.0.
 if [[ -n "${RESET_LOG_STD}" ]]; then
   FORCE_ARGS+=(--reset-log-std "${RESET_LOG_STD}")
+fi
+# Raffin/SB3 gSDE (Zoo Pendulum: use_sde + sample_freq=4, typically with ENT=0).
+if [[ "${USE_SDE}" == "1" || "${USE_SDE}" == "true" || "${USE_SDE}" == "on" ]]; then
+  FORCE_ARGS+=(--use-sde --sde-sample-freq "${SDE_SAMPLE_FREQ}")
 fi
 
 if [[ "${TRACK_WALLS}" == "1" || "${TRACK_WALLS}" == "true" || "${TRACK_WALLS}" == "on" ]]; then

@@ -120,6 +120,19 @@ def parse_args():
         help="After checkpoint load, fill_ global log_std to this value and rebuild Adam "
         "(SB3 #155 curriculum resume). Omit=off. Use 0.0 when resuming a collapsed-σ H1 into RPO/ERA.",
     )
+    parser.add_argument(
+        "--use-sde",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Raffin/SB3 gSDE: state-dependent exploration from actor penultimate features "
+        "(Zoo Pendulum-style). Pair with --ent 0; keeps RPO+ERA. Default off.",
+    )
+    parser.add_argument(
+        "--sde-sample-freq",
+        type=int,
+        default=4,
+        help="Resample gSDE exploration noise every N PPO updates (Zoo default 4).",
+    )
     parser.add_argument("--episode-len", type=int, default=800)
     parser.add_argument("--impulse-p", type=float, default=0.005)
     parser.add_argument(
@@ -999,19 +1012,27 @@ def main():
     )
     print(f"tensorboard --logdir {args.logdir}", flush=True)
 
-    model = ActorCritic(obs_dim=OBS_DIM, hidden=constants["hidden"]).to(device)
+    model = ActorCritic(
+        obs_dim=OBS_DIM,
+        hidden=constants["hidden"],
+        use_sde=bool(getattr(args, "use_sde", False)),
+    ).to(device)
     # ERA soft floor applies on rollout+update; RPO α is evaluate-only (passed to evaluate).
+    # gSDE (if on) uses actor penultimate features; resample noise every sde_sample_freq updates.
     _floor = float(getattr(args, "log_std_floor", 0.0) or 0.0)
     model.log_std_floor = _floor if _floor > 0 else None
+    _sde_freq = int(getattr(args, "sde_sample_freq", 4) or 4)
     print(
         f"explore: ent={args.ent} rpo_alpha={getattr(args, 'rpo_alpha', 0.0)} "
-        f"log_std_floor={model.log_std_floor}",
+        f"log_std_floor={model.log_std_floor} use_sde={model.use_sde} "
+        f"sde_sample_freq={_sde_freq}",
         flush=True,
     )
     if args.checkpoint.is_file():
         ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
         state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
-        model.load_state_dict(state_dict)
+        # gSDE adds sde_weights; cold-start arm removes ckpt, but allow partial load.
+        model.load_state_dict(state_dict, strict=not bool(getattr(args, "use_sde", False)))
         prev = ckpt.get("update") if isinstance(ckpt, dict) else None
         print(
             f"loaded checkpoint {args.checkpoint}"
@@ -1055,6 +1076,9 @@ def main():
     t0 = time.time()
     t_prev = time.perf_counter()
     for update in range(1, args.updates + 1):
+        # Zoo/SB3 gSDE: resample exploration noise every sde_sample_freq updates.
+        if model.use_sde and (_sde_freq <= 1 or (update - 1) % _sde_freq == 0):
+            model.sample_sde_noise()
         goal_probs, allowed = goal_probs_for_update(args, update)
         obs_buf = []
         raw_buf = []
