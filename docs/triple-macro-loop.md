@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~21:00 CT  
+Last updated: 2026-09-19 ~21:10 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -27,7 +27,7 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Current phase + next micro-task
 
 - **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Next micro-task:** finish cool-ent **v6/v7b** stretch without mid-kill; if `near_target/at_goal/UUU` still ≲ 0.15 after u400 → ship **two-policy handoff** (swing specialist → hold specialist) as the next code experiment
+- **Next micro-task:** let **A** cool-ent v6 (~u80) and **C** entboost v7 (~u70) finish their stretches; **B** v7b (~u249) entropy-saturated at ~3.42 — already staged **v8 cool-from-boost** (ENT0.05 cold wipe via `.triple-b-cool-from-boost-v8`) for natural u400 restart (~55m). If after those full stretches `near_target/at_goal/UUU` still ≲ 0.15 → ship **two-policy handoff** (swing→hold) as the next code experiment
 - **Kill list:** no double/xonly on the L4; all 3 slots = triple-a/b/c
 - **Do not:** mid-kill improving runs; rewrite plant without a paper-backed reason; stack a second GPU VM
 

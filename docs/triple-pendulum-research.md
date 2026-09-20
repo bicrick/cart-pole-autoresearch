@@ -1,7 +1,22 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~20:45 CT.
+Last updated: 2026-09-19 ~21:10 CT.
 
+
+## Overnight fire — status (2026-09-19 ~21:10 CT)
+
+**VM:** `cartpole-train-od` RUNNING us-east1-b L4 ~98%/16.1GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~42.2h ≈ **~$29–35** (budget uncapped — stay up). continue-a/b/c armed; scripts md5-match box. GPU healthy. No NaNs.
+
+**Jobs (alive — do not mid-kill):**
+| Slot | Recipe | ~u | entropy | nt at_goal/UUU | nt align/UUU | hang at_goal/UUU | hang align/UUU |
+|---|---|---|---|---|---|---|---|
+| A | cool-ent v6 swing f50 e0.05 lr1e-4 | ~80 | ~0.95 healthy | ~0.048 flat | ~0.18 | ~0.012 | ~−0.018 |
+| B | entboost v7b hold f40 e0.08 lr5e-5 | ~249 | **~3.42 saturated** since ~u80 | ~0.040 flat | ~0.21↑ | ~0.002 | ~−0.15↑ |
+| C | entboost v7 combo f40 e0.08 lr5e-5 | ~70 | ~0.43 cooling | ~0.060↑ | ~0.22 | (early) | (early) |
+
+**Diagnosis:** P1 gate ≪0.80. **B** entropy maxed / explore useless; nt UUU hold still ~0.04 — **v8** (ENT0.05 cold) already staged for u400 (~22:05 CT). **A/C** early in stretch, oob=0; A nt flat, C nt slightly rising. Not a plant/force issue.
+
+**Action:** None mid-run. Watch B→v8 cold; A/C to u400. Next lever if still flat: **two-policy handoff**. NEED_USER_PING no.
 
 ## Implementation status (2026-09-19 ~14:35 CT)
 
