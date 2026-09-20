@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~07:58 CT
+Last updated: 2026-09-20 ~08:18 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~07:58 CT):** **A = S1** walls-swing ~u48 (hang_align **~−0.027**, ent~1.11); **B = H1 ATRPO-lite + ENERGY_W=0.35 RPO+ERA ENT=0** just cold-started pid 169207 (`--avg-reward`, EP=1200) after ENERGY_W FAIL @~u58 (H→0.517 ERA floor, nt~0.038 flat, rew↑); **C = H1-var** (~u278 ent~0.84). ATRPO marker **armed**. Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE / ENERGY_W-only. **Stay order:** ENERGY_W (FAIL) → **ATRPO-lite LIVE (γ-free, keep long ep)** → optional Naik **ρ-center+keep-γ** if ATRPO-lite unstable → Turcato short-ep only as discounted fallback (research 07:56; Naik 2405.09999 / Wan 2501.06937).
+**Live mapping (2026-09-20 ~08:18 CT):** **A = S1** walls-swing ~**u86** (hang_align/UUU **~−0.049**, nt_UUU~0.058, ent~1.07, OOB=0); **B = H1 ATRPO-lite + ENERGY_W=0.35 RPO+ERA ENT=0** pid **169207** ~**u33** early (`--avg-reward`, EP=1200): nt_UUU **~0.036 flat**, nt_align −0.076→**+0.058**, nt_rew 233→248↑, ρ **−1.03→+0.42**, H **1.77→0.88** (above ERA 0.5), OOB=0 — babysit; **C = H1-var** ~**u315** nt~0.049 ent~0.81 OOB=0. ATRPO markers armed. Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE / ENERGY_W-only. **Stay order:** ENERGY_W (FAIL) → **ATRPO-lite LIVE (γ-free, keep long ep)** → optional Naik **ρ-center+keep-γ** if ATRPO-lite unstable → Turcato short-ep only as discounted fallback (research 07:56; Naik 2405.09999 / Wan 2501.06937).
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,16 +61,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~07:58 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
-  - **A = S1 walls-swing** — ~**u48** hang_align/UUU **~−0.027**, nt_UUU~0.062, ent **~1.11**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
-  - **B = H1 ATRPO-lite + ENERGY_W=0.35 RPO+ERA ENT=0** — **LIVE** pid **169207** cold-start (`--avg-reward`, EP=1200). Prior ENERGY_W stretch FAIL @~u58 (H 1.77→0.517 ERA floor, nt~0.038 flat, nt_rew 228→250↑). Markers `.triple-b-h1-atrpo-v1` + `.triple-b-h1-atrpo-cold-v1`.
-  - **C = H1-var** — ~**u278** ENT=0.05 ent **~0.84** nt~0.056 — leave alone. Marker `.triple-c-h1var-walls-v1`.
+- **Live (2026-09-20 ~08:18 CT):** VM `cartpole-train-od` RUNNING us-east1-b L4 ~99%/16.5GB; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c. TRACK_WALLS=1 all slots.
+  - **A = S1 walls-swing** — pid **166936** ~**u86** hang_align/UUU **~−0.049**, nt_UUU~0.058, ent **~1.07**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
+  - **B = H1 ATRPO-lite + ENERGY_W=0.35 RPO+ERA ENT=0** — pid **169207** ~**u33** (`--avg-reward`, EP=1200): nt_UUU **~0.036 flat**, nt_align −0.076→**+0.058**, nt_rew 233→248↑, ρ **−1.03→+0.42**, H **1.77→0.88** (above ERA 0.5), OOB=0 — **early+healthy → leave alone** (babysit to ~u80–100). Markers `.triple-b-h1-atrpo-v1` + `.triple-b-h1-atrpo-cold-v1`.
+  - **C = H1-var** — pid **158583** ~**u315** ENT=0.05 ent **~0.81** nt_UUU **~0.049** OOB=0 — leave alone. Marker `.triple-c-h1var-walls-v1`.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire:** ENERGY_W hit ~u60 gate with visit≠hold (reward↑/hold≈0) + H pinned at ERA soft floor → **armed ATRPO**, mid-killed B 166805, watcher cold-wiped and started ATRPO-lite. A/C left alone.
-- **Next micro-task:** (1) Babysit B **ATRPO-lite** to ~u80–100: watch `train/avg_reward_rho`, nt_UUU, entropy. If nt climbs → cook toward 0.80. If still flat+reward↑ by u100 → **Naik ρ-center+keep-γ** next (not short-ep first), then Turcato EP 600–800 / PPO-BR — **never** AR-EAPO / ENT≥0.02 / gSDE / ENERGY_W-only. (2) A leave alone early stretch. (3) C = H1-var control. (4) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
+- **Diagnosis / actions this fire:** B still <u40; ATRPO ρ climbing and nt_align improving while nt_UUU flat — expected early cold-start, not a kill. Entropy diving but still ≫ ERA floor. No crashes. **Left A/B/C alone** (no mid-kill, no EP shorten, no Naik yet).
+- **Next micro-task:** (1) Babysit B **ATRPO-lite** to ~u80–100: watch `train/avg_reward_rho`, nt_UUU, entropy vs ERA 0.5. If nt climbs → cook toward 0.80. If still flat+reward↑ by u100 → **Naik ρ-center+keep-γ** next (not short-ep first), then Turcato EP 600–800 / PPO-BR — **never** AR-EAPO / ENT≥0.02 / gSDE / ENERGY_W-only. (2) A leave alone early stretch. (3) C = H1-var control. (4) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
 - **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1 ATRPO-lite + ENERGY_W=0.35** / **C H1-var**
-- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENERGY_W-only (no ATRPO); relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN before giving ATRPO ~u80–100**; **re-arm ENERGY_W-only after ATRPO armed**; **treat Naik ρ-center+keep-γ as a substitute for ATRPO-lite before trying ATRPO** (Naik is fallback *after* ATRPO-lite, research 07:56)
-- **NEED_USER_PING:** **yes** — ENERGY_W FAIL → ATRPO armed + mid-kill
+- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENERGY_W-only (no ATRPO); relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN before giving ATRPO ~u80–100**; **re-arm ENERGY_W-only after ATRPO armed**; **treat Naik ρ-center+keep-γ as a substitute for ATRPO-lite before trying ATRPO** (Naik is fallback *after* ATRPO-lite, research 07:56); **mid-kill climbing/early ATRPO**
+- **NEED_USER_PING:** **yes** — 15m think-out-loud (ATRPO early babysit, no action)
 
 
 ## Ranked backlog (pull from top when a stretch ends)
