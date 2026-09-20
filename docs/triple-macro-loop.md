@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~01:15 CT
+Last updated: 2026-09-20 ~01:25 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -29,7 +29,7 @@ When found: name root cause, update Next micro-task, implement carefully, push, 
 | Phase | Gate to leave | What "done" looks like |
 |---|---|---|
 | **P0 — Plant + meters** | Physics/tests green; product reward + flip-augment + `eval/near_target` + `eval/hang` logging | Already mostly done on `main` |
-| **P1a — Walls-on UUU** | Walls-on plant: `eval/near_target/at_goal/UUU` ≳ **0.80** and align ≳ **0.90** for ≥1 stretch; entropy not collapsed | **LIVE on A** (just cold-started) |
+| **P1a — Walls-on UUU** | Walls-on plant: `eval/near_target/at_goal/UUU` ≳ **0.80** and align ≳ **0.90** for ≥1 stretch; entropy not collapsed | **LIVE on A+B+C** (walls confirmed) |
 | **P1b — Nowalls FT** | Same meters on **void** plant (walls off), starting from P1a ckpt | After P1a gate |
 | **P1 — UUU hold (overall)** | P1a then P1b both clear (void is the ship plant) | Current focus |
 | **P2 — UUU swing** | `eval/hang/at_goal/UUU` ≳ **0.50** (then chase 0.70+) without killing hold | After P1 |
@@ -39,21 +39,23 @@ When found: name root cause, update Next micro-task, implement carefully, push, 
 
 ## Current phase + next micro-task
 
-- **Phase:** P1a — walls-on UUU (**A+C LIVE**; **B fixing to walls**)
-- **Live (~01:15 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/13.5GB). TB http://34.148.138.48:6006/
-  - **A** **P1a walls-on UUU LIVE** (pid 142589, ~u40/400) — `track_walls=True`; nt_UUU~**0.033** align_UUU~**+0.06** (climbing from −0.07); entropy~**1.84** healthy; **oob=0**. Early but align direction better than dead void stretch.
-  - **B** was **void PPO-balance** (pid 142965, ~u14, `track_walls=False`) — **mis-arm**. TQC did exit (~06:07Z) after reward-hack (ep_rew~567 success≈0). Restarting B as **walls-on PPO-balance** (marker `.triple-b-ppo-balance-walls-v1`, `TRACK_WALLS=1`).
-  - **C** **P1a walls-on combo LIVE** (pid 143053, ~u1+) — `track_walls=True`, ent0.08/lr5e-5, hang0.15; marker `.triple-c-walls-v1`. Prior void ended nt~0.049. Leave alone.
-- **Diagnosis this fire:**
-  1. **Wrong plant on B (self-caught):** continue-b launched PPO-balance with default void — violates P1a walls-first. Fixed script + cold walls restart (not babysitting void balance).
-  2. **A walls early OK:** reward↑ but hold still ~0 (expected <u50); align climbing +; entropy not collapsed; oob=0 (walls). No center-farm signal.
-  3. TQC reward-hack closed (natural exit done). Do not relaunch wide TQC.
-- **Catch-basin:** TQC zip dead; LQR tiny RoA; PPO-balance walls-on is the live catcher path.
-- **Watchers:** continue-a/b/c alive. B script patched for `TRACK_WALLS=1`.
-- **Next micro-task:** (1) Babysit **A+C walls-on** — watch nt_UUU/align/entropy/oob through first 100u; no mid-kill. (2) Confirm **B walls-balance** cold-start healthy. (3) After P1a gate (nt≳0.80 align≳0.90) → P1b nowalls FT.
-- **Kill list:** no double/xonly; slots = **A walls** / **B walls-balance** / **C walls-combo**
-- **Do not:** mid-kill A/C; relaunch wide TQC; stack GPU; treat TQC zip as catcher; run B void during P1a
-- **NEED_USER_PING:** **no** — first walls ping already owed/sent prior fire; this fire is ops fix (B walls) + early babysit. Ping on gate clear or new strategy flip.
+- **Phase:** P1a — walls-on UUU (**A+B+C ALL LIVE walls-on**)
+- **Live (~01:25 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~98–99%/14.2GB of 22.5GB; uptime ~46.5h). TB http://34.148.138.48:6006/ HTTP 200. continue-a/b/c watchers alive. Scripts md5-match box.
+  - **A** walls-on UUU hold LIVE (pid **142589**, ~**u50–56**/400) — `--track-walls` / `TRACK_WALLS=1`; marker `.triple-a-walls-v1`. **nt_UUU~0.036** (flat early); **align_UUU~+0.123** (from −0.07 @u1 → +0.06 @u40 → +0.12 @u50); train reward peaked ~229 @u10 then settling ~155; **entropy~1.94** healthy; **oob_rate=0**. Hang UUU still ~0.
+  - **B** **CONFIRMED walls-on PPO-balance** LIVE (pid **143661**, ~**u10** train / eval@u1) — run `…-walls-balance…`; marker `.triple-b-ppo-balance-walls-v1` (06:19Z); `track_walls=True`; nt_UUU~**0.037** align~**−0.075**; ent~**1.45**; **oob=0**. Prior void balance (pids 142965/143446) exited; TQC exited earlier (reward-hack) — do not relaunch.
+  - **C** walls-on combo LIVE (pid **143053**, ~**u10–20**/400) — `track_walls=True`; marker `.triple-c-walls-v1`; nt_UUU~**0.0345** align~**−0.055** (slightly up from −0.064); reward~227 @u10; **entropy~2.25**; **oob=0**. Early — leave alone.
+- **Diagnosis this fire (~01:25 CT):**
+  1. **Plant phase OK:** all three live jobs have `--track-walls` + `TRACK_WALLS=1`. **B is walls-on now** (prior void mis-arm closed).
+  2. **Reward↑ hold≈0:** A reward up then settling while hold still ~0.036 — **expected <u100**, not classic hack (align climbing strongly +, unlike TQC reward-hack with success≈0). C/B too early to call.
+  3. **Center farm:** oob=0 on walls plant; no thrash/void-death signal. No action.
+  4. **Entropy:** A~1.94 / B~1.45 / C~2.25 — not collapsed, not saturated (~3.4 was prior bad pattern).
+  5. **Actions:** none — leave A/B/C cooking; no mid-kill; no TQC relaunch; no code change (continue-b already walls-v1 on box+VM, md5 match).
+- **Catch-basin:** TQC zip dead; LQR tiny RoA; **PPO-balance walls-on on B** is the live catcher path.
+- **Watchers:** continue-a (142090) / continue-b (143647) / continue-c (142091) alive.
+- **Next micro-task:** (1) Babysit **A+B+C walls-on** through ~u100 — watch nt_UUU / align_UUU / entropy / oob; no mid-kill. (2) If A nt stays flat past ~u150 with align plateau, stage natural-exit ladder (bar10→50 / ENERGY_W↑) — never mid-kill. (3) After P1a gate (nt≳0.80 align≳0.90) → P1b nowalls FT from best walls ckpt.
+- **Kill list:** no double/xonly; slots = **A walls-hold** / **B walls-balance** / **C walls-combo**
+- **Do not:** mid-kill healthy stretches; relaunch wide TQC; stack GPU; treat TQC zip as catcher; run void during P1a
+- **NEED_USER_PING:** **no** — first walls live already reported; B walls confirm is ops babysit; gate not clear; no strategy flip.
 
 ## Ranked backlog (pull from top when a stretch ends)
 
