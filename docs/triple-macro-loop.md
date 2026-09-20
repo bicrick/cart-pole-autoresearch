@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~07:36 CT
+Last updated: 2026-09-20 ~07:45 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~07:36 CT):** **A = S1** walls-swing (new stretch ~u10 after u400; hang_align **~−0.034**, clean); **B = H1 ENERGY_W=0.35 RPO+ERA ENT=0 (no gSDE)** ~u20 (H **1.37→1.18↓**, nt **~0.034 flat**, reward↑ — babysit u60–80); **C = H1-var** (~u240 ent~0.87). Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE. **Stay order:** ENERGY_W → **ATRPO-lite (keep long ep)** → short-ep only as discounted fallback (research 07:36).
+**Live mapping (2026-09-20 ~07:45 CT):** **A = S1** walls-swing ~u26 (hang_align **~−0.047**, ent~1.14); **B = H1 ENERGY_W=0.35 RPO+ERA ENT=0 (no gSDE)** ~u38 (H **1.77→0.64↓↓**, nt **~0.035 flat**, nt_rew↑ — babysit u60–80); **C = H1-var** (~u259 ent~0.85). ATRPO-lite **staged** (`--avg-reward`) behind `.triple-b-h1-atrpo-v1` (not armed). Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE. **Stay order:** ENERGY_W → **ATRPO-lite (keep long ep)** → short-ep only as discounted fallback.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,16 +61,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~07:36 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
-  - **A = S1 walls-swing** — new stretch ~**u10** (prior finished u400); hang_align/UUU **~−0.034**, nt_UUU~0.063, ent **~1.15**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
-  - **B = H1 ENERGY_W=0.35 RPO+ERA ENT=0 (no gSDE)** — ~**u20** H **1.37→1.18↓**, nt **~0.034 flat**, eval/reward **119→212↑** (reward↑/hold≈0 early — babysit to u60–80). Marker `.triple-b-h1-energy035-v1`. Prior gSDE marker kept (do not re-arm).
-  - **C = H1-var** — ~**u240** ENT=0.05 ent **~0.87** nt~0.051 — leave alone. Marker `.triple-c-h1var-walls-v1`.
+- **Live (2026-09-20 ~07:45 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
+  - **A = S1 walls-swing** — ~**u26** hang_align/UUU **~−0.047**, nt_UUU~0.057, ent **~1.14**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
+  - **B = H1 ENERGY_W=0.35 RPO+ERA ENT=0 (no gSDE)** — ~**u38** H **1.77→0.64↓↓**, nt **~0.035 flat**, nt_rew **228→243↑** (reward↑/hold≈0 — babysit to u60–80). Marker `.triple-b-h1-energy035-v1`. Prior gSDE marker kept (do not re-arm).
+  - **C = H1-var** — ~**u259** ENT=0.05 ent **~0.85** nt~0.058 — leave alone. Marker `.triple-c-h1var-walls-v1`.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire (research):** gSDE FAIL confirmed; ENERGY_W live. Literature **reorders** stay ladder: ATRPO assumes continuing long horizons (2106.07329 §6.3) — do **not** shorten EPISODE_LEN before ATRPO-lite.
-- **Next micro-task:** (1) Babysit B **ENERGY_W=0.35** to ~u60–80: if nt still flat + reward↑ → next **ATRPO-lite** (ρ-center + γ-free GAE, ENT=0, **keep EPISODE_LEN ≥1200**) — **not** short-ep first, **not** ENT crank / AR-EAPO / gSDE. Turcato EPISODE_LEN 600–800 only as **discounted fallback** if ATRPO-lite not coded / fails. If nt climbs, cook. (2) Never ENT≥0.02 on RPO / AR-EAPO / blind-resume floor-σ / re-arm gSDE. (3) A natural exit: flat-eval ladder (ENERGY_W already 0.5 — soft-land later; bar10→50 only if rail-park). (4) C = H1-var control. (5) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
-- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1+ENERGY_W=0.35** / **C H1-var**
-- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENT=0 without energy bump; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN as a prerequisite before ATRPO-lite**
-- **NEED_USER_PING:** **yes** — stay order beat (ATRPO before short-ep)
+- **Diagnosis / actions this fire:** ENERGY_W showing same visit≠hold + entropy dive as early gSDE (H diving ~0.03/u toward ERA floor). Still under u60–80 gate → no mid-kill. **Staged ATRPO-lite** (`--avg-reward` ρ-center + γ-free GAE) in trainer/scripts; continue-b arms it only when `.triple-b-h1-atrpo-v1` is touched.
+- **Next micro-task:** (1) Babysit B **ENERGY_W=0.35** to ~u60–80: if nt still flat + reward↑ → **touch `.triple-b-h1-atrpo-v1`, mid-kill B**, watcher cold-starts ATRPO-lite (ENT=0, EP≥1200, keep ENERGY_W=0.35 + RPO+ERA) — **not** short-ep first. If nt climbs, cook. (2) Never ENT≥0.02 on RPO / AR-EAPO / blind-resume floor-σ / re-arm gSDE. (3) A leave alone early stretch. (4) C = H1-var control. (5) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
+- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1+ENERGY_W=0.35** (ATRPO staged) / **C H1-var**
+- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENT=0 without energy bump; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN as a prerequisite before ATRPO-lite**; **arm `.triple-b-h1-atrpo-v1` before u60–80 ENERGY_W gate**
+- **NEED_USER_PING:** **yes** — ENERGY_W entropy dive watch + ATRPO staged
 
 
 ## Ranked backlog (pull from top when a stretch ends)

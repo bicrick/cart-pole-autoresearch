@@ -62,31 +62,57 @@ start_ppo_h1() {
     rm -f policies/checkpoint-triple-b.pt
     echo "$(date -u +%FT%TZ) arming H1 gSDE sf4 + ENT=0 (RPO+ERA kept); cold ckpt; marker set" >> logs/continue-triple-b.log
   fi
-  # Next: non-MaxEnt stay — Spong ENERGY_W 0.2→0.35, DROP gSDE, keep RPO+ERA+ENT=0.
-  # Cold wipe collapsed-σ ckpt. Later if still flat: ATRPO-lite FIRST (ρ-center + γ-free
-  # GAE, keep EPISODE_LEN≥1200) — short-ep 600–800 only as discounted fallback (research 07:36).
+  # ENERGY_W=0.35 stretch (LIVE ~07:23 CT). Babysit to u60–80; if nt still flat+reward↑
+  # → overnight touches .triple-b-h1-atrpo-v1 then mid-kills / natural-exits into ATRPO.
   if [[ ! -f policies/.triple-b-h1-energy035-v1 ]]; then
     touch policies/.triple-b-h1-energy035-v1
     rm -f policies/checkpoint-triple-b.pt
     echo "$(date -u +%FT%TZ) arming H1 ENERGY_W=0.35 + RPO+ERA ENT=0 (no gSDE); cold ckpt; marker set" >> logs/continue-triple-b.log
   fi
-  nohup env TRACK_WALLS=1 NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
-    REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
-    WARMUP_UPDATES=0 WARMUP_GOAL=UUU \
-    WARMUP_HANG_START_P=0.0 HANG_START_P=0.0 \
-    NEAR_GOAL_P=1.0 WRONG_EQ_P=0.0 UU_BIAS=1.0 ANNEAL_UPDATES=0 \
-    GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
-    CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
-    FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
-    INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.35 LR=1e-4 ENT=0 \
-    VEL_COST_COEF=0.015 RPO_ALPHA=0.01 LOG_STD_FLOOR=0.5 RESET_LOG_STD=0 \
-    USE_SDE=0 \
-    RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-rpo01-era05-ew035-ent0-bar10-prog1-flip \
-    CHECKPOINT=policies/checkpoint-triple-b.pt \
-    OUT=policies/policy-triple-b.json \
-    bash scripts/next-train-triple.sh \
-    >> logs/train-triple-b-balance.log 2>&1 &
-  echo "$(date -u +%FT%TZ) STARTED triple-b H1 walls-hold RPO+ERA ENERGY_W=0.35 ENT=0 (no gSDE) pid=$!" >> logs/continue-triple-b.log
+  if [[ -f policies/.triple-b-h1-atrpo-v1 ]]; then
+    # ATRPO-lite (Zhang–Ross 2106.07329): ρ-center + γ-free GAE, ENT=0, EP≥1200.
+    # Cold wipe ENERGY_W weights once.
+    if [[ ! -f policies/.triple-b-h1-atrpo-cold-v1 ]]; then
+      rm -f policies/checkpoint-triple-b.pt
+      touch policies/.triple-b-h1-atrpo-cold-v1
+      echo "$(date -u +%FT%TZ) ATRPO cold wipe collapsed ENERGY_W ckpt; cold marker set" >> logs/continue-triple-b.log
+    fi
+    nohup env TRACK_WALLS=1 NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
+      REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
+      WARMUP_UPDATES=0 WARMUP_GOAL=UUU \
+      WARMUP_HANG_START_P=0.0 HANG_START_P=0.0 \
+      NEAR_GOAL_P=1.0 WRONG_EQ_P=0.0 UU_BIAS=1.0 ANNEAL_UPDATES=0 \
+      GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
+      CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
+      FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
+      INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.35 LR=1e-4 ENT=0 \
+      VEL_COST_COEF=0.015 RPO_ALPHA=0.01 LOG_STD_FLOOR=0.5 RESET_LOG_STD=0 \
+      USE_SDE=0 AVG_REWARD=1 EPISODE_LEN=1200 \
+      RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-rpo01-era05-ew035-atrpo-ent0-bar10-prog1-flip \
+      CHECKPOINT=policies/checkpoint-triple-b.pt \
+      OUT=policies/policy-triple-b.json \
+      bash scripts/next-train-triple.sh \
+      >> logs/train-triple-b-balance.log 2>&1 &
+    echo "$(date -u +%FT%TZ) STARTED triple-b H1 ATRPO-lite + ENERGY_W=0.35 RPO+ERA ENT=0 pid=$!" >> logs/continue-triple-b.log
+  else
+    nohup env TRACK_WALLS=1 NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
+      REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
+      WARMUP_UPDATES=0 WARMUP_GOAL=UUU \
+      WARMUP_HANG_START_P=0.0 HANG_START_P=0.0 \
+      NEAR_GOAL_P=1.0 WRONG_EQ_P=0.0 UU_BIAS=1.0 ANNEAL_UPDATES=0 \
+      GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
+      CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
+      FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
+      INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.35 LR=1e-4 ENT=0 \
+      VEL_COST_COEF=0.015 RPO_ALPHA=0.01 LOG_STD_FLOOR=0.5 RESET_LOG_STD=0 \
+      USE_SDE=0 \
+      RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-rpo01-era05-ew035-ent0-bar10-prog1-flip \
+      CHECKPOINT=policies/checkpoint-triple-b.pt \
+      OUT=policies/policy-triple-b.json \
+      bash scripts/next-train-triple.sh \
+      >> logs/train-triple-b-balance.log 2>&1 &
+    echo "$(date -u +%FT%TZ) STARTED triple-b H1 walls-hold RPO+ERA ENERGY_W=0.35 ENT=0 (no gSDE) pid=$!" >> logs/continue-triple-b.log
+  fi
 }
 
 while true; do

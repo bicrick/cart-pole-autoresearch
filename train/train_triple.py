@@ -99,6 +99,13 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--gamma", type=float, default=0.995)
     parser.add_argument("--gae", type=float, default=0.95)
+    parser.add_argument(
+        "--avg-reward",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="ATRPO-lite (Zhang–Ross 2106.07329 Alg.2/App.G): ρ-center rewards + "
+        "γ-free GAE (λ=--gae). Keep EPISODE_LEN≥1200. Pair with --ent 0.",
+    )
     parser.add_argument("--clip", type=float, default=0.2)
     parser.add_argument("--ent", type=float, default=0.01)
     parser.add_argument(
@@ -1218,10 +1225,16 @@ def main():
         adv = torch.zeros_like(rew_t)
         last_adv = torch.zeros(args.num_envs, device=device)
         next_value = last_val
+        # ATRPO-lite: subtract batch-mean reward ρ̂, drop γ from TD/GAE (λ only).
+        rho_hat = rew_t.mean() if args.avg_reward else rew_t.new_zeros(())
         for t in reversed(range(args.rollout)):
             mask = 1.0 - done_t[t]
-            delta = rew_t[t] + args.gamma * next_value * mask - val_t[t]
-            last_adv = delta + args.gamma * args.gae * mask * last_adv
+            if args.avg_reward:
+                delta = (rew_t[t] - rho_hat) + next_value * mask - val_t[t]
+                last_adv = delta + args.gae * mask * last_adv
+            else:
+                delta = rew_t[t] + args.gamma * next_value * mask - val_t[t]
+                last_adv = delta + args.gamma * args.gae * mask * last_adv
             adv[t] = last_adv
             next_value = val_t[t]
         ret = adv + val_t
@@ -1290,6 +1303,8 @@ def main():
             writer.add_scalar("train/policy_loss", last_policy, update)
             writer.add_scalar("train/value_loss", last_value, update)
             writer.add_scalar("train/entropy", last_ent, update)
+            if args.avg_reward:
+                writer.add_scalar("train/avg_reward_rho", float(rho_hat.detach()), update)
             writer.add_scalar("train/loss", last_loss, update)
         else:
             writer.add_scalar("train/skipped_all_minibatches", 1.0, update)

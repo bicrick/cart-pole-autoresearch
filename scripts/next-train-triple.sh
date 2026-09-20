@@ -41,6 +41,7 @@ LOG_STD_FLOOR="${LOG_STD_FLOOR:-0}"
 RESET_LOG_STD="${RESET_LOG_STD:-}"
 USE_SDE="${USE_SDE:-0}"
 SDE_SAMPLE_FREQ="${SDE_SAMPLE_FREQ:-4}"
+AVG_REWARD="${AVG_REWARD:-0}"
 FORCE_LIMIT="${FORCE_LIMIT:-40}"
 PROGRESS_W="${PROGRESS_W:-}"
 FLIP_AUGMENT="${FLIP_AUGMENT:-1}"
@@ -70,6 +71,10 @@ fi
 # Raffin/SB3 gSDE (Zoo Pendulum: use_sde + sample_freq=4, typically with ENT=0).
 if [[ "${USE_SDE}" == "1" || "${USE_SDE}" == "true" || "${USE_SDE}" == "on" ]]; then
   FORCE_ARGS+=(--use-sde --sde-sample-freq "${SDE_SAMPLE_FREQ}")
+fi
+# ATRPO-lite (Zhang–Ross): ρ-center + γ-free GAE. Keep EPISODE_LEN≥1200.
+if [[ "${AVG_REWARD}" == "1" || "${AVG_REWARD}" == "true" || "${AVG_REWARD}" == "on" ]]; then
+  FORCE_ARGS+=(--avg-reward)
 fi
 
 if [[ "${TRACK_WALLS}" == "1" || "${TRACK_WALLS}" == "true" || "${TRACK_WALLS}" == "on" ]]; then
