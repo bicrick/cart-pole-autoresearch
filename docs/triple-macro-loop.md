@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~11:25 CT (LIVE square-one — walls-on H1 hold)
+Last updated: 2026-09-20 ~11:43 CT (LIVE square-one — walls-on H1 hold @u67)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -74,9 +74,10 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 
-- **Status:** **LIVE square-one** (2026-09-20 ~11:25 CT). User green-lit restart. VM `cartpole-train-od` RUNNING (us-east1-b, 34.148.138.48).
-- **Archive:** TB runs moved to `runs_archive/20260920-pre-squareone` (VM + box). TB pointed at fresh empty `runs/`.
-- **Phase:** Square-one — walls-on UUU hold only (LOCKED recipe). Slot B = `sq1-h1-walls-ent0-nt1-in005` via `scripts/continue-sq1-h1.sh` / `next-train-triple-hold-sq1.sh`. A/C continues DISARMED.
+- **Status:** **LIVE square-one** (2026-09-20 ~11:43 CT). User green-lit restart. VM `cartpole-train-od` RUNNING (us-east1-b, 34.148.138.48). Single H1 pid 2288 + continue-sq1-h1 + TB :6006.
+- **Archive:** TB runs moved to `runs_archive/20260920-pre-squareone` (VM + box). Live run `20260920-162321_sq1-h1-walls-ent0-nt1-in005`.
+- **Phase:** Square-one — walls-on UUU hold only (LOCKED recipe). Slot = `sq1-h1-walls-ent0-nt1-in005`. A/C continues DISARMED.
+- **Live meters (~u67):** nt_UUU **~0.036 flat**, nt_align **~−0.04**, eval/reward **~226↑**, H **1.44→−0.24**, OOB=0 — visit≠hold early; babysit to hard-kill window.
 - **Next micro-task:** Babysit H1 sq1. **Hard kill @u100–150** if `near_target/at_goal/UUU` ≲ **0.15** and reward↑ → STOP + ping user. No next paper lever same day. Prove stay (basin), not just mean reward.
 - **Do not:** swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT ladder, mid-kill into new algos, stack GPU VMs, auto-start A/C.
 
