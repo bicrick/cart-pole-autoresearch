@@ -1,6 +1,56 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~03:28 CT.
+Last updated: 2026-09-20 ~04:02 CT.
+
+## Research pass (2026-09-20 ~04:02 CT) — H1 fail-stack: AR-EAPO **MaxEnt fights hold**; C ENT=0.05 is a null for nt
+
+**Sources checked (this fire):** live TB `20260920-063349_*b/c` + `20260920-084629_*a` (~04:02 CT); overnight/macro @03:55; prior research 03:28 (RPO α≈0.01); **AI Olympics lessons** arXiv:2503.15290 §III-B (AR-EAPO on RealAIGym double pendulum); AR-EAPO arXiv:2409.08938; ERA 2510.08549 reconfirm; CAPS / ASAP already in notes (hold thrash → soft-land first). Overnight owns slots — no train start / no mid-kill.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (~04:02 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** (LR1e-4 restart) | 30 | **1.91↑** | 0.036 | 0.084 | hang_align/UUU **−0.97→−0.83→−0.17** @u1/10/20; policy_loss still sane — **strong climb, watch NaN** |
+| **B H1** | 270 | **−0.29↓↓** | **flat ~0.054** | **0.176↑** | rollout_reward **~0.50** / hold≈0; classic flop + dead-σ |
+| **C H1-var** | 260 | **1.47** (healthy) | **~0.042** | 0.142 | **ENT=0.05 live** — explore OK, **nt still ≈B** |
+
+### Q1 — Dead path clarification: do **not** put AR-EAPO MaxEnt on H1
+
+Competition write-up (2503.15290 §III-B) is explicit about AR-EAPO on underactuated double pendulum:
+
+> *“…the entropy component **prevents the pendulum from remaining stationary at the uppermost position**. Instead, it encourages movement toward lower positions where average entropy is higher.”*
+
+So endless swing-up/down is a **feature** of MaxEnt+avg-reward for robustness contests — and a **bug** for a pure **H1 hold specialist**. Our backlog #2 (viii) “AR-EAPO stay pressure” was underspecified and easy to miscode as “crank MaxEnt / ship full AR-EAPO on B”.
+
+**Steal only the stay half:**
+1. Turcato short episode / Spong ENERGY_W 0.2→0.35 / `center_hold_w` / staged `VEL_COST` (already next restart)
+2. Optional later **average-reward soft bias** without a MaxEnt entropy objective on the hold net
+3. **Do not** add AR-EAPO’s separate entropy-advantage / high τ MaxEnt on H1
+
+AR-EAPO full recipe stays a **swing / single-net robustness** cookbook (slot A / P2), not the H1 fail branch.
+
+### Q2 — C is the natural ENT=0.05 experiment (and it failed the hold gate)
+
+C has run ~2.5h with **ENT=0.05**, entropy **~1.47** (not collapsed), same walls/product/near_target family as B — and `nt/at_goal/UUU` is still **~0.042**, statistically the same flat as B’s **~0.054**. So:
+
+- Unbound / high ENT **≠** UUU hold on this plant+reward
+- Macro already said “prefer RPO/ERA/stay stack over ENT≥0.05”; **C meters confirm** — do not promote B→ENT=0.05 after ENT035
+- After ENT=0.035 + VEL_COST natural restart, fail order stays: **RPO α≈0.01** or **ERA soft log_std floor** (reward objective stays clean) → **non-MaxEnt stay pressure** (ENERGY_W / short ep / avg-reward bias) → cold wipe / promote C-recipe knobs (lr/noise), **not** C’s ENT
+
+### Q3 — Hold thrash / flop after soft-land
+
+If after VEL_COST + ERA/RPO we still see reward↑ / align mid / nt flat (visit≠hold with chatter), prefer **ASAP λ_T** (already noted) or CAPS temporal smoothness on the **hold** actor — not another ENT bump. CAPS is same family as ASAP; ASAP cookbook already preferred.
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Split AR-EAPO: **ban MaxEnt on H1**; keep avg-reward/ENERGY_W/short-ep stay only | **Yes** — fail branch (2) wording | **Yes** — #2 (viii) |
+| Cite C ENT=0.05 as null for nt → no B→0.05 | **Yes** — reinforce | **Yes** |
+| Mid-kill B / void / TQC / ENT≥0.05 on H1 | No | Banned |
+| Babysit + ENT035 natural | No (already Next) | — |
+
+**Nothing displaces** babysit → ENT=0.035. **Corrects a misreadable lever** before overnight codes “AR-EAPO” onto the catcher. NEED_USER_PING **yes** — MaxEnt-vs-hold footgun + C null experiment.
 
 ## Research pass (2026-09-20 ~03:28 CT) — RPO α footgun: pendulum needs **0.01**, not 0.3–0.5
 
