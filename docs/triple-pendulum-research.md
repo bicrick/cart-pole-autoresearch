@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~20:15 CT.
+Last updated: 2026-09-19 ~20:45 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -1360,3 +1360,58 @@ RC-SAC / RC-TD3: phase-1 train on **task** rewards only; phase-2 unlock **behavi
 77. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented.
 
 **No code this fire** (overnight owns train / B v7b / C→v7; wait for green-light / overnight ask). NEED_USER_PING no.
+
+
+### Research pass (2026-09-19 ~20:45 CT) — DiffSwing energy→LQR + QIP VER/TQC scale
+
+Digged DiffSwing (yunusemredanabas.com/projects/mujoco_cartpole — Sabancı ME58006; JAX energy-NN + LQR), Oh/Lee/Ryoo/Koh/Han/Lee *Reinforcement Learning to Achieve Real-time Control of a Quadruple Inverted Pendulum* (IJCAS 23:2797–2806, 2025; DOI 10.1007/s12555-025-0235-y), re-checked fawraw (still last *code* **2026-06-25** / docs **2026-07-02** — no soft-landing). Live: VM `cartpole-train-od` RUNNING; overnight owns train (do not mid-kill). **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (fills energy-swing + off-policy scale cookbooks under existing P1/P2; does not displace handoff as #1).
+
+#### DiffSwing — closest *same-mass-scale* neural energy → LQR handoff
+
+Plant matches our link/cart masses almost exactly (single pole only — retune \(E^\star\) for triple):
+
+| Knob | Steal |
+|---|---|
+| Plant | \(M{=}1.0\,\mathrm{kg}\), \(m{=}0.1\,\mathrm{kg}\), \(\ell{=}0.5\,\mathrm{m}\) (half-length) — same \(m_c,m_i,\ell_i\) class as `constants-triple.json` |
+| \(E_{\mathrm{target}}\) | **\(2mgl\)** (upright−hang ΔU for single COM at \(\ell\)) → for us use measured \(E_{\mathrm{UUU}}\) / \(U_{\mathrm{UUU}}{\approx}0.736\,\mathrm{J}\), not \(2mgl\) blindly |
+| Swing objective | \(J=\sum_t\bigl[w_E(E-E^\star)^2 + w_x x^2 + w_u u^2\bigr]\) |
+| Weight schedule | **Energy 1.0 → Position 0.1 → Control 0.01** (task energy first; behaviour later — same spirit as 2603.05113 staging @20:15) |
+| Net | MLP **2×64**, tanh; Adam **1e-3**; batch **256** ICs; ~5k steps (diffrax / analytical grads — not PPO; architecture still stealable) |
+| Obs | \([x,\cos\theta,\sin\theta,\dot x,\dot\theta]\) |
+| Handoff | neural energy pump until **\(\|\theta\|<12^\circ\approx0.209\,\mathrm{rad}\)** → LQR |
+| Peak force | ~**12 N** swing / ~6 N LQR hold — reconfirms forceLimit 40–50 ample; demote 80–100 |
+| Result | 98% success over \([-\pi,\pi]\times\pm2\,\mathrm{rad/s}\); ~1.9 s mean swing-up |
+
+**Steal for cart-triple (when green-lit):**
+
+1. P2 swing reward / residual: prefer DiffSwing-style **\(w_E(E-E_{\mathrm{UUU}})^2\)** (+ light \(x,u\)) over height-proxy `energy_w`; still prefer Fattahi *modulated action* (19:00) if coding structured \(u\), DiffSwing loss if coding energy *reward* only.
+2. Weight order: keep product+progress (task) dominant; unlock centre / soft-landing / ctrl crank only after near_target at_goal moves — DiffSwing schedule is the single-pole numeric twin of 20:15 task→behavior.
+3. Handoff angle: DiffSwing **12°** is a *single-pole LQR RoA* cue. For triple, **do not** replace measured basin ≤0.1 rad / low-ω (fawraw + ResearchSquare ±15° LQR limit @19:40) with 12° alone — treat 12° / Mon \(\bar c>0.9\) as optional *delivery* meters AND'd with basin∩energy∩low-ω.
+4. Architecture confirmation: neural (or PPO) **energy swing** + **classical LQR hold** = same rank-#1 two-policy pattern; DiffSwing is the cleanest published single-pole cookbook with our mass numbers.
+
+#### Oh et al. QIP (IJCAS 2025) — VER+TQC scales past TIP
+
+Same Inha/POSTECH lineage as Baek TIP (EAAI 2024). First model-free **quadruple** cart inverted-pendulum swing-up+balance on hardware via **TQC + VER** (geometric left↔right mirror into replay). Paywalled — **no open numeric reward / hypers cookbook** this pass (Springer / OASIS abstract only).
+
+**Steal (qualitative only until PDF unlocks):**
+
+1. Strengthens P2 off-policy: hardware winners at TIP *and* QIP used **TQC+VER**, not PPO — keep PPO overnight, but a one-slot TQC(+flip) A/B remains justified when green-lit.
+2. VER is the sample-efficiency lever that survived 3→4 links; our shipping `--flip-augment` is the on-policy cousin — no new multi-link on-policy VER paper yet.
+3. Do **not** chase QIP plant / 4-link reward until UUU hold works.
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing **implementation**: still absent (19:40 starter pack stands).
+- Serial **cart-triple** classical energy **bang-bang coeffs**: still none (DiffSwing = single-pole neural energy, not triple bang-bang).
+- Force 80–100: still demoted (DiffSwing peak ~12 N on our mass scale).
+- Baek VER: no new multi-link *on-policy* paper (QIP = off-policy VER confirmation only).
+- Rank: after v6/v7 cook, **split swing vs hold** still #1; **DiffSwing \(2mgl\) / 12° / \(w_E{:}w_x{:}w_u{=}1{:}0.1{:}0.01\)** joins Fattahi/Dyad/NNM under P2 swing + LQR handoff under P1; **QIP TQC+VER** joins Lim/Baek under P2 off-policy scale.
+
+#### Amend recommended redesign (additions only)
+
+78. When coding P2 energy *reward* (not just action modulation): start from DiffSwing \(w_E(E-E_{\mathrm{UUU}})^2 + 0.1\,x^2 + 0.01\,u^2\) with \(E_{\mathrm{UUU}}\) measured on `physics_triple`; keep product+progress as outer task or stage DiffSwing weights after product moves.
+79. Optional handoff delivery cue: \(\|\phi\|_\infty < 12^\circ\) (DiffSwing) AND'd with measured basin ≤0.1 rad + low-ω + optional E-gate — never 12° alone on triple.
+80. P2 off-policy side slot: prefer **TQC + VER/flip** (Baek TIP → Oh QIP lineage) over inventing a new algo; still second to two-policy under PPO.
+81. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented.
+
+**No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
