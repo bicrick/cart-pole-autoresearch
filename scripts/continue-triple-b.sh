@@ -63,7 +63,8 @@ start_ppo_h1() {
     echo "$(date -u +%FT%TZ) arming H1 gSDE sf4 + ENT=0 (RPO+ERA kept); cold ckpt; marker set" >> logs/continue-triple-b.log
   fi
   # Next: non-MaxEnt stay — Spong ENERGY_W 0.2→0.35, DROP gSDE, keep RPO+ERA+ENT=0.
-  # Cold wipe collapsed-σ ckpt. Later if still flat: EPISODE_LEN 600–800 → ATRPO-lite.
+  # Cold wipe collapsed-σ ckpt. Later if still flat: ATRPO-lite FIRST (ρ-center + γ-free
+  # GAE, keep EPISODE_LEN≥1200) — short-ep 600–800 only as discounted fallback (research 07:36).
   if [[ ! -f policies/.triple-b-h1-energy035-v1 ]]; then
     touch policies/.triple-b-h1-energy035-v1
     rm -f policies/checkpoint-triple-b.pt

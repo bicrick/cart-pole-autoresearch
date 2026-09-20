@@ -1,6 +1,55 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~07:07 CT.
+Last updated: 2026-09-20 ~07:36 CT.
+
+
+## Research pass (2026-09-20 ~07:36 CT) — non-MaxEnt stay **ORDER beat**: ATRPO-lite **before** short-ep (do not shorten then AR)
+
+**Sources checked (this fire):** live TB `…ew035-ent0` / prior gSDE / A restart / C (~07:35 CT); overnight/macro @07:20 (ENERGY_W=0.35 live after gSDE FAIL); prior research 07:07 (ATRPO cookbook) + 04:59 (EVAL-PPI) + 04:02 (MaxEnt ban); **ATRPO** Zhang–Ross arXiv:2106.07329 Alg.2 + §6.3 + App.G; **EVAL+PPI** arXiv:2501.09770 Fig.3; **AI Olympics** 2503.15290 §III-B; soft-Q bifurcation 2506.05615; Turcato short-horizon (paper-lessons y); Spong energy (capture E→E*); PPO-BR 2505.17714. Overnight owns slots — **no mid-kill / no train start**.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (~07:35 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | other |
+|---|---|---|---|---|
+| **A S1** | new stretch ~**u10** (prior finished u400 hang_align ~−0.05) | **~1.15** | ~0.063 | hang_align/UUU **~−0.034** — leave alone |
+| **B H1 ENERGY_W=0.35 RPO+ERA ENT=0 (no gSDE)** | **~20** | **1.37→1.18↓** | **~0.034 flat** | eval/reward **119→212↑**; rollout 0.31→0.34↑; policy_loss OK; OOB=0 — **same reward↑/hold≈0 class early** (babysit to u60–80) |
+| **C H1-var** | ~**240** | **~0.87** | ~0.051 | flat control — leave alone |
+
+### Q1 — Live ENERGY_W=0.35 already rhymes with visit≠hold @u20
+
+Overnight mid-killed gSDE (H 1.59→0.58 @u30, nt flat) → cold ENERGY_W 0.2→0.35 + drop gSDE. Early signal: H still diving (~0.01/u), nt stuck ~0.03–0.04, reward climbing — **do not mid-kill from research**; gate remains u60–80. Note: Spong ENERGY_W is *energy-to-goal* pressure. On H1 `near_target` noise=0.05, |E−E★| is already tiny, so ENERGY_W may be a **weak stay lever for flopping** (VEL_COST=0.015 already live on this stretch). Treat ENERGY_W as step-1 of the stay ladder, not a guaranteed fix.
+
+### Q2 — MATERIAL order beat: **ATRPO-lite before Turcato short-ep**
+
+Live Next / 07:07 stay ladder said: ENERGY_W → **EPISODE_LEN 600–800** → ATRPO-lite. That order **fights** the ATRPO paper:
+
+1. **ATRPO Alg.2 / App.G** (2106.07329): ρ̂ = batch mean reward; critic/advantage use \(r−\hat\rho\) with **no γ** (γ-free GAE λ≈0.95). Designed for **continuing** infinite-horizon tasks.
+2. **ATRPO §6.3 Humanoid:** discounted TRPO gets higher *early* speed then falls (~median traj len ~450); ATRPO sustains **10k-step** trajectories — exactly “visit/farm early vs stay forever.” Our B symptom (reward↑ / nt flat) is the discounted failure mode ATRPO was built to fix.
+3. **ATRPO training protocol:** they *remove* early episode termination and use large truncation N during training. **Shortening `EPISODE_LEN` before ATRPO** re-imposes the episodic/discounted bias the method rejects.
+4. **Turcato short-horizon (lesson y)** remains valid as a *discounted episodic proxy*: force early capture when you stay on γ-PPO without porting AR. It is **not** a prerequisite for ATRPO — it is the **fallback if ATRPO-lite is not coded / fails**.
+5. **EVAL Fig.3** (2501.09770): un-regularized AR+PPI holds continuing CartPole ≫ soft-Q — confirmation that the *objective* is stay; EVAL stack itself stays confirmation-only (discrete/off-policy).
+6. **MaxEnt ban restated** (2503.15290 §III-B; 2506.05615): entropy term prevents stationary upright — keep ENT=0; ban AR-EAPO MaxEnt pair / re-arm gSDE / ENT≥0.02 on RPO.
+7. **PPO-BR ε contract** (2505.17714): still later — after σ/stay tools, if reward plateaus under recovering σ (contract ε 0.2→0.1; never expand-on-low-H on H1).
+
+**Corrected stay ladder after MaxEnt/explore FAIL (gSDE / ENT cranks dead):**
+1. Spong `ENERGY_W` 0.2→**0.35** (LIVE on B; babysit → u60–80)
+2. **ATRPO-lite next:** ρ-center rewards + γ-free GAE / bias critic, ENT=0, **keep `EPISODE_LEN` ≥1200** (or lengthen / continuing spirit) — do **not** shorten first
+3. Turcato `EPISODE_LEN` 600–800 only as **discounted fallback** if (2) not yet implementable or fails
+4. Optional PPO-BR ε contract if reward flat after stay objective moves
+5. Still banned: AR-EAPO MaxEnt, ENT≥0.02 on RPO, Listing-2 D=1, blind-resume floor-σ, re-arm gSDE, void TQC
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Reorder fail branch: ENERGY_W → **ATRPO-lite (keep long ep)** → short-ep fallback | **Yes** | **Yes** — #2 (viii) |
+| Declare ENERGY_W dead @u20 | **No** — babysit to u60–80 | — |
+| Mid-kill B / code ATRPO tonight | **No** — overnight owns; research docs only | — |
+| PPO-BR / EVAL port now | **No** — later / confirmation-only | unchanged rank |
+
+**Material:** literature **beats** live EPISODE_LEN→ATRPO order; ATRPO wants long continuing horizons. NEED_USER_PING **yes**.
+
+**Code this fire:** docs only (research + macro Next/backlog sharpen). No train start / no mid-kill.
 
 ## Research pass (2026-09-20 ~07:07 CT) — H1 gSDE LIVE: **entropy diving @u10** + ATRPO portable stay cookbook
 
