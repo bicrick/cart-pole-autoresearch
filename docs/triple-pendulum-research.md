@@ -1,7 +1,54 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~21:31 CT.
+Last updated: 2026-09-19 ~21:56 CT.
 
+
+## Research pass (2026-09-19 ~21:56 CT) — P1 UUU-hold feeder: TQC mirror + staged two-policy recipe
+
+**Sources checked (this fire):** Lim/Ju/Lee KIEE 2025 PDF (Table 1 + §4.2–4.3 product + ICs); fawraw `m2_upright_tqc.yaml` + live `sim/handoff.py` + `docs/m4_findings.md` (CDN/raw); Baek EAAI 2024 lineage (already in product/VER); Spong/Xin energy→LQR pattern; DiffSwing (energy NN→LQR @12°); Oh et al. QIP IJCAS 2025 (TQC+VER scale); Glück Automatica 2013 (accel budget only); ResearchSquare 2026 cart-triple LQR Q/R; arXiv:2606.22145 / 2312.11311 / prior 15:42–21:31 notes. Skimmed top of this log (21:30 status + 21:31 BaRC) — no duplicate overnight-status section.
+
+**Phase focus:** P1 UUU **hold** only (near_target meter). Live Next = leave B PPO → Lim TQC UUU (~ETA 22:40 CT). Diagnosis already locked: single-policy PPO dead (nt~0.04–0.06).
+
+### Q1 — Once Lim TQC is live, what should overnight mirror?
+
+Staged `next-train-triple-tqc-uuu.sh` already matches Lim Table 1 (lr **3e-4**, γ **0.99**, τ **0.005**, buffer **1e6**, batch **256**, policy **400→300**, critic **3×512**, n_quantiles **25**, n_critics **3**, top_drop **2**). Product + progress + barrier already wired. **Do not retune arches mid-run.**
+
+| Lever | Lim / fawraw M2 | Our staged default | Overnight action |
+|---|---|---|---|
+| Init | Lim: wide random; **fawraw M2 hold:** `near_target` **noise=0.05**, 150k | `near_target` **noise=0.15**, wide_frac **0.25**, hang_frac **0.05**, 300k | Keep first stretch as staged. If **flat after ~50–100k** (nt_at_goal still ≲0.1): **tighten** to M2-like `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0` before declaring TQC dead (BaRC ladder 21:31: expand only after mastery). |
+| Reward | Lim pure product (eq 8–9); fawraw additive+progress | Product + `progress_w=1` + barrier10 | Keep. Optional later: CSAC-QI ∫θ on hold-only after nt moves (21:31 #83). |
+| Done signal | Lim ep return plateaus **~700–800 / 1000** under wide ICs | sb3 `ep_rew_mean` + our `eval/near_target/*` | Judge hold by **`eval/near_target/at_goal/UUU`** (gate ≳0.80) + align ≳0.90; treat ~700–800 return as healthy specialist, not failure. |
+| Force / early-stop | Lim \|a\|>**2.5** m/s², \|y\|>0.48 m (their plant) | forceLimit **40**, soft barrier | Do **not** copy Lim 2.5 m/s² — different units/plant. Keep f40; force→60 only if OOB≈0 **and** rail-slide (backlog #4). |
+| Eval | Lim: wide IC robustness | Curriculum near_target + hang | Keep curriculum meters; harsh random eval stays secondary for P1. |
+
+**QIP / Baek:** reinforces off-policy TQC(+VER/flip) for multi-link hold — already why we left PPO. No new numeric hypers beyond Lim Table 1.
+
+### Q2 — Concrete two-policy handoff if TQC plateaus (~150k flat)
+
+Ready-to-stage recipe (consolidates fawraw handoff + DiffSwing + ResearchSquare LQR + 15:42/19:40 notes). **Do not interrupt B→TQC.**
+
+1. **Hold half (catcher):** prefer the live TQC UUU ckpt if nt rising; else **cart-triple LQR** about UUU with starter \(Q_\theta\sim 100\), \(R\sim 0.01\) (ResearchSquare 2026), ICs inside **≤0.1–0.26 rad**; or PPO-balance / residual around upright with **short horizon** + dense near_target only.
+2. **Swing half:** leave slot A (or energy / DiffSwing-style \(w_E(E-E_{UUU})^2\)) — separate net; never one Gaussian for both.
+3. **Switch (enter):** all world angles \(\|\phi_i\| < \mathbf{0.1}\,\mathrm{rad}\) **and** \(\|\omega_i\|_\infty < \mathbf{1.0}\,\mathrm{rad/s}\) (tighten ω from measured basin; fawraw table: any vel≥2 → 0 catch). Optional AND \(\bar c>0.9\) (Mon) and/or energy near \(E_{UUU}\). **Never** fawraw code default `capture_tol_rad=0.3`.
+4. **Latch + hysteresis:** `latch=True`; exit only if \(\|\phi\|_\infty > \mathbf{0.25}\,\mathrm{rad}\) (or dwell) so near-misses recover (arXiv:2606.22145).
+5. **Soft-landing on swing near target:** Baek \(c_e=0.09\) rate floors / Lim \(R_\omega\) / light \(-w_\omega\|\omega\|^2\) + cart centre — gated by \(\bar c>0.9\) (19:40 pack).
+6. **Action smoothing:** first-order LPF **τ≈0.3** on swing force before handoff (2606.22145); ASAP only if still bangy.
+7. **Obs window:** full state (pos/vel/angles/rates); DiffSwing trig encoding optional for energy net only.
+
+### Q3 — Hold-specific levers vs backlog #1–3?
+
+| Candidate | Beats live Next (B→TQC)? | Beats / sharpens backlog? |
+|---|---|---|
+| Pure M2 tighten (`noise=0.05`, no hang) if TQC early-flat | **No** — same #1 stretch, curriculum detail | Sharpens #1 implementation |
+| BaRC ladder expand after mastery | No | Sharpens #1 (already 21:31) |
+| Two-policy recipe above | No — only after TQC ~150k flat | **Sharpens #2** (was vague) |
+| Energy E→E_UUU | No | Stays #3; hold-phase energy is soft-landing / E-gate, not swing pump |
+| Obs noise / residual upright / shorter hold horizon | No new winner | Optional hold-net knobs after TQC lives; residual LQR+RL is a *form* of #2 |
+| Force 40→60 | No | Stays #4 gated |
+
+**Nothing clearly beats** the live Next micro-task (Lim TQC already staged on B). Recommendation: **stay the course** — let B exit → TQC; mirror table above; if TQC flat ~150k → stage two-policy with the concrete switch/LQR pack (do not invent a new #1).
+
+**Promote?** Macro backlog item **#2 only** (concrete recipe). **Do not** change Next micro-task / interrupt B→TQC. NEED_USER_PING no.
 
 ## Overnight fire — status (2026-09-19 ~21:30 CT)
 
