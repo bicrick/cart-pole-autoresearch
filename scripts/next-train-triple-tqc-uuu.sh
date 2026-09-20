@@ -46,6 +46,18 @@ fi
 
 mkdir -p policies logs "$LOGDIR"
 
+WALLS_ARGS=()
+TRACK_WALLS="${TRACK_WALLS:-0}"
+if [[ "${TRACK_WALLS}" == "1" || "${TRACK_WALLS}" == "true" || "${TRACK_WALLS}" == "on" ]]; then
+  WALLS_ARGS+=(--track-walls)
+  # Tag run name if caller did not already.
+  if [[ "${RUN_NAME}" != *walls* ]]; then
+    RUN_NAME="${RUN_NAME}-walls"
+  fi
+elif [[ "${TRACK_WALLS}" == "0" || "${TRACK_WALLS}" == "false" || "${TRACK_WALLS}" == "off" ]]; then
+  WALLS_ARGS+=(--no-track-walls)
+fi
+
 exec "$PYTHON" train/train_triple_tqc.py \
   --total-steps "$TOTAL_STEPS" \
   --force-limit "$FORCE_LIMIT" \
@@ -73,4 +85,5 @@ exec "$PYTHON" train/train_triple_tqc.py \
   --gamma 0.99 \
   --tau 0.005 \
   "${SMOKE_FLAG[@]}" \
+  "${WALLS_ARGS[@]}" \
   "$@"

@@ -278,6 +278,16 @@ def parse_args():
         help="Override constants forceLimit (N); also env FORCE_LIMIT. Hard tanh action cap.",
     )
     parser.add_argument(
+        "--track-walls",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Hard inelastic cart endstops at ±trackLimit (clamp x, xd=0). "
+            "Default: constants trackWalls (JSON false = void). "
+            "Also env TRACK_WALLS=1/0. Walls prevent oob death — use for P1a curriculum."
+        ),
+    )
+    parser.add_argument(
         "--progress-w",
         type=float,
         default=None,
@@ -326,7 +336,8 @@ def default_run_name(args) -> str:
     parts.append(f"e{args.num_envs}")
     parts.append(f"r{args.rollout}")
     parts.append("triple")
-    parts.append("nowalls")
+    tw = getattr(args, "track_walls", None)
+    parts.append("walls" if tw else "nowalls")
     if getattr(args, "center_hold_w", 0) and args.center_hold_w > 0:
         parts.append("center")
         if args.center_hold_w != 0.18:
@@ -882,6 +893,21 @@ def main():
         constants = dict(constants)
         constants["forceLimit"] = float(fl)
         args.force_limit = float(fl)
+    # Optional track walls: CLI wins over env TRACK_WALLS over JSON trackWalls.
+    tw = args.track_walls
+    if tw is None:
+        env_tw = os.environ.get("TRACK_WALLS", "").strip().lower()
+        if env_tw in ("1", "true", "yes", "on"):
+            tw = True
+        elif env_tw in ("0", "false", "no", "off"):
+            tw = False
+        else:
+            tw = bool(constants.get("trackWalls", False))
+    constants = dict(constants)
+    constants["trackWalls"] = bool(tw)
+    # Keep physics wall rail aligned with training oob threshold.
+    constants["trackLimit"] = float(args.track_limit)
+    args.track_walls = bool(tw)
     if args.smoke:
         args.num_envs = min(args.num_envs, 32)
         args.rollout = 32
@@ -917,8 +943,8 @@ def main():
         f"forceLimit={constants['forceLimit']} "
         f"progress_w={args.progress_w} flip_augment={args.flip_augment} "
         f"eval_curriculum={args.eval_curriculum} "
-        f"alpha_th={args.alpha_th} track_limit={args.track_limit} reward_clip={args.reward_clip} "
-        f"oob_penalty={args.oob_penalty} "
+        f"alpha_th={args.alpha_th} track_limit={args.track_limit} track_walls={args.track_walls} "
+        f"reward_clip={args.reward_clip} oob_penalty={args.oob_penalty} "
         f"warmup={args.warmup_updates}x{args.warmup_goal}(hang={args.warmup_hang_start_p}) "
         f"uu_bias={args.uu_bias} anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
         f"hang_start_p={args.hang_start_p} wrong_eq_p={args.wrong_eq_p} "
@@ -1021,7 +1047,12 @@ def main():
             ep_age = ep_age + 1
             grace_n = int(args.fall_grace_steps) + int(args.start_grace_steps)
             in_grace = ep_age <= grace_n
-            oob_raw = next_state[:, 0].abs() > args.track_limit
+            # With hard walls, cart is clamped at trackLimit so void oob should
+            # not fire; keep a safety check only if somehow past the bumper.
+            if args.track_walls:
+                oob_raw = next_state[:, 0].abs() > (args.track_limit + 1e-4)
+            else:
+                oob_raw = next_state[:, 0].abs() > args.track_limit
             oob = oob_raw & (~in_grace)
             fell = torch.zeros(args.num_envs, dtype=torch.bool, device=device)
             if args.angle_fall:

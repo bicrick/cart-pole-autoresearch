@@ -1831,3 +1831,7 @@ Already noted at a high level; this pass locks the **steal for the hold half**:
 
 **No code this fire** (overnight owns train / slots). NEED_USER_PING no.
 
+
+## Walls-first UUU curriculum (2026-09-20 ~00:45 CT)
+
+Patrick: no-walls triple demo looks like center/void farming, not upright. Adopt double’s path — **P1a hard inelastic track walls** (cart clamp + \(\dot x=0\), no pole impulse), then **P1b void FT**. Flag: `trackWalls` / `--track-walls`. See macro loop P1a/P1b and paper-training-lessons (ap).

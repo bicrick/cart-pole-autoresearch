@@ -53,6 +53,15 @@ else
   FORCE_ARGS+=(--flip-augment)
 fi
 
+# Optional hard inelastic track walls (P1a curriculum). Default off (void plant).
+# TRACK_WALLS=1/--track-walls enables; TRACK_WALLS=0/--no-track-walls disables.
+TRACK_WALLS="${TRACK_WALLS:-0}"
+if [[ "${TRACK_WALLS}" == "1" || "${TRACK_WALLS}" == "true" || "${TRACK_WALLS}" == "on" ]]; then
+  FORCE_ARGS+=(--track-walls)
+elif [[ "${TRACK_WALLS}" == "0" || "${TRACK_WALLS}" == "false" || "${TRACK_WALLS}" == "off" ]]; then
+  FORCE_ARGS+=(--no-track-walls)
+fi
+
 exec python3 train/train_triple.py \
   --num-envs "${NUM_ENVS}" \
   --updates "${UPDATES}" \

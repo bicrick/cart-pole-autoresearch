@@ -85,6 +85,7 @@ class TriplePendulumUUUEnv(gym.Env):
         force_limit: float = 40.0,
         max_steps: int = 1000,
         track_limit: float = 2.4,
+        track_walls: bool = False,
         init_mode: str = "near_target",
         init_noise: float = 0.15,
         hang_frac: float = 0.0,
@@ -102,9 +103,12 @@ class TriplePendulumUUUEnv(gym.Env):
         super().__init__()
         self.constants = dict(load_constants())
         self.constants["forceLimit"] = float(force_limit)
+        self.constants["trackLimit"] = float(track_limit)
+        self.constants["trackWalls"] = bool(track_walls)
         self.force_limit = float(force_limit)
         self.max_steps = int(max_steps)
         self.track_limit = float(track_limit)
+        self.track_walls = bool(track_walls)
         self.init_mode = init_mode
         self.init_noise = float(init_noise)
         self.hang_frac = float(hang_frac)
@@ -195,7 +199,11 @@ class TriplePendulumUUUEnv(gym.Env):
         reward = float(rew_t.item())
 
         x = float(nxt[0].item())
-        oob = abs(x) > self.track_limit
+        # Walls clamp at trackLimit; only treat as void if somehow past bumper.
+        if self.track_walls:
+            oob = abs(x) > (self.track_limit + 1e-4)
+        else:
+            oob = abs(x) > self.track_limit
         align = float(
             mean_cos_align(nxt.unsqueeze(0), self._goal.unsqueeze(0)).item()
         )

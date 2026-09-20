@@ -44,6 +44,12 @@ def parse_args():
     p.add_argument("--force-limit", type=float, default=40.0)
     p.add_argument("--max-steps", type=int, default=1000)
     p.add_argument("--track-limit", type=float, default=2.4)
+    p.add_argument(
+        "--track-walls",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Hard inelastic cart endstops at ±trackLimit (P1a walls curriculum)",
+    )
     p.add_argument("--init-mode", type=str, default="near_target")
     p.add_argument("--init-noise", type=float, default=0.15)
     p.add_argument("--hang-frac", type=float, default=0.05)
@@ -78,8 +84,9 @@ def main() -> None:
     from stable_baselines3.common.vec_env import DummyVecEnv
     from sb3_contrib import TQC
 
+    walls_tag = "walls" if args.track_walls else "nowalls"
     run_name = args.run_name or (
-        f"tqc-uuu-f{args.force_limit:g}-"
+        f"tqc-uuu-f{args.force_limit:g}-{walls_tag}-"
         f"nt{args.init_noise:g}-w{args.wide_frac:g}-h{args.hang_frac:g}"
     )
     log_path = Path(args.logdir) / run_name
@@ -92,6 +99,7 @@ def main() -> None:
             force_limit=args.force_limit,
             max_steps=args.max_steps,
             track_limit=args.track_limit,
+            track_walls=bool(args.track_walls),
             init_mode=args.init_mode,
             init_noise=args.init_noise,
             hang_frac=args.hang_frac,
@@ -131,6 +139,8 @@ def main() -> None:
             "policy_arch": args.policy_arch,
             "critic_arch": args.critic_arch,
             "force_limit": args.force_limit,
+            "track_walls": bool(args.track_walls),
+            "track_limit": args.track_limit,
         },
         "init": {
             "mode": args.init_mode,

@@ -497,3 +497,14 @@ Overnight UVFA+hang (`hang_start_p≈0.45–0.60`) parked at mean align~0.2 with
 
 **Watch:** `eval/near_target/at_goal/UUU` for hold progress; `eval/hang/align/UUU` for swing. Stage-gate still UUU hold ≳0.80 before multi-eq.
 
+
+## (ap) Walls-first curriculum for cart-triple (2026-09-20 ~00:45 CT)
+
+**User insight:** on the no-walls triple demo, policies farm “stay mid-track / don’t void-die” and flop angles instead of truly erecting UUU. Same failure mode double hit before hard endstops.
+
+**Steal from double history:** early double training used **hard inelastic cart-only walls** (clamp \(x\) at ±trackLimit, set \(\dot x=0\) on contact, **no pole impulse** — commits `8ad0780` / `8c55986`). Walls later removed for void plant (`7efa4d5`) once upright existed.
+
+**Shipped for triple:** optional `trackWalls` in `shared/constants-triple.json` (default **false** = void ship plant) + CLI `--track-walls` / `--no-track-walls` (env `TRACK_WALLS=1/0`). Physics mirrors double inelastic endstops. Episode OOB terminal suppressed while walls hold the cart. Center reward terms remain; walls remove OOB-death as the dominant “stay mid” teacher.
+
+**Curriculum:** **P1a** walls-on UUU (product, near_target, UUU-first) → **P1b** nowalls fine-tune. Launch: `scripts/next-train-triple-walls.sh`. Continue A/C retargeted to walls for next *natural* restart (do not mid-kill live TQC B / improving PPO).
+

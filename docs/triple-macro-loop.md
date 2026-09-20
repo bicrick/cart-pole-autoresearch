@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~00:34 CT  
+Last updated: 2026-09-20 ~00:45 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -18,7 +18,9 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 | Phase | Gate to leave | What "done" looks like |
 |---|---|---|
 | **P0 — Plant + meters** | Physics/tests green; product reward + flip-augment + `eval/near_target` + `eval/hang` logging | Already mostly done on `main` |
-| **P1 — UUU hold** | `eval/near_target/at_goal/UUU` ≳ **0.80** and align ≳ **0.90** for ≥1 stretch; entropy not collapsed | Current focus |
+| **P1a — Walls-on UUU** | Walls-on plant: `eval/near_target/at_goal/UUU` ≳ **0.80** and align ≳ **0.90** for ≥1 stretch; entropy not collapsed | **Priority new experiment** (staged on A/C next natural restart) |
+| **P1b — Nowalls FT** | Same meters on **void** plant (walls off), starting from P1a ckpt | After P1a gate |
+| **P1 — UUU hold (overall)** | P1a then P1b both clear (void is the ship plant) | Current focus |
 | **P2 — UUU swing** | `eval/hang/at_goal/UUU` ≳ **0.50** (then chase 0.70+) without killing hold | After P1 |
 | **P3 — Multi-eq (8)** | min over 8 eqs `at_goal` ≳ **0.55**, align ≳ **0.75** | After P2 |
 | **P4 — 56 transitions** | Directed A→B≠A curriculum; eval all 56 pairs | After P3 |
@@ -35,7 +37,7 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
   - TQC@150k: **0/9 dead** (`docs/basins/basin-tqc150k.json`) — do **not** use as hold catcher.
   - LQR soft Qθ=100 / stiff Qθ=1e3: only **0.1 rad @ ω=0** survives (`docs/basins/basin-lqr-*.json`). RoA too small for enter-gate 0.1 alone under velocity.
 - **Code staged:** `train/lqr_uuu.py`, `train/handoff.py` (enter 0.1 / exit 0.25 / dwell / LPF τ=0.3), `scripts/measure_catch_basin.py`. `scripts/continue-triple-b.sh` on VM **md5-matches box** (PPO-balance on natural TQC exit; marker `.triple-b-tqc-uuu-v1` present).
-- **Next micro-task:** (1) leave B TQC to ~300k (no mid-kill); watcher will auto-start **PPO-balance** catcher on natural exit (not another wide TQC). (2) On A exit keep swing specialist via continue-a. (3) On C exit keep combo. (4) Next free cycle after B→balance starts: wire `handoff_eval` smoke (swing-A + LQR/PPO-balance catcher) + widen LQR (∫x LQI / multi-link ICs) if PPO-balance also thin. If TQC eval success>0 before stretch end → abort handoff, stage EP specialist instead. (Rollout success 0.01 alone is **not** that signal.)
+- **Next micro-task:** User insight (Patrick, 2026-09-20 ~00:37 CT): on the no-walls triple demo the policy seems to maximize staying centered / not dying and flopping angles rather than truly getting upright. Same path as double: **train with sidewalls/bumpers first**, get good, then remove bumpers for a void fine-tune. (1) leave B TQC to ~300k (no mid-kill); watcher still auto-starts **PPO-balance** catcher on natural exit (not another wide TQC). (2) On **A or C** next natural exit → pick up **P1a walls-on PPO UUU** (`scripts/continue-triple-a.sh` / `continue-triple-c.sh` now stage walls; markers `.triple-a-walls-v1` / `.triple-c-walls-v1`). Manual launch: `TRACK_WALLS=1 bash scripts/next-train-triple-walls.sh`. (3) After P1a gate → P1b nowalls FT from walls ckpt (`TRACK_WALLS=0`). (4) Next free cycle after B→balance starts: wire `handoff_eval` smoke if still needed. If TQC eval success>0 before stretch end → abort handoff, stage EP specialist instead.
 - **Kill list:** no double/xonly on the L4; slots = A PPO / **B TQC→PPO-balance** / C PPO
 - **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C; relaunch parallel wide TQC on B
 - **NEED_USER_PING:** **no** (quiet; gate ≪0.80; TQC still hold-flat; handoff path armed)

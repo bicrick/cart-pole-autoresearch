@@ -159,8 +159,15 @@ def step(state, force, extra_q=None, constants=None):
     th1 = state[..., 2] + th1d * dt
     th2 = state[..., 4] + th2d * dt
     th3 = state[..., 6] + th3d * dt
-    # No track walls. Cart may leave |x| > trackLimit; training ends the
-    # episode on oob (void → respawn).
+    # Optional hard inelastic track walls (cart-only endstops). Mirror double's
+    # early-training bumpers: clamp x, zero xd on contact, no pole impulse.
+    # When trackWalls is false (default JSON / void plant), cart may leave
+    # |x| > trackLimit and training ends the episode on oob.
+    if bool(constants.get("trackWalls", False)):
+        track = float(constants.get("trackLimit", 2.4))
+        hit = (x > track) | (x < -track)
+        x = x.clamp(-track, track)
+        xd = torch.where(hit, torch.zeros_like(xd), xd)
     next_state = torch.stack((x, xd, th1, th1d, th2, th2d, th3, th3d), dim=-1)
     return torch.nan_to_num(next_state, nan=0.0, posinf=0.0, neginf=0.0)
 

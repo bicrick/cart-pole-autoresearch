@@ -71,6 +71,26 @@ def main():
     print("physics_triple ok", nxt.tolist()[0][:4], "acc", [float(x) for x in a[0]])
     print("nowalls ok", float(s[0, 0]), "OBS_DIM", OBS_DIM, "goals", GOAL_IDS)
 
+    # Hard inelastic walls: cart held at trackLimit, xd -> 0 (cart-only, no bounce).
+    c_walls = dict(constants)
+    c_walls["trackWalls"] = True
+    track = float(c_walls.get("trackLimit", 2.4))
+    s = torch.tensor(
+        [[track - 0.01, 8.0, 0.2, 1.0, -0.2, -1.0, 0.1, 0.5]], dtype=torch.float64
+    )
+    for _ in range(30):
+        s = step(s, torch.tensor([20.0], dtype=torch.float64), constants=c_walls)
+    assert abs(float(s[0, 0])) <= track + 1e-9, s
+    assert abs(float(s[0, 1])) < 1e-9, s
+    s = torch.tensor(
+        [[-track + 0.01, -8.0, 0.2, 1.0, -0.2, -1.0, 0.1, 0.5]], dtype=torch.float64
+    )
+    for _ in range(30):
+        s = step(s, torch.tensor([-20.0], dtype=torch.float64), constants=c_walls)
+    assert abs(float(s[0, 0])) <= track + 1e-9, s
+    assert abs(float(s[0, 1])) < 1e-9, s
+    print("walls ok", float(s[0, 0]), float(s[0, 1]))
+
 
 def _mech_energy(state, constants):
     """Kinetic + potential (y up, θ=0 upright) for tip point-masses."""
