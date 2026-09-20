@@ -1,3 +1,8 @@
-tensorboard>=2.16
 torch>=2.2
+tensorboard>=2.16
 pygame>=2.6
+
+# TQC UUU specialist (Lim KIEE 2025 path; optional — use .venv-tqc)
+gymnasium>=0.29
+stable-baselines3>=2.3
+sb3-contrib>=2.3

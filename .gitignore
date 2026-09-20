@@ -41,4 +41,6 @@ credentials.json
 .gcloud/
 
 tb/
-
+.venv-tqc/
+policies/tqc-*-smoke*
+runs/tqc-uuu-smoke*
