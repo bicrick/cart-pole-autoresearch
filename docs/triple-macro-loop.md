@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~23:08 CT  
+Last updated: 2026-09-19 ~23:24 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -27,11 +27,11 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Current phase + next micro-task
 
 - **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Live (~23:08 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~98–99%/10.4GB, up ~44h). TB http://34.148.138.48:6006/
-  - **A** PPO cool-ent v6 swing f50 ~**u130**/400 nt_at_goal/UUU~**0.036** align_UUU~−0.06 — still flat on hold; leave alone (no mid-kill)
-  - **B** **TQC UUU live** (`train_triple_tqc.py` pid 133757) since **03:37Z / ~22:37 CT** — marker `.triple-b-tqc-uuu-v1`; run `tqc-uuu-f40-hold-wide_2`; ~**61.5k**/300k steps, `ep_rew_mean` −182→**+302** (still climbing), success_rate 0, fps~33, ent_coef~0.013; eval@50k mean_rew~517 success 0. **Not flat** — keep metering to ~150k
-  - **C** PPO entboost v7 combo f40 ~**u160**/400 nt~**0.042** align_UUU~0.19 — leave alone
-- **Next micro-task:** **meter TQC only.** Track B timesteps / `ep_rew_mean` / success / next eval (~75k). Leave A/C alone. If TQC still flat after ~**150k** steps → stage two-policy handoff (do not spam entropy knobs). If real UUU hold lift (success or hold eval) → stage next EP specialist. No mid-kill.
+- **Live (~23:24 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~98%/10.4GB, up ~44.5h). TB http://34.148.138.48:6006/
+  - **A** PPO cool-ent v6 swing f50 ~**u179**/400 nt_at_goal/UUU~**0.037** align_UUU~−0.066 — still flat on hold; leave alone (no mid-kill)
+  - **B** **TQC UUU live** (`train_triple_tqc.py` pid 133757) since **03:37Z / ~22:37 CT** — marker `.triple-b-tqc-uuu-v1`; run `tqc-uuu-f40-hold-wide_2`; ~**93.5k**/300k steps, `ep_rew_mean` −258→**+435** (steady climb; +133 since 61k), success_rate 0, ent_coef~0.012; eval@75k mean_rew~543 success 0. **Not flat** — keep metering to ~150k (next eval ~100k)
+  - **C** PPO entboost v7 combo f40 ~**u199**/400 nt~**0.047** align_UUU~0.22 ent~3.4 — leave alone
+- **Next micro-task:** **meter TQC only.** Track B timesteps / `ep_rew_mean` / success / next eval (~100k). Leave A/C alone. If TQC still flat after ~**150k** steps → stage two-policy handoff (do not spam entropy knobs). If real UUU hold lift (success or hold eval) → stage next EP specialist. No mid-kill.
 - **Kill list:** no double/xonly on the L4; slots = A PPO / **B TQC** / C PPO (until C stretch ends)
 - **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C while B is the specialist slot; relaunch parallel `continue-triple-tqc-uuu` (B already owns TQC)
 - **NEED_USER_PING:** **no** (quiet meter; gate still ≪0.80; TQC reward still climbing, no success yet)
