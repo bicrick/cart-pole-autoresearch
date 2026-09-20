@@ -51,6 +51,7 @@ start_ppo_h1() {
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
     INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.2 LR=1e-4 ENT=0.02 \
+    VEL_COST_COEF=0.015 \
     RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-bar10-prog1-flip \
     CHECKPOINT=policies/checkpoint-triple-b.pt \
     OUT=policies/policy-triple-b.json \

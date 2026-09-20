@@ -35,6 +35,7 @@ while true; do
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
     INIT_MODE=near_target INIT_NOISE=0.08 ENERGY_W=0.2 LR=5e-5 ENT=0.05 \
+    VEL_COST_COEF=0.015 \
     RUN_NAME=ft-triple-c-e8192-r256-uuu-walls-hold-h1var-f40-nt1-in008-bar10-prog1-flip-ent05-lr5e5 \
     CHECKPOINT=policies/checkpoint-triple-c.pt \
     OUT=policies/policy-triple-c.json \
