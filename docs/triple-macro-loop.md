@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~22:30 CT  
+Last updated: 2026-09-19 ~22:34 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -38,7 +38,7 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 
 ## Ranked backlog (pull from top when a stretch ends)
 
-1. **Lim TQC UUU specialist** (shipping now on slot B) — off-policy path that hit hardware
+1. **Lim TQC UUU specialist** (shipping now on slot B) — off-policy path that hit hardware. Hold mirror ladder if early-flat (do not mid-kill): (a) M2 tighten `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0`; (b) `ry_scale=1.0` Lim cart term; (c) **∫x obs** (Lim x₉ / LQI) + curriculum `eval/near_target/*` meters on TQC; (d) Baek VER replay flip (TQC-native); (e) optional fawraw M2 arch `[128,128]` / buffer 200k / 150k before declaring TQC dead
 2. **Two-policy handoff** (stage only if TQC flat ~150k) — hold: TQC-UUU ckpt or LQR \(Q_\theta\sim100,R\sim0.01\) / PPO-balance near_target≤0.1 rad; swing: separate net (slot A / energy); enter: \(\|\phi_i\|<0.1\) rad **and** \(\|\omega\|_\infty<1\) rad/s (+ optional \(\bar c>0.9\) / E-gate), **never** tol=0.3; latch + hysteresis exit ~0.25 rad; swing soft-landing + LPF τ≈0.3 before handoff (fawraw/DiffSwing/ResearchSquare; research 21:56)
 3. Energy-to-goal (true E→E_UUU) if product+progress plateaus
 4. Force probe 40→60 only if OOB≈0 and plant feels underpowered

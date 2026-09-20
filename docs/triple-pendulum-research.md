@@ -1,7 +1,52 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~21:56 CT.
+Last updated: 2026-09-19 ~22:34 CT.
 
+
+## Research pass (2026-09-19 ~22:34 CT) — P1 UUU-hold: Lim PDF deep-read + fawraw M2 yaml + ∫x / VER ladder
+
+**Sources checked (this fire):** Lim/Ju/Lee KIEE 2025 PDF full (Table 1 + §2.2 + §3.1 x₉=∫y + §4.1–4.3 reward/ICs); fawraw live `training/configs/m2_upright_tqc.yaml` (raw); Kuznetsov TQC defaults / sb3_contrib TQC API; Cambridge Robotica 2026 CSAC-QI (already logged); ILQR CoDIT 2024 + Machines 2025 integral-cart LQR; IJMLC 2025 LQR+SAC friction residual; arXiv:2506.17564 residual RL (adjacent). Prior 21:56 TQC-mirror + two-policy recipe stands — no overnight-status duplicate.
+
+**Phase focus:** P1 UUU **hold**. Live Next = do not touch B/C; wait B PPO exit → Lim TQC UUU. Gate ≪0.80.
+
+### Q1 — What does Lim actually do that our staged TQC still lacks?
+
+Re-read Table 1 + §3.1/§4.2 against `train_triple_tqc.py` + `product_reward` + `observe`:
+
+| Lever | Lim (hardware) | Ours staged | Action if TQC early-flat |
+|---|---|---|---|
+| Hypers | lr 3e-4, γ 0.99, τ 0.005, buffer **1e6**, batch 256, N=**3**, M=**25**, drop 2, π 400→300, qf 3×512, **1 env-step / 1 grad-step** | Matches Table 1 | **Do not retune arches mid-run** |
+| ICs | **Wide** eq (10): y±0.3, ẏ±1.2, θ±π, ω±10/20/30 — specialists from random | near_target noise=**0.15** + wide_frac 0.25 + hang 0.05 | First: **M2 tighten** noise=0.05, hang=0, wide=0 (21:56). Only expand toward Lim-wide **after** near_target mastery (BaRC) |
+| Reward R_ω | Relative-joint summed world rates: \|θ̇₁\|, \|θ̇₁+θ̇₂\|, \|θ̇₁+θ̇₂+θ̇₃\| | Absolute plant → per-link world ω — **equivalent** | No change |
+| Reward R_y | exp(−0.3·\|y\|) meters; early-stop \|y\|>**0.48** | exp(−0.3·\|x\|/track_limit) → **softer** cart center | Optional hold patch: `ry_scale=1.0` (meter Lim) once TQC lives |
+| **Obs ∫y** | State x₉ = ∫₀ᵗ y(τ)dτ to kill cart steady-state offset (§3.1) | `observe()` is 11-D: x,ẋ,sin/cos×3,ω×3 — **no integral** | **Stage ∫x obs** (clip/reset each ep) for TQC hold / LQR catcher — classical LQI + Lim |
+| VER / flip | **None** (DR via wide ICs only) | TQC trainer has **no** Baek VER replay doubling | Off-policy VER is native here (unlike PPO port); add buffer flip if M2 tighten still flat |
+| Eval meter | ep return ~700–800/1000 under wide ICs | SB3 EvalCallback on **same** init mix; no `eval/near_target/*` | Wire curriculum near_target eval into TQC trainer so P1 gate is visible |
+
+**fawraw M2 yaml (confirmed):** `near_target` noise=**0.05**, 150k steps, buffer **200k**, net **[128,128]**, n_quantiles **20**, n_critics 3, train_freq=1, gradient_steps=1. Smaller/faster than Lim Table 1 — valid **fallback arch** if Lim-sized net is sample-hungry on near_target after tighten.
+
+### Q2 — Hold catcher extras for backlog #2 (do not interrupt B→TQC)
+
+1. **∫x-augmented LQR / ILQR** (CoDIT 2024 / Machines 2025 / Lim x₉) — same switch ≤0.1 rad + ω∞<1; integral kills cart bias the pure LQR miss.
+2. **LQR + residual SAC** (IJMLC 2025 friction compensation) — residual over nominal LQR; more sim2real than sim-hold, but a clean form of residual upright if pure TQC/LQR wobbles.
+3. CSAC-QI ∫θ still optional after nt moves (21:31) — orthogonal to ∫x (angles vs cart).
+
+### Q3 — Beats live Next / backlog?
+
+| Candidate | Beats live Next (wait B→TQC)? | Beats / sharpens backlog? |
+|---|---|---|
+| M2 tighten / BaRC expand | No | Sharpens #1 (already 21:56) |
+| `ry_scale=1.0` Lim cart term | No | Sharpens #1 reward mirror |
+| **∫x in obs** + ILQR catcher | No | **Sharpens #1 and #2** |
+| Baek VER on TQC replay | No | Sharpens #1 (TQC-native; Lim didn't need it) |
+| M2 arch [128,128] / buffer 200k / 150k | No | Fallback under #1 if Lim arch stalls |
+| Curriculum eval meters on TQC | No | Ops for P1 gate reading |
+| Residual SAC-on-LQR | No | Form of #2 |
+| Force 40→60 / energy E→E_UUU | No | Stay #4 / #3 |
+
+**Nothing clearly beats** the live Next micro-task. Stay the course: B→TQC → mirror ladder below → two-policy only if ~150k flat after tighten.
+
+**Promote?** Macro backlog **#1** only (TQC hold mirror ladder). **Do not** rewrite Next / interrupt B. NEED_USER_PING no.
 
 ## Research pass (2026-09-19 ~21:56 CT) — P1 UUU-hold feeder: TQC mirror + staged two-policy recipe
 
