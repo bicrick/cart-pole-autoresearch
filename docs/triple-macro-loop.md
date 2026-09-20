@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~22:34 CT  
+Last updated: 2026-09-19 ~22:41 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -27,18 +27,18 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Current phase + next micro-task
 
 - **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Live (~22:30 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/15.6GB, up ~45h). TB http://34.148.138.48:6006/
-  - **A** PPO cool-ent v6 swing f50 ~**u030**/400 nt~**0.036** — NaN TB crash fix confirmed on VM (`if last_policy is not None`); continue-a restarted onto patch @03:15Z; past u1 crash zone, leave alone
-  - **B** PPO entboost v7b hold f40 ~**u380**/400 nt~**0.050** align_UUU~0.24 — still flat; continue-b TQC-staged (waiting pid 119552) → Lim TQC UUU (**ETA ~22:41 CT**, ~20u×~33s). `.venv-tqc` + `train_triple_tqc.py` ready (sb3_contrib 2.9.0)
-  - **C** PPO entboost v7 combo f40 ~**u090** nt~**0.04** — leave alone
-- **Next micro-task:** **do not touch B/C.** Wait for B natural exit; `continue-triple-b` launches TQC UUU (marker `.triple-b-tqc-uuu-v1` on first start). Next fire: confirm B is `train_triple_tqc` and meter timesteps/`ep_rew_mean`. If TQC flat after ~150k → two-policy handoff. No mid-kill A/C.
-- **Kill list:** no double/xonly on the L4; slots = A PPO / B→TQC / C PPO (until C stretch ends)
-- **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C while B handoff is the plan; start `continue-triple-tqc-uuu` in parallel with continue-b
-- **NEED_USER_PING:** no (B not yet on TQC; gate ≪0.80; A patch verified healthy)
+- **Live (~22:41 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~98%/10.4GB, up ~44h). TB http://34.148.138.48:6006/
+  - **A** PPO cool-ent v6 swing f50 ~**u060**/400 nt~**0.041** — healthy past NaN patch; leave alone
+  - **B** **TQC UUU live** (`train_triple_tqc.py` pid 133757) since **03:37Z / ~22:37 CT** — marker `.triple-b-tqc-uuu-v1` set; run `tqc-uuu-f40-hold-wide_2`; ~**7.6k**/300k steps, `ep_rew_mean` −182→**−100**, success_rate 0, fps~37, ent_coef~0.15. Early — too soon for flat call
+  - **C** PPO entboost v7 combo f40 ~**u110**/400 nt~**0.046** align_UUU~0.16 — leave alone
+- **Next micro-task:** **meter TQC only.** Track B timesteps / `ep_rew_mean` / any UUU hold eval each fire. Leave A/C alone. If TQC still flat after ~**150k** steps → stage two-policy handoff (do not spam entropy knobs). If real UUU hold lift → stage next EP specialist. No mid-kill.
+- **Kill list:** no double/xonly on the L4; slots = A PPO / **B TQC** / C PPO (until C stretch ends)
+- **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C while B is the specialist slot; relaunch parallel `continue-triple-tqc-uuu` (B already owns TQC)
+- **NEED_USER_PING:** **yes — B successfully on TQC** (gate still ≪0.80)
 
 ## Ranked backlog (pull from top when a stretch ends)
 
-1. **Lim TQC UUU specialist** (shipping now on slot B) — off-policy path that hit hardware. Hold mirror ladder if early-flat (do not mid-kill): (a) M2 tighten `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0`; (b) `ry_scale=1.0` Lim cart term; (c) **∫x obs** (Lim x₉ / LQI) + curriculum `eval/near_target/*` meters on TQC; (d) Baek VER replay flip (TQC-native); (e) optional fawraw M2 arch `[128,128]` / buffer 200k / 150k before declaring TQC dead
+1. **Lim TQC UUU specialist** (**LIVE on slot B** since 22:37 CT) — meter to ~150k before declaring dead. Hold mirror ladder if early-flat (do not mid-kill): (a) M2 tighten `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0`; (b) `ry_scale=1.0` Lim cart term; (c) **∫x obs** (Lim x₉ / LQI) + curriculum `eval/near_target/*` meters on TQC; (d) Baek VER replay flip (TQC-native); (e) optional fawraw M2 arch `[128,128]` / buffer 200k / 150k before declaring TQC dead
 2. **Two-policy handoff** (stage only if TQC flat ~150k) — hold: TQC-UUU ckpt or LQR \(Q_\theta\sim100,R\sim0.01\) / PPO-balance near_target≤0.1 rad; swing: separate net (slot A / energy); enter: \(\|\phi_i\|<0.1\) rad **and** \(\|\omega\|_\infty<1\) rad/s (+ optional \(\bar c>0.9\) / E-gate), **never** tol=0.3; latch + hysteresis exit ~0.25 rad; swing soft-landing + LPF τ≈0.3 before handoff (fawraw/DiffSwing/ResearchSquare; research 21:56)
 3. Energy-to-goal (true E→E_UUU) if product+progress plateaus
 4. Force probe 40→60 only if OOB≈0 and plant feels underpowered
