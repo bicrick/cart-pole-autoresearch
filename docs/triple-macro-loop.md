@@ -58,10 +58,10 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 ## Current phase + next micro-task
 
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (~01:35 CT):** VM `cartpole-train-od` RUNNING us-east1-b. TB http://34.148.138.48:6006/. Watchers continue-a/b/c. **Training breakup GO** (user authorized).
-  - **A = S1 walls-swing** — `INIT_MODE=bottom`, hang_p=0.85, near_goal_p=0.10, warmup=0, progress_w=1, product, `TRACK_WALLS=1`, ENT=0.05 LR=3e-4. Marker `.triple-a-s1-walls-v1` (cold). Run `…-walls-swing-s1-…`
-  - **B = H1 walls-hold (tight)** — `INIT_MODE=near_target`, near_goal_p=1.0, hang=0, warmup=0, **`INIT_NOISE=0.05`**, product, `TRACK_WALLS=1`, ENT=0.02 LR=1e-4. Marker `.triple-b-h1-noise05-v1` (cold). Run `…-walls-hold-h1-…-in005-…`
-  - **C = H1-var walls-hold** — same near-only recipe as B but LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1` (cold). Prefer second H1 over combo mush (documented choice).
+- **Live (~01:35 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~98%/10.5GB). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c. Commit `96695cd`. **Training breakup GO LIVE**.
+  - **A = S1 walls-swing** — pid **145281** / watcher **145239** — `INIT_MODE=bottom`, hang_p=0.85, near_goal_p=0.10, warmup=0, progress_w=1, product, `TRACK_WALLS=1`, ENT=0.05 LR=3e-4. Marker `.triple-a-s1-walls-v1` (cold). Run `…-walls-swing-s1-…`
+  - **B = H1 walls-hold (tight)** — pid **145275** / watcher **145240** — `INIT_MODE=near_target`, near_goal_p=1.0, hang=0, warmup=0, **`INIT_NOISE=0.05`**, product, `TRACK_WALLS=1`, ENT=0.02 LR=1e-4. Marker `.triple-b-h1-noise05-v1` (cold). Run `…-walls-hold-h1-…-in005-…`
+  - **C = H1-var walls-hold** — pid **145280** / watcher **145241** — same near-only as B but LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1` (cold). Prefer second H1 over combo mush (documented choice).
 - **X1 handoff:** `train/handoff.py` + `scripts/handoff_eval.py` + `scripts/eval-handoff-uuu.sh`. Smoke S1→H1 when A/B ckpts exist (`bash scripts/eval-handoff-uuu.sh`). capture_tol=0.1.
 - **Code:** PPO `--init-noise` added + wired in `next-train-triple.sh` (default 0.3 = legacy ±0.3).
 - **Diagnosis / actions this fire:** Roles were merged (A hold sibling, B loose-IC balance, C combo). User authorized GO — cold-restart A→S1, B→H1@noise0.05, C→H1-var. Prefer correct roles over preserving early ~u50 flat walls stretches. No TQC relaunch.
