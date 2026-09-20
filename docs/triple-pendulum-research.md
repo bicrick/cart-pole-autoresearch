@@ -1,8 +1,50 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~23:01 CT.
+Last updated: 2026-09-19 ~23:27 CT.
 
 
+
+## Research pass (2026-09-19 ~23:27 CT) — P1 UUU-hold: gSDE / zoo TQC + BaRC expand-with-ω + trainer CLI gaps
+
+**Sources checked (this fire):** sb3-contrib TQC docs (`use_sde` / `n_steps` params); RL Zoo3 `hyperparams/tqc.yml` (Pendulum-v1, PyBullet Inverted* + BipedalWalker, MountainCarContinuous); Raffin gSDE note on TQC PyBullet results; fawraw `m2_upright_tqc.yaml` + `docs/m4_findings.md` reconfirm (CDN/raw); BaRC arXiv:1806.06161 expand-after-mastery; arXiv:2506.17564 uncertainty-gated residual RL (adjacent to #2); CrossQ/DroQ UTD notes (prior 18:36 anti-pattern stands). Skimmed live `train_triple_tqc.py` + `next-train-triple-tqc-uuu.sh` vs macro Next @23:08.
+
+**Phase focus:** P1 UUU **hold**. Live Next = **meter TQC only** on B (~61.5k, ep_rew climbing, success 0). Gate ≪0.80. Overnight owns slots — no train start.
+
+### Q1 — Fresh hold levers not yet on the TQC ladder
+
+| Lever | Evidence | Live trainer | If early-flat after tighten / n_steps |
+|---|---|---|---|
+| **gSDE** | Zoo TQC: PyBullet InvertedPendulumSwingup / InvertedDoublePendulum / BipedalWalker / MountainCarContinuous all `use_sde: True` (+ often `log_std_init=-3`); sb3 TQC docs note PyBullet curves used gSDE hypers. Pendulum-v1 zoo entry is bare (no gSDE) — not our plant. Lim Table 1 / fawraw M2: **no** gSDE | `use_sde=False` (default); **no CLI** | **New ladder (g):** after (f) `n_steps=3` still flat → `use_sde=True sde_sample_freq=4` (optional `use_sde_at_warmup=True`). Do **not** lead with gSDE on a climbing first stretch |
+| BaRC expand **with ω** | fawraw M4 catch-basin: reliable only ≤0.1 rad **and** ~0 vel; any \|ω\|≳2 → catch 0. Widen catcher = larger `init_noise` + **nonzero link velocities** + off-centre cart — *after* near_target mastery, not when early-flat | Live stretch: noise 0.15 / hang 0.05 / wide 0.25 (harder than M2). Ladder (a) still **tighten** first if flat | Sharpen expand-after-mastery: angle noise alone is insufficient; add ω noise + off-centre x before claiming catcher ready for handoff |
+| Zoo `train_freq=8` / `gradient_steps=8` | PyBullet TQC defaults keep UTD≈1, just batched | Lim/M2 = 1/1 | Optional wall-clock tweak only; **not** DroQ UTD=20. Skip unless coding convenience |
+| VecNormalize | Zoo Pendulum/PyBullet TQC: usually off; HER Fetch uses normalize | None | Low priority vs ∫x / n_steps / gSDE |
+| Uncertainty-gated residual (2506.17564) | Focus residual explore where base is uncertain; critic on combined action | N/A (no residual yet) | Form of backlog **#2** if LQR/TQC catcher + residual; do not interrupt B |
+| CrossQ / high-UTD DroQ | Prior 18:36: CrossQ poor on sparse pendulum-swingup | — | Still **banned** for sparse UUU hold |
+
+### Q2 — Trainer ops gaps (when overnight codes the next ladder patch)
+
+Live `train_triple_tqc.py` still missing vs staged ladder:
+1. No `--n-steps` (SB3 TQC supports it; unset → 1)
+2. No `--use-sde` / `--sde-sample-freq`
+3. `EvalCallback` shares train init mix — still **no** `eval/near_target/at_goal/UUU` (P1 gate invisible on TQC TB)
+4. No ∫x obs / VER flip / `ry_scale` CLI (already on ladder a–e)
+
+Wire (1)+(3) first when patching; (2) with ladder (g).
+
+### Q3 — Beats live Next / backlog?
+
+| Candidate | Beats live Next (meter TQC)? | Beats / sharpens backlog? |
+|---|---|---|
+| Keep metering to ~150k | — | Status quo |
+| M2 tighten / ry / ∫x / VER / M2 arch / n_steps | No | Already #1 (a–f) |
+| **gSDE after n_steps** | No | **Sharpens #1** → new **(g)** |
+| BaRC expand-with-ω after mastery | No | Sharpens #1 expand + #2 catcher basin |
+| Uncertainty residual / Zoo 8/8 UTD-batch | No | #2 form / skip |
+| Force 40→60 / energy E→E_UUU / CrossQ | No | Stay #4 / #3 / banned |
+
+**Nothing clearly beats** the live Next micro-task. Stay the course: meter B TQC; no mid-kill; no entropy/PPO knobs; two-policy only if ~150k flat after hold ladder (now through gSDE).
+
+**Promote?** Macro backlog **#1** only — append ladder **(g) gSDE** + note expand-with-ω. **Do not** rewrite Next (overnight running). NEED_USER_PING no.
 
 ## Research pass (2026-09-19 ~23:01 CT) — P1 UUU-hold: live TQC gap audit + n-step / eval-meter / LQR-PI
 
