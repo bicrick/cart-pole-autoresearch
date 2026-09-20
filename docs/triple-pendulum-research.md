@@ -1,6 +1,67 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~06:27 CT.
+Last updated: 2026-09-20 ~07:07 CT.
+
+## Research pass (2026-09-20 ~07:07 CT) — H1 gSDE LIVE: **entropy diving @u10** + ATRPO portable stay cookbook
+
+**Sources checked (this fire):** live TB `20260920-120349_*b-gsde-sf4-ent0` / `20260920-084629_*a` / `20260920-102255_*c` (~07:08 CT); overnight/macro @07:05 (mid-killed ENT=0 → gSDE cold); prior research 06:27 (ENT=0.02 mismatch) + 05:31 (Zoo ENT=0+gSDE) + 04:59 (EVAL-PPI); **ATRPO** Zhang–Ross arXiv:2106.07329 Alg.2 + App.G (avg-reward GAE); **EVAL+PPI** arXiv:2501.09770 Fig.3 (continuing CartPole); SB3 gSDE NaN watch (#1593). Overnight owns slots — **no mid-kill this fire**.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (~07:08 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | other |
+|---|---|---|---|---|
+| **A S1** | ~**366** | **~1.21** | ~0.056 | hang_align/UUU ~−0.037; policy_loss ±0.03; OOB=0 — leave alone (ETA ~0.2h) |
+| **B H1 gSDE ENT=0** | **~10** | **1.59→0.96↓↓** | **0.045** (only @u1 so far) | rollout_reward −5.3→**0.29↑**; eval/reward −52→**172↑**; policy_loss OK; OOB=0 — **same reward↑/σ-death class, faster than prior ENT=0** |
+| **C H1-var** | ~**190** | **~0.91** | ~0.051 | flat control — leave alone |
+
+Prior ENT=0 (no gSDE) died 1.70→0.61 @**u30**. Live gSDE already 1.59→0.96 @**u10** (~0.06/u). Extrapolated floor ~u25–35 if slope holds — **do not wait to u100** to declare explore-fail.
+
+### Q1 — gSDE is **not** stopping the entropy meter dive (yet)
+
+Overnight hypothesis: Zoo `use_sde` + ENT=0 explores via state-dep noise so global `log_std` can cool without killing explore. Live counter-signal at u10:
+
+1. Logged `train/entropy` (still from isotropic `Normal(μ,σ)` via `log_std`) is collapsing **faster** than the just-killed ENT=0 stretch.
+2. Reward/eval climbing while nt stuck on the ~0.05 floor — classic visit/farm signature returns early.
+3. Our `ppo.py` gSDE is **sample-path only**: `act()` adds `φ(s)·(W⊙ε)·σ`, but `evaluate()` / entropy / PPO ratio still use isotropic `Normal(mean,std)`. Raffin/SB3 keep sampling+log_prob under the same gSDE distribution. So (a) the entropy meter understates true explore, (b) the importance ratio is approximate — if nt stays flat while H dies, treat as **gSDE explore-fail**, not "meter lie".
+
+**Babysit gate (sharpen):** through ~**u30–40** (not u100): if H still ≲1.0 and diving, or nt flat + reward↑ → declare gSDE dead for this stretch → **non-MaxEnt stay** next. If H stabilizes ≳1.0 and nt starts climbing, keep cooking to u80+.
+
+**gSDE footguns to watch (SB3 #1593):** NaN `log_std`, exploding approx_kl/clip — our custom path has no `use_expln`; if NaNs appear, mid-kill is overnight's call.
+
+### Q2 — NEW concrete cookbook: **ATRPO-style differential advantage** (post-gSDE stay)
+
+Prior 04:59 locked EVAL-PPI / ATRPO as citation. This pass locks the **PPO-portable recipe** (ATRPO Alg.2 + App.G) so overnight can stage without re-reading papers:
+
+| Piece | Steal | Notes for our trainer |
+|---|---|---|
+| Reward centering | \(r_t \leftarrow r_t - \hat\rho\), \(\hat\rho =\) batch/rollout mean reward | Cheap; no discount change required |
+| Critic target | \(\bar V^{\text{tgt}} = r-\hat\rho + \bar V(s')\) | Bias function, not discounted V |
+| Advantage | \(\hat A = r-\hat\rho + \bar V(s') - \bar V(s)\) or avg-reward GAE: \(\delta = r-\hat\rho+\bar V(s')-\bar V(s)\), \(\hat A=\sum \lambda^{k}\delta\) (**no \(\gamma\)**) | Drop γ from GAE; keep λ≈0.95 |
+| Entropy | **0** (already) | ATRPO/EVAL-PPI both target un-regularized AR |
+| Not | Full TRPO / Kemeny trust-region / EVAL DQN+PPI prior net | Too heavy for first stay attempt |
+
+**EVAL Fig.3 confirmation:** after short CartPole training, EVAL+PPI holds continuing episodes (≥1e5 steps; authors claim ≫) while soft Q-learning rarely does — un-regularized average-reward is the right *stay* objective for upright balance. EVAL itself is discrete/off-policy; **steal the objective, not the DQN stack**. Prefer ATRPO-bias / ρ-centering inside our PPO before any EVAL port.
+
+**Ranked stay ladder after gSDE fail (unchanged order, sharper code):**
+1. Spong `ENERGY_W` 0.2→**0.35** (H1 only; hang=0)
+2. Turcato `EPISODE_LEN` 1200→**600–800**
+3. **ATRPO-lite:** ρ-center rewards + γ-free GAE / bias critic (ENT stays 0; keep gSDE or drop — prefer drop if H already dead)
+4. Optional later: full ATRPO trust-region / EVAL-PPI prior iteration — only if 1–3 stall
+5. Still banned: AR-EAPO MaxEnt pair, ENT≥0.02 on RPO, Listing-2 D=1, blind-resume floor-σ
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Tighten B gSDE babysit to **u30–40** ent-slope / reward↑-nt-flat gate | **Yes** | #2 (viii) |
+| Stage ATRPO-lite (ρ-center + γ-free GAE) as stay #3 after ENERGY_W/short-ep | **Sharpen only** | **Yes** — concrete cookbook |
+| Mid-kill B from research @u10 | **No** — too early; overnight owns | — |
+| Declare gSDE dead already | **No** — need u30–40 confirmation | — |
+
+**Material:** live gSDE collapsing entropy faster than prior ENT=0 + ATRPO-portable stay recipe locked. NEED_USER_PING **yes**.
+
+**Code this fire:** docs only (research + macro Next sharpen). No train start / no mid-kill.
+
 
 ## Research pass (2026-09-20 ~06:27 CT) — H1 RPO+ERA live: **ENT=0.02 is a cookbook mismatch** (CleanRL/Zoo use `ent_coef=0`)
 
