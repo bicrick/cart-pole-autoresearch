@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~11:43 CT (LIVE square-one — walls-on H1 hold @u67)
+Last updated: 2026-09-20 ~11:57 CT (HARD KILL — square-one H1 FAILED @u100)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -74,12 +74,12 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 
-- **Status:** **LIVE square-one** (2026-09-20 ~11:43 CT). User green-lit restart. VM `cartpole-train-od` RUNNING (us-east1-b, 34.148.138.48). Single H1 pid 2288 + continue-sq1-h1 + TB :6006.
-- **Archive:** TB runs moved to `runs_archive/20260920-pre-squareone` (VM + box). Live run `20260920-162321_sq1-h1-walls-ent0-nt1-in005`.
-- **Phase:** Square-one — walls-on UUU hold only (LOCKED recipe). Slot = `sq1-h1-walls-ent0-nt1-in005`. A/C continues DISARMED.
-- **Live meters (~u67):** nt_UUU **~0.036 flat**, nt_align **~−0.04**, eval/reward **~226↑**, H **1.44→−0.24**, OOB=0 — visit≠hold early; babysit to hard-kill window.
-- **Next micro-task:** Babysit H1 sq1. **Hard kill @u100–150** if `near_target/at_goal/UUU` ≲ **0.15** and reward↑ → STOP + ping user. No next paper lever same day. Prove stay (basin), not just mean reward.
-- **Do not:** swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT ladder, mid-kill into new algos, stack GPU VMs, auto-start A/C.
+- **Status:** **HARD KILL** (2026-09-20 ~11:57 CT). Square-one recipe `sq1-h1-walls-ent0-nt1-in005` **FAILED** at the u100 gate. Train STOPPED; ckpt+policy quarantined; `scripts/continue-sq1-h1.sh` DISARMED. VM still RUNNING (TB only) — waiting on user. No same-day paper lever.
+- **Archive:** TB runs at `runs_archive/20260920-pre-squareone`. Failed run kept for inspect: `runs/20260920-162321_sq1-h1-walls-ent0-nt1-in005`. Quarantine: `policies/quarantine/checkpoint-sq1-h1-FAIL-u100-20260920-165701.pt`.
+- **Phase:** Square-one hold gate — **blocked**. Locked recipe (walls, near-only, PPO ENT=0, f40) did not produce stay.
+- **Fail meters (@u100):** nt_UUU **0.030** (was ~0.036@u67, flat ≪0.15), nt_align/UUU **~0.008**, eval/reward **~225** (not dying), train H **1.44→−0.53** (collapse), OOB=0. Near-target still farms **DDD** (at_goal~0.20, align~0.72). Classic **visit≠hold** / reward-hack.
+- **Next micro-task:** **WAIT ON USER.** Do not invent next lever today. Overnight stays enabled but idle (no train restart) until Patrick green-lights a new recipe.
+- **Do not:** auto-restart sq1, swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT ladder, mid-kill into new algos, stack GPU VMs.
 
 
 ## Ranked backlog (pull from top when a stretch ends)
