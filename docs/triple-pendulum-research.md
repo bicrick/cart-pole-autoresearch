@@ -1,6 +1,55 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~06:06 CT.
+Last updated: 2026-09-20 ~06:27 CT.
+
+## Research pass (2026-09-20 ~06:27 CT) — H1 RPO+ERA live: **ENT=0.02 is a cookbook mismatch** (CleanRL/Zoo use `ent_coef=0`)
+
+**Sources checked (this fire):** live TB `20260920-084629_*a` / `20260920-111923_*b-rpo01-era05-ent02` / `20260920-102255_*c` (~06:28 CT); overnight/macro @06:20 (RPO+ERA cold on B after ENT035 mid-kill); prior research 06:06 (RESET_LOG_STD) + 05:31 (Zoo ENT=0+gSDE); **CleanRL** `rpo_continuous_action.py` (`ent_coef: float = 0.0`, `rpo_alpha` default 0.5 / **0.01 on IDP**); **RPO** arXiv:2212.07536 §4.2.2 Fig.6 (RPO **does not use** entropy coefficient; coef 0.01 can help plain PPO, ≥0.05 → unbounded entropy / worse return); **RL Zoo3** Pendulum-v1 (`ent_coef: 0.0`, `use_sde: True`, `sde_sample_freq: 4`); Raffin gSDE 2005.05719 (PPO appendix: ent **0.0**). Overnight owns slots — **no mid-kill this fire**.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (~06:28 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** | ~290 | **~1.34** | ~0.063 | ~0.26 | hang_align/UUU **~−0.027**; policy_loss ±0.04; OOB=0 — leave alone |
+| **B H1 RPO+ERA (ENT=0.02)** | **~16** | **1.78→1.53↓** | **0.041→0.035** | **−0.055→−0.026** | eval/reward **129→226↑** while nt flat; OOB=0 — early **reward↑ / hold≈0** |
+| **C H1-var** | ~118 | **~0.99** | ~0.052 | ~0.17 | flat control — leave alone |
+
+### Q1 — Live recipe stacks β-entropy on top of RPO (anti-pattern)
+
+Overnight cold-started B as **RPO α=0.01 + ERA H₀=0.5 + ENT=0.02**. That ENT term fights the papers that justified RPO/gSDE:
+
+1. CleanRL RPO: `ent_coef=0.0` by default — exploration is **μ-perturb at update**, not an entropy bonus in the loss.
+2. RPO paper §4.2.2: method is compared *against* entropy-regularization baselines; RPO **does not introduce / use** the entropy coefficient. Coef ≥0.05 unbound entropy; even 0.01 is a PPO-tuning knob, not part of RPO.
+3. Zoo Pendulum + Raffin gSDE: `ent_coef=0.0` + state-dep noise — same “explore without β” pattern already on our fail ladder as step-after-RPO.
+4. Our own bans: AR-EAPO MaxEnt / ENT≥0.035 / C’s ENT=0.05 null (nt~0.05 with healthy H) — keeping ENT=0.02 on the catcher re-imports the MaxEnt *stay* footgun at a milder dose.
+
+Early B meters already rhyme with visit/farm: **reward↑ ~100 pts in 10 updates, nt stuck on the ~0.05 floor**, σ cooling fast (1.78→1.53). Too early to declare dead, but the recipe is wrong even if σ survives.
+
+### Q2 — Reorder fail ladder: **ENT→0 on RPO+ERA before gSDE**
+
+Prior Next said: babysit RPO+ERA (ENT=0.02) → if flat @u80–100 → gSDE/Zoo ENT→0. That skips the cheaper, paper-faithful fix:
+
+| Rank | Lever | Status this fire |
+|---|---|---|
+| 0 | ENT035 | **DEAD** (06:06 / overnight mid-kill) |
+| 1 | Live B RPO+ERA **ENT=0.02** | Cooking (~u16) — babysit; do not mid-kill from research |
+| **1b** | **Next restart: RPO α=0.01 + ERA H₀=0.5 + ENT=0 + RESET_LOG_STD** | **STAGED** (continue-b) — CleanRL/Zoo default |
+| 2 | gSDE / Zoo `use_sde` + ENT=0 (after 1b fails) | Demoted one notch |
+| 3 | Non-MaxEnt stay / PPO-BR / EVAL-PPI | Unchanged |
+| — | ENT≥0.02 crank on RPO / AR-EAPO / Listing-2 D=1 / blind-resume floor-σ | **Banned** (ENT=0.02 on RPO now explicit) |
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Babysit live B; next restart **ENT=0** on RPO+ERA (not ENT=0.02) | **Yes** | #2 (viii) — ban ENT β with RPO |
+| gSDE only after ENT=0 RPO+ERA fails | **Yes** | reorder leftover g |
+| Mid-kill B from research | **No** | overnight owns u80 gate |
+
+**Material:** cookbook mismatch on the live H1 stretch + early reward↑/hold≈0. NEED_USER_PING **yes**.
+
+**Code this fire (staging only):** `continue-triple-b.sh` → next arm ENT=0 + marker `.triple-b-h1-rpo01-era05-ent0-v1`. No train start / no mid-kill.
+
 
 ## Research pass (2026-09-20 ~06:06 CT) — H1 ENT035 **dead past babysit**: σ death + **policy_loss explode** + **reset-log_std** before RPO+ERA
 
