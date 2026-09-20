@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~12:30 CT (continuous cart-pole loop — not overnight)
+Last updated: 2026-09-20 ~12:45 CT (continuous cart-pole loop — not overnight)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -83,12 +83,22 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 
-- **Status:** **LIVE sq1b** (2026-09-20 ~12:30 CT). After hard kill of in005 @u100, agent iterates **one simpler wheel** (no wait-on-user): same locked hold recipe with **tighter ICs** `INIT_NOISE=0.02` (was 0.05). Run `sq1b-h1-walls-ent0-nt1-in002` via `scripts/continue-sq1-h1.sh` → `next-train-triple-hold-sq1.sh`. A/C remain DISARMED. Cold start (`.sq1b-h1-cold-v1`; **no** FAIL quarantine ckpt).
+- **Status:** **LIVE sq1b** (2026-09-20 ~12:45 CT KEEP). After hard kill of in005 @u100, agent iterates **one simpler wheel** (no wait-on-user): same locked hold recipe with **tighter ICs** `INIT_NOISE=0.02` (was 0.05). Run `sq1b-h1-walls-ent0-nt1-in002` via `scripts/continue-sq1-h1.sh` → `next-train-triple-hold-sq1.sh`. A/C remain DISARMED. Cold start (`.sq1b-h1-cold-v1`; **no** FAIL quarantine ckpt).
 - **Prior fail (in005 @u100):** nt_UUU **~0.03**, visit≠hold, DDD farm, reward↑. Archive: `runs_archive/20260920-pre-squareone`; failed run `runs/20260920-162321_sq1-h1-walls-ent0-nt1-in005`; quarantine `policies/quarantine/checkpoint-sq1-h1-FAIL-u100-20260920-165701.pt`.
 - **Phase:** Square-one hold gate — **retry with tighter basin** (walls, near-only, PPO ENT=0, f40, hang=0, product). Kill rule unchanged: u100–150 nt≲0.15 ∧ reward↑ → STOP → next simpler wheel.
 - **Next micro-task:** **Babysit sq1b in002** to u100–150. Hard kill if `near_target/at_goal/UUU` ≲ **0.15** ∧ reward↑; then iterate next wheel. Gate to leave still nt ≳ 0.80 / align ≳ 0.90.
 - **Do not:** swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT>0, resume FAIL quarantine, stack GPU VMs, Mac.
 
+
+## Fire log — 2026-09-20 ~12:45 CT (Cart-pole loop)
+
+- **Observe:** VM `cartpole-train-od` RUNNING us-east1-b (g2-standard-4 L4); up ~1.25h this boot (lastStart 09:19 PDT); GPU ~14%/5.5GB; TB http://34.148.138.48:6006/ **200 OK**. Single slot: `continue-sq1-h1.sh` → `train_triple.py` pid **4586** run `sq1b-h1-walls-ent0-nt1-in002` (INIT_NOISE=0.02, ENT=0, walls, near-only). Cold marker `.sq1b-h1-cold-v1` set. A/C DISARMED.
+- **Meters (TB `20260920-173101_sq1b…`, ~u40–43):** nt_UUU **0.0368→0.0335** flat; nt_align/UUU **−0.075→−0.042**; nt_DDD **0.89→0.30↓**; eval/reward **52→228↑**; train/entropy **1.44→0.13↓**; OOB=0; hang_UUU=0. Train goal_frac UUU~0.91 (target 1.0).
+- **Diagnosis:** Early **visit≠hold** same class as killed in005 (reward↑ / hold≈0 / σ collapse) — but still **≪u100**; do not mid-kill.
+- **Decision:** **KEEP**
+- **Action:** Left sq1b alone; VM+TB stay up. No code change. Next fire: babysit to u100–150; hard kill if nt_UUU≲0.15 ∧ reward↑ then launch next one-change easier wheel.
+- **W0 gate:** not closer yet (nt~0.03 vs 0.80); trajectory mirrors prior fail early — watch kill window.
+- **Next check:** ~13:00 CT (or sooner if u≥100).
 
 ## Ranked backlog (pull from top when a stretch ends)
 
