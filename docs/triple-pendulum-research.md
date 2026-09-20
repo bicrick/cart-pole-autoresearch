@@ -1,7 +1,62 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~00:00 CT.
+Last updated: 2026-09-20 ~00:34 CT.
 
+
+## Research pass (2026-09-20 ~00:34 CT) — P1 UUU-hold: handoff_eval smoke + LQI widen + PPO-balance cold-start gaps
+
+**Sources checked (this fire):** fawraw raw `scripts/handoff_eval.py` + `docs/m4_findings.md` (CDN); arXiv:2606.28627 full (energy→LQR reachability / Σ⊆Ω_c* / V_aug μẋ); ResearchSquare 2026 TIP LQR (rs-10173980 — RoA ~5°≈0.087 rad @ω=0); CoDIT 2024 ILQR + Machines 2025 ILQR-SMC (∫x augmented Q); Thiru2006 SARS −ẋ² drift-kill; IC_ASET 2025 PI/VI-in-LQR (already). Skimmed box: `train/handoff.py` + `train/lqr_uuu.py` + `scripts/measure_catch_basin.py` staged; **no** `scripts/handoff_eval.py`; `continue-triple-b.sh` PPO-balance path; `train_triple.py` argparse (no `--init-noise`).
+
+**Phase focus:** P1 UUU **hold**. Live Next @00:28 = leave B TQC→~300k → auto **PPO-balance**; then `handoff_eval` smoke + LQI widen if thin. Gate ≪0.80. Overnight owns slots — no train start.
+
+### Q1 — `handoff_eval` smoke checklist (port fawraw; do not copy tol=0.35)
+
+| Metric / knob | Concrete default | Why |
+|---|---|---|
+| Capture | `capture_tol=0.1`, `capture_vel=1.0` (our measured basin ∩ enter gate) | fawraw script default **0.35** is their transition success tol — **too wide** for our LQR/TQC basins (only 0.1@ω=0 survives) |
+| Latch / exit | latch=True + exit 0.25 + dwell≥5 (already in `train/handoff.py`) | Beyond fawraw one-way latch |
+| LPF | τ≈0.3 on emitted force | 2606.22145 / staged |
+| Energy gate (optional AND) | \|Ẽ\| < ε with Ẽ=E−E_UUU (or \|E\|≲1.08 E_UUU) | 2606.28627 Σ includes \|Ẽ\|<ε; keep angle+ω primary |
+| Trials | n≥5 hang→UUU (A swing ckpt) + n≥5 near_target tip-in | Pin start/target via reset options (fawraw M4 bug #2) |
+| Report | `handoff@step`, reached, held (≥hold_frac·T), cartx[min,max], stab_time%, max_hold_after_handoff | Exact fawraw print contract |
+| Catcher order in smoke | (1) PPO-balance zip/pt if basin>0 → (2) LQR soft → (3) skip dead TQC@150k | Live basin data |
+
+**Repo gap:** still **no** `scripts/handoff_eval.py` — Next item (4) already names it. Port fawraw API onto our `TwoPolicyHandoff` + plant (not MuJoCo SB3).
+
+### Q2 — LQI / multi-link widen (when PPO-balance also thin)
+
+Live LQR soft/stiff: **only** `0.1|0` survives — ResearchSquare independently reports ~**5°** tip recovery @ω≈0 (matches). `lqr_uuu.py` is **8-D only** — no ∫x.
+
+| Lever | Concrete | Source |
+|---|---|---|
+| **LQI augment** | State z₉=ξ=∫x dt (clip/reset each ep); Q_ξ≈**0.1** (Machines 2025: 0.01·diag with integral weight 10 → 0.1); keep Q_θ=100, R=0.01 | CoDIT 2024 / Machines 2025 / Lim x₉ |
+| Multi-link ICs | Basin grid: tip each link **alone** ±{0.1,0.2} @ω=0, then pairwise; don't only equal-offset all three | ResearchSquare phase portrait is single-mode; our plant couples |
+| Cart-vel at handoff | Prefer \|ẋ\| small before switch (V_aug μ term on **swing** soft-land, not on LQR) | 2606.28627: W(z) grows with ẋ; unaugmented energy law leaves ẋ≠0 |
+| PI/VI-in-LQR | IC_ASET fallback if LQI still 0.1-only | Already #2 classical |
+
+### Q3 — PPO-balance cold-start gaps (armed in `continue-triple-b.sh`)
+
+Live `start_ppo_balance` sets near_target / ENERGY_W=0.2 / ENT=0.02 / no hang — **good**. Two holes before B exits:
+
+1. **`train_triple.py` has no `--init-noise`** — gym default **0.15** always. Catcher should start at **0.05** (fawraw M2 / BaRC tighten-first), then expand with ω+off-centre after nt_at_goal/UUU moves. Overnight must wire CLI (mirror TQC) **before or as** balance starts; env-only `INIT_NOISE=` in the shell is currently a no-op for PPO.
+2. **`--vel-cost-coef` exists (default 0) unused** — SARS (Thiru2006) −w₆ẋ² kills drift-and-balance. Starter **0.01–0.02** on the balance recipe only (not on A swing).
+
+Optional later: CLF-RL hold shaping / ENERGY_W↑ near upright (already logged); do not displace balance start.
+
+### Q4 — Beats live Next / backlog?
+
+| Candidate | Beats live Next? | Beats / sharpens backlog? |
+|---|---|---|
+| Leave B→PPO-balance; then handoff_eval + LQI | — | Status quo (Next) |
+| handoff_eval smoke checklist (tol=0.1, pin options, metrics) | No | **Sharpens #2** ops |
+| LQI Q_ξ≈0.1 + per-link basin grid | No | **Sharpens #2** widen |
+| Wire PPO `--init-noise=0.05` + vel-cost 0.01 on balance | No | **Sharpens #2** cold-start (armed script) |
+| 2606.28627 \|Ẽ\| gate / V_aug swing ẋ damp | No | Sharpens #2 enter / soft-land |
+| Mid-kill B / force 40→60 / energy E→E_UUU as P1 displace | No | Banned / #4 / #3 |
+
+**Nothing clearly beats** the live Next micro-task. Stay the course: no mid-kill; do not rewrite Next.
+
+**Promote?** Macro backlog **#2** only — concrete handoff_eval checklist + LQI Q_ξ + PPO-balance `--init-noise`/vel-cost ops. **Do not** rewrite Next (overnight @00:28). NEED_USER_PING no.
 
 ## Research pass (2026-09-20 ~00:00 CT) — P1 UUU-hold: two-policy handoff staging (catcher order / basin measure / latch+exit / LQR fallback)
 

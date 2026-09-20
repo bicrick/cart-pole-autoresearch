@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~00:28 CT  
+Last updated: 2026-09-20 ~00:34 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -43,7 +43,7 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Ranked backlog (pull from top when a stretch ends)
 
 1. **Lim TQC UUU specialist** (**LIVE on slot B** → finishing stretch; basin **dead** @150k). Hold mirror ladder leftovers (post-stretch only, **after** PPO-balance try): (a) M2 tighten `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0`; (b) `ry_scale=1.0`; (c) **∫x obs**; (d) Baek VER flip; (e) optional fawraw M2 arch; (f) `n_steps=3`; (g) `use_sde=True sde_sample_freq=4`.
-2. **Two-policy handoff** (**CODE STAGED + basin measured**) — catcher order data-backed: **skip TQC zip** → LQR only tiny → **PPO-balance next on B exit**. Enter \(\|\phi_i\|<0.1\) & \(\|\omega\|_\infty<1\); latch + exit 0.25 + dwell; LPF τ≈0.3. Modules: `train/handoff.py`, `train/lqr_uuu.py`, `scripts/measure_catch_basin.py`.
+2. **Two-policy handoff** (**CODE STAGED + basin measured**) — catcher order data-backed: **skip TQC zip** → LQR only tiny → **PPO-balance next on B exit**. Enter \(\|\phi_i\|<0.1\) & \(\|\omega\|_\infty<1\) (+ opt \(|\tilde E|<\varepsilon\)); latch + exit 0.25 + dwell; LPF τ≈0.3. Modules: `train/handoff.py`, `train/lqr_uuu.py`, `scripts/measure_catch_basin.py`. **Ops leftovers (research 00:34):** (i) wire `scripts/handoff_eval.py` smoke — capture_tol=**0.1** (not fawraw 0.35), pin reset options, report handoff@/reached/held/cartx/stab%; (ii) PPO-balance cold-start: add `--init-noise` to `train_triple.py` (gym default 0.15 is a no-op for shell `INIT_NOISE`), start at **0.05** then BaRC-expand; set `--vel-cost-coef` **0.01–0.02** (SARS −ẋ²); (iii) if balance thin → LQI ∫x with Q_ξ≈**0.1** + per-link basin grid (ResearchSquare RoA ~5° confirms 0.1@ω=0).
 3. Energy-to-goal (true E→E_UUU) if product+progress plateaus
 4. Force probe 40→60 only if OOB≈0 and plant feels underpowered
 5. 8×TQC specialists (Lim full set) after UUU hold actually works
