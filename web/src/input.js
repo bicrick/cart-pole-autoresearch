@@ -91,7 +91,7 @@ export function createKeys({ onGoal, onTogglePolicy, onCycleGoal, getGoals } = {
     const key = event.key;
     if (key === "Tab") {
       event.preventDefault();
-      onCycleGoal?.();
+      onCycleGoal?.(event.shiftKey);
       return;
     }
     if (key >= "1" && key <= "8") {

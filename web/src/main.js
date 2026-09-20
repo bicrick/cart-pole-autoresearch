@@ -65,9 +65,11 @@ function setPolicyOn(on) {
   policyBtn.disabled = !policyReady;
 }
 
-function cycleGoal() {
+function cycleGoal(dir = 1) {
+  const n = plant.goalIds.length;
+  if (!n) return;
   const i = plant.goalIds.indexOf(currentGoal);
-  setGoal(plant.goalIds[(i + 1) % plant.goalIds.length]);
+  setGoal(plant.goalIds[(i + dir + n) % n]);
 }
 
 function setStatus(text) {
@@ -181,8 +183,9 @@ const keys = createKeys({
   onTogglePolicy: () => {
     if (started) setPolicyOn(!policyOn);
   },
-  onCycleGoal: () => {
-    if (started) cycleGoal();
+  onCycleGoal: (shift = false) => {
+    if (started) cycleGoal(shift ? -1 : 1);
+    if (document.activeElement?.blur) document.activeElement.blur();
   },
   getGoals: () => plant.goalIds,
 });

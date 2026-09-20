@@ -149,6 +149,14 @@ html.is-dark body {
   font-size: 0.95rem;
   color: var(--link);
   cursor: pointer;
+  outline: none;
+  box-shadow: none;
+}
+
+.text-btn:focus,
+.text-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .text-btn:hover {
