@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~11:57 CT (HARD KILL — square-one H1 FAILED @u100)
+Last updated: 2026-09-20 ~12:29 CT (auto-research loop)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -13,6 +13,15 @@ Ship a cracked cart-**triple**-pendulum policy that can:
 
 on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mirroring to the user's local demo. Budget: **no hard $30 cap** — keep training until UUU works; prefer one L4 on-demand, don't stack GPU VMs.
 
+
+
+## Auto-research loop (routine ownership)
+
+Overnight (`Cart-pole auto-research`) owns the full cycle every 15m: observe → hypothesize → KEEP/KILL/ADVANCE → act → log → narrate.
+After a hard kill it **must** launch the next one-change / easier-wheel experiment — never idle waiting on Patrick.
+Research feeder digs for the current wheel’s next delta only.
+
+Wheels: W0 hold → W1 swing → W2 handoff → W3 void → W4 multi-eq → W5 transitions.
 
 ## Square-one deal (user 2026-09-20 — LOCKED)
 
