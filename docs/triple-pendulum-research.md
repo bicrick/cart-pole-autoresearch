@@ -1,6 +1,76 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~04:59 CT.
+Last updated: 2026-09-20 ~05:31 CT.
+
+## Research pass (2026-09-20 ~05:31 CT) — H1: **Zoo Pendulum = ENT=0 + gSDE** (move gSDE into hold fail ladder)
+
+**Sources checked (this fire):** live TB exact dirs `20260920-084629_*a` / `20260920-101634_*b-ent035` / `20260920-102255_*c` (~05:33 CT); overnight/macro @05:21; prior research 04:59 (EVAL-PPI / PPO-BR) + 04:37 (ERA D=1) + 03:28 (RPO α≈0.01); **RL Zoo3** `hyperparams/ppo.yml` **Pendulum-v1** (`ent_coef: 0.0`, `use_sde: True`, `sde_sample_freq: 4`); Raffin gSDE arXiv:2005.05719 (PPO appendix: ent **0.0**, gSDE freq **4**, clip 0.4 — explore via state-/feature-dep noise, not unstructured σ); Fattahi thesis PPO+gSDE underactuated (already @19:00); PPO+ RLJ 2026 / Kallel (off-policy critic + tanh bound + MaxEnt — **MaxEnt half banned on H1**); Soft/Residual PPO arXiv:2503.11019 (global `log_std` empirically beats state-dep on MuJoCo — keeps our Actor + ERA soft-floor path valid). Overnight owns slots — no train start / no mid-kill.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (~05:33 CT):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** (LR1e-4) | ~191 | **~1.60** | ~0.054 | ~0.225 | hang_align/UUU **−0.037→−0.018** (recovering); hang_at_goal~0.006; policy_loss ~±0.01 — **inside NaN window ~u150–228, still clean** |
+| **B H1 ENT035** | ~30 | **−0.80→−0.95↓↓** | **~0.054 flat** | ~0.177 | rollout_reward≈**0.51** flat; OOB=0 — **ENT035 not stopping σ death early** (still diving from dead-σ ckpt) |
+| **C H1-var** | ~20 | **~1.12** (healthy) | **~0.053 flat** | ~0.164 | ENT=0.05 null reconfirmed early; VEL_COST live |
+
+### Q1 — NEW cookbook for *hold*: Zoo Pendulum PPO = **ENT=0 + gSDE**
+
+Prior H1 fail ladder treated gSDE as a **TQC leftover (g)** only. RL Zoo's **Pendulum-v1** PPO entry is the closest balance plant:
+
+| Knob | Zoo Pendulum-v1 |
+|---|---|
+| `ent_coef` | **0.0** |
+| `use_sde` | **True** |
+| `sde_sample_freq` | **4** |
+| other | n_steps 1024, lr 1e-3, clip 0.2, γ 0.9 |
+
+Raffin 2005.05719 PPO appendix matches: **entropy coefficient 0.0** + gSDE sample freq **4**. Explore comes from **resampled state-/latent-feature noise**, not from keeping a global `log_std` high via ENT bonus.
+
+**Why this matches live B:** ENT=0.035 is still a β-crank on a **collapsed global Parameter**. Live B @u30: H **−0.95↓** while reward/nt flat — same class as C's ENT=0.05 null (healthy H, dead nt). Once σ is near the −5 clamp floor, entropy-bonus gradients through `log_std` are tiny; cranking ENT fights the catcher without restoring explore (2503/2506 MaxEnt-vs-hold). gSDE (or RPO μ-perturb / ERA soft floor) **decouples** explore from that dead Parameter.
+
+**Steal for H1 (post-ENT035 babysit — after RPO α≈0.01 / ERA soft floor, not before):**
+
+1. Prefer **ENT anneal→0** (or keep 0) **+ gSDE-style explore** over another ENT bump. Zoo Pendulum is the numeric twin of "balance wants no MaxEnt."
+2. Our Actor is custom global `log_std` (`train/ppo.py`) — full SB3 gSDE is a **real patch** (noise matrix on latent features, resample every n). Cheap cousins already staged: **RPO α≈0.01** (update-time μ jitter) and **ERA soft floor**. Rank gSDE as the **structured** peer when those two are coded/tried and H still dies.
+3. Do **not** lead H1 with gSDE mid-ENT035 babysit. Do **not** steal PPO+ / Soft-PPO **MaxEnt** half for H1 (banned).
+4. Optional stability companion (orthogonal): `target_kl` / ESPO early-stop — our `ppo.py` has **no** KL early-stop today; oversized updates can shove σ into the floor. Defer behind RPO/ERA/gSDE.
+
+### Q2 — Soft PPO (2503.11019) + PPO+ (RLJ 2026): what *not* to steal
+
+| Paper | Steal for H1? | Why |
+|---|---|---|
+| Soft PPO global vs state-dep `log_std` | **Yes (confirm)** | Global std wins MuJoCo ablations — keep Actor; ERA soft floor still the right shape |
+| Soft / Residual PPO MaxEnt reward rewrite | **No** | Same MaxEnt-vs-stay footgun |
+| PPO+ off-policy critic + tanh bound | **Defer** | Big rewrite; tanh we partly have; off-policy critic orthogonal to σ death |
+| PPO+ MaxEnt objective | **Ban** | Explicitly fights upright stay on H1 |
+
+### Q3 — Locked stack (babysit unchanged; gSDE enters fail ladder)
+
+| Rank | Lever | Status this fire |
+|---|---|---|
+| 0 | Babysit B **ENT=0.035** + VEL_COST → ~u80 | **LIVE** @u30; H still diving — leave alone |
+| 1 | RPO α≈0.01 (ladder; never 0.5) | Unchanged |
+| 2 | ERA soft log_std floor H₀≈0.5–0.8 softplus/detached | Unchanged |
+| **2b** | **gSDE / Zoo-Pendulum explore with ENT→0** (after 1–2) | **NEW** — relocated from TQC leftover into H1 |
+| 3 | Non-MaxEnt stay: ENERGY_W / short ep / EVAL-PPI / ATRPO | Unchanged (04:59) |
+| 3b | PPO-BR ε contract if reward flat after σ tools | Unchanged (04:59) |
+| — | ENT≥0.05 / AR-EAPO MaxEnt / Listing-2 D=1 pin / PPO+ MaxEnt | **Banned** |
+
+A hang_align recovering inside NaN window — overnight watch only (policy_loss explode → mid-kill). C leave as ENT=0.05 control.
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| gSDE + ENT→0 as H1 fail-ladder peer after RPO/ERA | **Yes** — sharpen fail branch (2) | **Yes** — #2 (viii) + note Zoo Pendulum |
+| Babysit ENT035 / mid-kill ban / MaxEnt ban | No (already Next) | — |
+| PPO+ off-policy critic | No | Optional later, not σ-death fix |
+
+**Nothing displaces** babysit ENT035 → ~u80. **Material:** Zoo Pendulum locks **ENT=0 + gSDE** as the balance-plant explore cookbook; live B @u30 shows ENT crank alone cannot revive dead-σ — strengthens RPO/ERA/**gSDE** over further ENT. NEED_USER_PING **yes**.
+
+**No code this fire** (overnight owns train; no mid-kill).
+
 
 ## Research pass (2026-09-20 ~04:59 CT) — H1: **EVAL** non-MaxEnt avg-reward (2501.09770) + **PPO-BR** clip-contract under visit≠hold
 
