@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~06:06 CT
+Last updated: 2026-09-20 ~06:20 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~06:06 CT):** **A = S1** walls-swing (~u255 hang_align **−0.014**, past NaN u228 clean); **B = H1 ENT035 FAILED** (~u75–100: H **−1.47**, policy_loss **~8e26**, eval reward **−619** — natural-exit → RPO+ERA+**RESET_LOG_STD=0**); **C = H1-var** (~u80 ent~1.03). Staged RPO+ERA+reset on continue-b. Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO MaxEnt on H1. **Do not** blind-resume floor-σ.
+**Live mapping (2026-09-20 ~06:20 CT):** **A = S1** walls-swing (~u270 hang_align **−0.006**, clean); **B = H1 RPO+ERA LIVE** (cold @11:19Z after ENT035 mid-kill: NaN quarantined; ENT=0.02 RPO α=0.01 ERA H₀=0.5); **C = H1-var** (~u90 ent~1.01). Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO MaxEnt on H1. **Do not** blind-resume floor-σ.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,16 +61,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~06:06 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c (B rearmed for RPO+ERA + **RESET_LOG_STD**).
-  - **A = S1 walls-swing** — LR=1e-4 ~**u255** hang_align/UUU **−0.014**, hang_at_goal~0.006, nt~0.053, ent **~1.42**, policy_loss ±0.01, OOB=0 — past prior NaN u228, still clean. Marker `.triple-a-s1-walls-v1`.
-  - **B = H1 ENT035** — ~**u75–100**: ent **−1.25→−1.47↓↓**; nt_UUU **0.05→0.035**; nt_align **→−0.05**; **policy_loss ~8e26 @u75**; eval/reward **~168→−619 @u80**. **Babysit FAILED** — ENT035 dead path. Marker `.triple-b-h1-noise05-v1`. Next restart = RPO+ERA+**RESET_LOG_STD=0** (marker `.triple-b-h1-rpo01-era05-v1`).
-  - **C = H1-var** — ~**u80** ENT=0.05 ent **~1.03** nt~0.056 — leave alone. Marker `.triple-c-h1var-walls-v1`.
+- **Live (2026-09-20 ~06:20 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c (B rearmed after mid-kill).
+  - **A = S1 walls-swing** — LR=1e-4 ~**u270** hang_align/UUU **−0.006**, hang_at_goal~0.005, nt~0.058, ent **~1.38**, policy_loss ±0.02, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
+  - **B = H1 RPO+ERA** — **LIVE cold** pid 161566 @11:19Z after ENT035 mid-kill (loss **8e26**, reward **−590**, NaN quarantined). Recipe: ENT=0.02 RPO α=0.01 ERA H₀=0.5 VEL_COST=0.015 noise=0.05 walls. Marker `.triple-b-h1-rpo01-era05-v1`. Cold start ⇒ log_std init 0 (RESET_LOG_STD redundant this stretch; watcher now has it for future resumes).
+  - **C = H1-var** — ~**u90** ENT=0.05 ent **~1.01** nt~0.057 — leave alone. Marker `.triple-c-h1var-walls-v1`.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire (research):** ENT035 confirmed dead past u80 with loss explode — do not extend babysit. Staged **`--reset-log-std` / `RESET_LOG_STD=0`** on RPO+ERA continue-b (SB3 #155 — no blind-resume floor-σ). **No mid-kill from research**; overnight owns natural-exit / watcher restart.
-- **Next micro-task:** (1) Overnight: **natural-exit B** (or allow crash/quarantine) into staged **RPO α=0.01 + ERA H₀=0.5 + ENT=0.02 + RESET_LOG_STD=0**; if ckpt NaN → quarantine → cold+RPO is fine. (2) Watch A (policy_loss explode → mid-kill + LR/grad clip). (3) If RPO+ERA still σ-dies / nt flat → gSDE/Zoo Pendulum ENT→0, then ENERGY_W/short-ep/EVAL-PPI — **never ENT crank / AR-EAPO MaxEnt / blind-resume floor-σ**. (4) C = H1-var control. (5) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
+- **Diagnosis / actions this fire (overnight):** ENT035 not climbing past u80 — mid-killed (natural-exit would burn ~2.5h). Synced RESET code → VM; quarantined NaN B ckpt; cold RPO+ERA up. A/C untouched.
+- **Next micro-task:** (1) Babysit B RPO+ERA: need ent not diving below ~0, nt_UUU climbing off ~0.05 floor; if σ-dies / nt flat by ~u80–100 → gSDE/Zoo Pendulum ENT→0 next (never ENT crank / AR-EAPO / blind-resume floor-σ). (2) Watch A (policy_loss explode → mid-kill + LR/grad clip). (3) C = H1-var control. (4) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
 - **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1** / **C H1-var**
-- **Do not:** extend ENT035; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**
-- **NEED_USER_PING:** **yes** — material research (ENT035 dead + reset-log_std footgun)
+- **Do not:** relaunch ENT035; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**
+- **NEED_USER_PING:** **yes** — standing think-out-loud (mid-killed ENT035 → RPO+ERA cold)
 
 
 ## Ranked backlog (pull from top when a stretch ends)
