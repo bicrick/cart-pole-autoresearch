@@ -3,6 +3,21 @@
 Last updated: 2026-09-19 ~21:31 CT.
 
 
+## Overnight fire — status (2026-09-19 ~21:30 CT)
+
+**VM:** `cartpole-train-od` RUNNING us-east1-b L4 ~99%/16.5GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~42.5h ≈ **~$30–36** (budget uncapped — stay up). continue-a/b/c armed. GPU healthy. No NaNs.
+
+**Jobs (alive — do not mid-kill):**
+| Slot | Recipe | ~u | entropy | nt at_goal/UUU | nt align/UUU | hang at_goal/UUU | hang align/UUU |
+|---|---|---|---|---|---|---|---|
+| A | cool-ent v6 swing f50 e0.05 lr1e-4 | ~120 | ~0.92 healthy | ~0.045 flat | ~0.18 | ~0.009 | ~−0.020 |
+| B | entboost v7b hold f40 e0.08 lr5e-5 | ~283 | **~3.42 saturated** since ~u140 | ~0.050 flat | ~0.22 | ~0.003 | ~−0.11 |
+| C | entboost v7 combo f40 e0.08 lr5e-5 | ~105 | ~0.38 cooling | ~0.053 flat | ~0.21 | ~0.010 | ~−0.083 |
+
+**Diagnosis:** P1 gate ≪0.80. Single-policy PPO is **dead for UUU hold** — cool-ent v6 (full prior stretch + live A), entboost v7b (B saturated), entboost v7 (C) all stuck nt at_goal/UUU ≈ 0.04–0.06. Matches user call: stop entropy/LR roulette.
+
+**Action:** Staged **Lim TQC UUU** on slot B for natural v7b exit (rewrote `continue-triple-b.sh`; marker `.triple-b-tqc-uuu-v1`). A/C finish current PPO stretches undisturbed. Next after TQC flat: two-policy handoff. NEED_USER_PING **yes** (material strategy change: leaving PPO for TQC).
+
 ## Overnight fire — status (2026-09-19 ~21:10 CT)
 
 **VM:** `cartpole-train-od` RUNNING us-east1-b L4 ~98%/16.1GB; TB http://34.148.138.48:6006/ up; **no double/xonly**. Uptime ~42.2h ≈ **~$29–35** (budget uncapped — stay up). continue-a/b/c armed; scripts md5-match box. GPU healthy. No NaNs.

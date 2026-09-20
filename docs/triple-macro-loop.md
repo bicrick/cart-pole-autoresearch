@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~21:31 CT  
+Last updated: 2026-09-19 ~21:30 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -27,21 +27,19 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Current phase + next micro-task
 
 - **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Next micro-task:** **build & smoke TQC UUU specialist (Lim 8×TQC path)** — `train/envs/triple_gym.py` + `train/train_triple_tqc.py` + `scripts/next-train-triple-tqc-uuu.sh` are on main; smoke passed on box. Next: scp `.venv-tqc` recipe to VM and **swap L4 slot C** onto TQC UUU (near_target + wide IC mix, product reward, Lim hypers). Do **not** mid-kill A/B PPO until C handoff is staged. Gate: TQC `eval/near_target/at_goal/UUU` ≳ 0.50 within ~300k steps, then promote.
-- **Kill list:** no double/xonly on the L4; all 3 slots = triple-a/b/c
-- **Do not:** mid-kill improving runs; rewrite plant without a paper-backed reason; stack a second GPU VM
+- **Next micro-task:** **leave PPO entropy roulette.** Live A cool-ent v6 (~u120, nt~0.045) and C entboost v7 (~u105, nt~0.053) finish their stretches undisturbed. **B** PPO v7b (~u283, entropy saturated 3.42, nt~0.05) → on natural exit, `continue-triple-b` now launches **Lim TQC UUU specialist** (marker `.triple-b-tqc-uuu-v1`). If TQC still flat after ~150k steps → implement two-policy swing→hold handoff next.
+- **Kill list:** no double/xonly on the L4; slots = A PPO / B→TQC / C PPO (until C stretch ends)
+- **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM
 
 ## Ranked backlog (pull from top when a stretch ends)
 
-1. **TQC UUU specialist (Lim)** — off-policy; swap slot C when smoke+scp ready (CURRENT). Hold recipe: BaRC/ladder widen near_target ICs (mastery-gated) + optional CSAC-QI ∫θ steady-state; keep product+progress as task
-2. Two-policy handoff (TQC/energy swing → TQC/LQR hold) once UUU hold works — capture_tol ≤ measured ≤0.1 rad (never fawraw 0.3 default); latch+vel gate
-3. Remaining 7 EP specialists (Lim 8×TQC) after UUU holds
-4. Cool-ent / entropy floor on leftover PPO slots (A/B) until C swap — do not expand PPO
-5. True E→E_UUU energy swing only if TQC hold still flat after full stretch
-6. Force probe 40→60 only if OOB≈0 and plant feels underpowered
-
+1. **Lim TQC UUU specialist** (shipping now on slot B) — off-policy path that hit hardware
+2. Two-policy handoff (literature: swing-up then LQR/local balance; Baek/Spong/Xin style)
+3. Energy-to-goal (true E→E_UUU) if product+progress plateaus
+4. Force probe 40→60 only if OOB≈0 and plant feels underpowered
+5. 8×TQC specialists (Lim full set) after UUU TQC proves hold
+6. Progressive/adapters from double — deferred; fresh triple policy first
 
 ## 15-minute cadence (what "adapt" means)
 
 Each fire: read this file → measure live TB/slots → decide whether the **next micro-task** above still holds → if evidence says jump (gate cleared or idea dead), **rewrite the Next micro-task line** and stage the matching continue script / code change → push box repo to `main` → keep VM+TB alive → ping user only on phase change, gate clear, or NEED_USER.
-
