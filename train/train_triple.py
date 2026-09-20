@@ -111,8 +111,16 @@ def parse_args():
         type=float,
         default=0.0,
         help="APO Average Value Constraint (2106.03442 §4.1): after GAE returns, "
-        "subtract ν·mean(ret) from ret so E[V]≈0 under γ-free. 0=off; try 0.1–0.3 "
+        "subtract ν·bias from ret so E[V]≈0 under γ-free. 0=off; try 0.1–0.3 "
         "with --avg-reward. Logs train/avc_bias.",
+    )
+    parser.add_argument(
+        "--avc-ema-alpha",
+        type=float,
+        default=0.0,
+        help="APO Alg.1 fidelity (2106.03442): EMA α for η̂ (ρ) and V-bias. "
+        "0=cheap one-shot mean(ret) AVC-lite; try 0.1 for EMA-η̂ + EMA-V. "
+        "Only meaningful with --avg-reward / --avc-nu.",
     )
     parser.add_argument("--clip", type=float, default=0.2)
     parser.add_argument("--ent", type=float, default=0.01)
@@ -1090,6 +1098,9 @@ def main():
     best_align = -1e9
     t0 = time.time()
     t_prev = time.perf_counter()
+    # APO Alg.1 EMA state (persists across updates when --avc-ema-alpha > 0).
+    ema_rho = None  # η̂
+    ema_v = None  # critic-mean bias b
     for update in range(1, args.updates + 1):
         # Zoo/SB3 gSDE: resample exploration noise every sde_sample_freq updates.
         if model.use_sde and (_sde_freq <= 1 or (update - 1) % _sde_freq == 0):
@@ -1234,7 +1245,17 @@ def main():
         last_adv = torch.zeros(args.num_envs, device=device)
         next_value = last_val
         # ATRPO-lite: subtract batch-mean reward ρ̂, drop γ from TD/GAE (λ only).
-        rho_hat = rew_t.mean() if args.avg_reward else rew_t.new_zeros(())
+        # With --avc-ema-alpha>0, ρ̂ is EMA-smoothed η̂ (APO Alg.1).
+        rho_batch = rew_t.mean() if args.avg_reward else rew_t.new_zeros(())
+        avc_ema_alpha = float(getattr(args, "avc_ema_alpha", 0.0) or 0.0)
+        if args.avg_reward and avc_ema_alpha > 0.0:
+            if ema_rho is None:
+                ema_rho = rho_batch.detach()
+            else:
+                ema_rho = (1.0 - avc_ema_alpha) * ema_rho + avc_ema_alpha * rho_batch.detach()
+            rho_hat = ema_rho
+        else:
+            rho_hat = rho_batch
         for t in reversed(range(args.rollout)):
             mask = 1.0 - done_t[t]
             if args.avg_reward:
@@ -1246,11 +1267,20 @@ def main():
             adv[t] = last_adv
             next_value = val_t[t]
         ret = adv + val_t
-        # APO AVC (2106.03442): pin differential-value offset via ν·mean(ret).
+        # APO AVC (2106.03442): pin differential-value offset via ν·bias.
+        # AVC-lite (α=0): bias = mean(ret). EMA-AVC (α>0): bias = EMA of mean(V_φ).
         avc_nu = float(getattr(args, "avc_nu", 0.0) or 0.0)
         avc_bias = ret.new_zeros(())
+        critic_mean = val_t.mean().detach()
         if avc_nu > 0.0:
-            avc_bias = ret.mean().detach()
+            if avc_ema_alpha > 0.0:
+                if ema_v is None:
+                    ema_v = critic_mean
+                else:
+                    ema_v = (1.0 - avc_ema_alpha) * ema_v + avc_ema_alpha * critic_mean
+                avc_bias = ema_v
+            else:
+                avc_bias = ret.mean().detach()
             ret = ret - avc_nu * avc_bias
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
 
@@ -1319,9 +1349,13 @@ def main():
             writer.add_scalar("train/entropy", last_ent, update)
             if args.avg_reward:
                 writer.add_scalar("train/avg_reward_rho", float(rho_hat.detach()), update)
+                writer.add_scalar("train/avg_reward_rho_batch", float(rho_batch.detach()), update)
             if float(getattr(args, "avc_nu", 0.0) or 0.0) > 0.0:
                 writer.add_scalar("train/avc_bias", float(avc_bias.detach()), update)
                 writer.add_scalar("train/avc_nu", float(args.avc_nu), update)
+                writer.add_scalar("train/critic_mean", float(critic_mean.detach()), update)
+                if float(getattr(args, "avc_ema_alpha", 0.0) or 0.0) > 0.0:
+                    writer.add_scalar("train/avc_ema_alpha", float(args.avc_ema_alpha), update)
             writer.add_scalar("train/loss", last_loss, update)
         else:
             writer.add_scalar("train/skipped_all_minibatches", 1.0, update)

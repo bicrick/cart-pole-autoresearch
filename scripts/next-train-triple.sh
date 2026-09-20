@@ -43,6 +43,7 @@ USE_SDE="${USE_SDE:-0}"
 SDE_SAMPLE_FREQ="${SDE_SAMPLE_FREQ:-4}"
 AVG_REWARD="${AVG_REWARD:-0}"
 AVC_NU="${AVC_NU:-0}"
+AVC_EMA_ALPHA="${AVC_EMA_ALPHA:-0}"
 FORCE_LIMIT="${FORCE_LIMIT:-40}"
 PROGRESS_W="${PROGRESS_W:-}"
 FLIP_AUGMENT="${FLIP_AUGMENT:-1}"
@@ -80,6 +81,10 @@ fi
 # APO AVC ν (2106.03442). Only meaningful with AVG_REWARD=1; 0=off.
 if [[ -n "${AVC_NU}" && "${AVC_NU}" != "0" && "${AVC_NU}" != "0.0" ]]; then
   FORCE_ARGS+=(--avc-nu "${AVC_NU}")
+fi
+# APO Alg.1 EMA α for η̂ + V-bias (0=AVC-lite one-shot; try 0.1).
+if [[ -n "${AVC_EMA_ALPHA}" && "${AVC_EMA_ALPHA}" != "0" && "${AVC_EMA_ALPHA}" != "0.0" ]]; then
+  FORCE_ARGS+=(--avc-ema-alpha "${AVC_EMA_ALPHA}")
 fi
 
 if [[ "${TRACK_WALLS}" == "1" || "${TRACK_WALLS}" == "true" || "${TRACK_WALLS}" == "on" ]]; then

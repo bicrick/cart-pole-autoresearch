@@ -69,7 +69,33 @@ start_ppo_h1() {
     rm -f policies/checkpoint-triple-b.pt
     echo "$(date -u +%FT%TZ) arming H1 ENERGY_W=0.35 + RPO+ERA ENT=0 (no gSDE); cold ckpt; marker set" >> logs/continue-triple-b.log
   fi
-  if [[ -f policies/.triple-b-h1-atrpo-avc-v1 ]]; then
+  if [[ -f policies/.triple-b-h1-atrpo-avc-ema-v1 ]]; then
+    # ATRPO + APO-faithful EMA-AVC (Alg.1): EMA-η̂ + EMA-V bias, α=0.1, ν=0.2.
+    # Arm only after AVC-lite FAIL @u80–100 (H≲0.55 ∧ nt≲0.10 ∧ reward↑).
+    # Do NOT touch this marker while AVC-lite is still babysitting.
+    if [[ ! -f policies/.triple-b-h1-atrpo-avc-ema-cold-v1 ]]; then
+      rm -f policies/checkpoint-triple-b.pt
+      touch policies/.triple-b-h1-atrpo-avc-ema-cold-v1
+      echo "$(date -u +%FT%TZ) ATRPO+EMA-AVC cold wipe collapsed AVC-lite ckpt; cold marker set" >> logs/continue-triple-b.log
+    fi
+    nohup env TRACK_WALLS=1 NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
+      REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
+      WARMUP_UPDATES=0 WARMUP_GOAL=UUU \
+      WARMUP_HANG_START_P=0.0 HANG_START_P=0.0 \
+      NEAR_GOAL_P=1.0 WRONG_EQ_P=0.0 UU_BIAS=1.0 ANNEAL_UPDATES=0 \
+      GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
+      CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
+      FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
+      INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.35 LR=1e-4 ENT=0 \
+      VEL_COST_COEF=0.015 RPO_ALPHA=0.01 LOG_STD_FLOOR=0.5 RESET_LOG_STD=0 \
+      USE_SDE=0 AVG_REWARD=1 AVC_NU=0.2 AVC_EMA_ALPHA=0.1 EPISODE_LEN=1200 \
+      RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-rpo01-era05-ew035-atrpo-avc02-ema01-ent0-bar10-prog1-flip \
+      CHECKPOINT=policies/checkpoint-triple-b.pt \
+      OUT=policies/policy-triple-b.json \
+      bash scripts/next-train-triple.sh \
+      >> logs/train-triple-b-balance.log 2>&1 &
+    echo "$(date -u +%FT%TZ) STARTED triple-b H1 ATRPO+EMA-AVC α=0.1 ν=0.2 + ENERGY_W=0.35 RPO+ERA ENT=0 pid=$!" >> logs/continue-triple-b.log
+  elif [[ -f policies/.triple-b-h1-atrpo-avc-v1 ]]; then
     # ATRPO-lite + APO AVC ν=0.2 (2106.03442 §4.1). Post ATRPO-lite FAIL @u80–100
     # (H≲0.55 + nt≲0.10 + reward↑). Cold wipe collapsed ATRPO weights once.
     if [[ ! -f policies/.triple-b-h1-atrpo-avc-cold-v1 ]]; then
