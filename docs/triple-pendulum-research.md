@@ -1,6 +1,55 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~08:33 CT.
+Last updated: 2026-09-20 ~09:00 CT.
+
+
+## Research pass (2026-09-20 ~09:00 CT) — live **ATRPO+AVC ν=0.2** early babysit + **APO Alg.1 fidelity gap** (EMA-η̂ + EMA-V bias)
+
+**Sources checked (this fire):** live TB `20260920-135858_*b-…-atrpo-avc02…` / `20260920-123008_*a` / `20260920-102255_*c` (~09:00 CT); overnight/macro @08:56 (ATRPO-lite FAIL@u100 → mid-kill AVC cold); prior research 08:33 (AVC named) + 07:56 (Naik twin); **APO** Ma et al. arXiv:2106.03442 §4.1 / Alg.1 / Fig.2 / App.B (ν grid, EMA α); box `train_triple.py` `--avg-reward` + `--avc-nu` (ret − ν·mean(ret); **no** EMA-η̂ / **no** EMA of V_φ). Overnight owns slots — **no mid-kill / no train start**.
+
+**Phase focus:** P1a walls-on role split; B = H1 ATRPO+AVC ν=0.2 just cold-started.
+
+| Slot | ~u | entropy | nt_at_goal/UUU | other |
+|---|---|---|---|---|
+| **A S1** | ~**u168** | **~1.00** | nt~0.053 | hang_align/UUU **~−0.046**, hang_at_goal~0.006, OOB=0 — leave alone |
+| **B H1 ATRPO+AVC ν=0.2** | ~**u6** (cold) | **~1.77→1.80** | **~0.039** (1 eval) | nt_align~−0.076; ρ ~−1.0; **avc_bias −3→−13→−10**; V_loss 991→354↓; policy_loss healthy; OOB=0 |
+| **C H1-var** | ~**u394**/400 | **~0.76** | **~0.055** | nt_align~0.19, OOB=0 — natural end imminent |
+
+Prior ATRPO-lite stretch closed @**u103**: H **0.517 ERA-pin**, nt **0.048→0.060→0.056**, align~0.17, ρ~0.46 — FAIL confirm stands.
+
+### Q1 — Live failure mode unchanged class; AVC too early to judge
+
+B is textbook cold-start: H still high (~1.8), ρ negative (~−1), |avc_bias| large while V_loss collapsing. **Do not** mid-kill / arm Naik yet — macro FAIL gate remains **H≲0.55 ∧ nt≲0.10 @u80–100** (ban mid-kill AVC before that). Watch `train/avc_bias` → toward 0 as V settles; if |bias| stays ≳5 after V_loss plateaus **and** H→ERA with nt flat → treat as AVC-lite FAIL even if value_loss looks OK (same quiet-drift story as 08:33).
+
+### Q2 — MATERIAL: our `--avc-nu` is a **cheap ret-shift cousin**, not APO Alg.1
+
+Re-read APO Alg.1 vs box code:
+
+| Knob | APO Alg.1 (paper) | Live `--avg-reward --avc-nu` |
+|---|---|---|
+| η̂ / ρ̂ | **EMA** η̂ ← (1−α)η̂ + α·mean(r), α∈{0.03,0.1,0.3} | **raw batch mean** each rollout |
+| AVC bias b | **EMA of V_φ(s)** over batch (Alg.1 step 6) | **one-shot mean(ret)** after GAE |
+| Target shift | Ṽ = V̂ − ν·b (critic targets) | ret ← ret − ν·mean(ret) |
+| ν grid | {0, 0.03, 0.1, 0.3, 1.0}; larger ν = tighter (Fig.2); +66% ablation | live **0.2** (mid-grid) |
+
+**Why it matters:** ATRPO-lite FAIL with healthy V_loss + ERA-pin is exactly the relative-value poison / drift AVC was meant to fix. If cheap ret-shift AVC **also** dies the same way @u80–100, the next harden is **not** automatically skip to Naik — first try **APO-faithful** EMA-η̂ (α≈0.1) + EMA-V bias AVC (log `train/critic_mean` = mean V_φ) at ν∈{0.1,0.3}, still γ-free + ENT=0. Naik ρ-center+**keep γ** remains the orthogonal softer twin if γ-free family (ATRPO / AVC-lite / AVC-EMA) all FAIL.
+
+**ACPO** (Agnihotri ICML'24, arXiv:2302.00808) = average-**CMDP** trust region — skip for H1 (no cost constraint); demote.
+
+**Gym InvertedPendulum-v5** +1/step upright dwell is a reminder product/align can climb without stay; we already have center_hold / vel_cost — no new reward promote this fire.
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Mid-kill AVC @u6 / arm Naik now | **No** — babysit to u80–100 | — |
+| Sharpen post-AVC-lite FAIL: **APO-faithful EMA-η̂ + EMA-V AVC** before/beside Naik | **Ops note** (code on FAIL restart only) | **Yes** — #2 (viii) order: … → ATRPO+AVC-lite → if FAIL: **EMA-AVC harden** **or** Naik keep-γ → Turcato short-ep |
+| Displace Naik | **No** — twins; EMA-AVC stays in γ-free family | — |
+| ACPO / dwell +1 rewrite | **No** | demote / already covered |
+
+**Material:** yes — concrete APO fidelity gap (EMA-η̂ + EMA-V vs ret.mean()) that can change the **post-AVC FAIL** branch. Does **not** beat live babysit Next. NEED_USER_PING **yes**.
+
+**Code this fire:** docs only (research + macro backlog sharpen). No train start / no mid-kill.
 
 
 ## Research pass (2026-09-20 ~08:33 CT) — ATRPO-lite LIVE @u60: **H pinned to ERA 0.5** + missing **APO Average Value Constraint**
