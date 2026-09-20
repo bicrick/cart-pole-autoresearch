@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Loop forever: triple-B slot.
 # Phase 1 (done): Lim TQC UUU wide (marker .triple-b-tqc-uuu-v1).
-# Phase 2 (after natural TQC exit): PPO-balance catcher near_target≤~0.1
+# Phase 2 (after natural TQC exit): PPO-balance catcher near_target, P1a walls-on.
 #   — TQC@150k catch-basin measured DEAD (0/9); soft/stiff LQR RoA only 0.1@ω=0.
-#   Do not relaunch identical wide TQC. Do not mid-kill the live TQC process.
+#   Void balance v1 was a miss (wrong plant phase). TRACK_WALLS=1 required for P1a.
+#   Do not relaunch identical wide TQC.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -38,13 +39,14 @@ start_tqc_wide() {
 }
 
 start_ppo_balance() {
-  # Hold catcher: near_target only, no hang, UUU-biased, short force40.
-  if [[ ! -f policies/.triple-b-ppo-balance-v1 ]]; then
+  # Hold catcher: near_target only, no hang, UUU-biased, force40, P1a walls-on.
+  # Void v1 (.triple-b-ppo-balance-v1) was a miss — curriculum lock is walls first.
+  if [[ ! -f policies/.triple-b-ppo-balance-walls-v1 ]]; then
     rm -f policies/checkpoint-triple-b.pt
-    touch policies/.triple-b-ppo-balance-v1
-    echo "$(date -u +%FT%TZ) cold-start triple-b → PPO-balance v1; marker set" >> logs/continue-triple-b.log
+    touch policies/.triple-b-ppo-balance-walls-v1
+    echo "$(date -u +%FT%TZ) cold-start triple-b → PPO-balance walls-on P1a; marker set" >> logs/continue-triple-b.log
   fi
-  nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
+  nohup env TRACK_WALLS=1 NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
     REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
     WARMUP_UPDATES=0 WARMUP_GOAL=UUU \
     WARMUP_HANG_START_P=0.0 HANG_START_P=0.0 \
@@ -53,12 +55,12 @@ start_ppo_balance() {
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
     INIT_MODE=near_target ENERGY_W=0.2 LR=1e-4 ENT=0.02 \
-    RUN_NAME=ft-triple-b-e8192-r256-uuu-balance-f40-nt1-bar10-prog1-flip \
+    RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-balance-f40-nt1-bar10-prog1-flip \
     CHECKPOINT=policies/checkpoint-triple-b.pt \
     OUT=policies/policy-triple-b.json \
     bash scripts/next-train-triple.sh \
     >> logs/train-triple-b-balance.log 2>&1 &
-  echo "$(date -u +%FT%TZ) STARTED triple-b PPO-balance pid=$!" >> logs/continue-triple-b.log
+  echo "$(date -u +%FT%TZ) STARTED triple-b PPO-balance walls pid=$!" >> logs/continue-triple-b.log
 }
 
 while true; do
