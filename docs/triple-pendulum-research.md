@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~19:40 CT.
+Last updated: 2026-09-19 ~20:15 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -1302,3 +1302,61 @@ fawraw still has **no** soft-landing implementation (CDN `m4_findings.md` unchan
 73. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented.
 
 **No code this fire** (overnight owns train / B v7b / C v7; wait for green-light / overnight ask). NEED_USER_PING no.
+
+
+### Research pass (2026-09-19 ~20:15 CT) — NNM energy walk + SA-TGaussian + staged rewards
+
+Digged DLR/TUM ENOC 2024 *Swing-Up of a Double, Triple, and Quadruple Pendulum via Nonlinear Normal Modes* (Sachtler / Albu-Schäffer / Della Santina; elib.dlr.de/205593), AAAI-25 *Truncated Gaussian Policy for Debiased Continuous Control* (Lee et al.; ojs.aaai.org download 33988), and arXiv:2603.05113 *Decoupling Task and Behavior: A Two-Stage Reward Curriculum* (RC-SAC/RC-TD3). Re-checked fawraw (still last *code* **2026-06-25**). Live peek (do not mid-kill): A swing still cool-ent **v6** `ent05-lr1e4` f50; B hold already **v7b** `ent08-lr5e5`; C combo still **v6** `ent04` (continue-c armed for v7). L4 ~99%/15.7GB. Overnight owns train. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (fills classical energy-architecture + PPO action-geometry + reward-staging cookbooks under existing P1/P2/explore; does not displace handoff as #1).
+
+#### DLR NNM (ENOC 2024) — closest *serial triple* classical energy architecture
+
+Still no cart-triple bang-bang coeffs (Glück=feedforward BVP; Xin/Fattahi/Dyad = other plants). NNM fills the **architecture** gap for n-link serial swing-up:
+
+| Piece | Steal |
+|---|---|
+| Plant in paper | Fixed-base n-link (joint torque), equal thin rods \(l{=}0.5\,\mathrm{m}\), \(m{=}0.662\,\mathrm{kg}\) — **not** cart-actuated; retune on our \(m_c{=}1,m_i{=}0.1,\ell_i{=}0.5\) |
+| Insight | All NNMs (modes 1…n) approach **homoclinic orbits through the upright** as \(E\to V_{\max}\); period \(\to\infty\) |
+| Controller | Superimpose **eigenmanifold stabilizer** + **energy injection** — walk up one NNM from tiny amplitude to the homoclinic |
+| Actuation | Feasible with **weak** actuators — torques capped at **~10% of max gravity torque** in the double demo |
+| Modes | Swing-up works via Mode 1 *or* Mode 2 (double shown); pick the mode whose generator matches available actuation |
+
+**Steal for cart-triple swing (when green-lit):** treat cart force as the energy-injection actuator along a soft “modal phase” / height-progress manifold rather than inventing bang-bang gains. Pair with Fattahi/Dyad/EBERL residual modulation (19:00 / 17:33) as the injection law; still **hand off** to LQR/CLF-RL hold once basin∩low-ω (rank #1). Do **not** expect NNM numbers to transfer — measure \(V_{\max}\) / \(E_{\mathrm{UUU}}\) on `physics_triple` first (\(U_{\mathrm{UUU}}\) already ~0.736 J in prior notes).
+
+#### SA-TGaussian (AAAI-25) — concrete alternative to latent-Gaussian + clip/tanh
+
+Our `train/ppo.py` samples unbounded `Normal(mean,std)` on **raw**, logs **latent** entropy `dist.entropy()`, then `tanh_action(raw)*forceLimit`. That is exactly the H(u)/clip geometry arXiv:2608.24488 flagged at 15:42. AAAI-25 gives the **bounded-support** cookbook that keeps Gaussian shape:
+
+| Knob | Steal |
+|---|---|
+| Location | \(\mu=\frac{u-l}{2}(\tanh g(s)+1)+l\) — keep µ **inside** bounds |
+| PDF | Truncated Gaussian \(f(x;\mu,\sigma,l,u)=\phi/\sigma\big/(\Phi_u-\Phi_l)\) |
+| Sample | Inverse-CDF via \(\Phi^{-1}\) (no post-clip) |
+| Scale-adjust | \(\sigma'=\sigma\cdot d(\mu)\); semi-ellipse \(d\) with **\(k{=}2\)**, **\(d_{\min}{=}0.01\)** (best overall Norm score) |
+| \(\sigma_{\mathrm{init}}\) | **0.5** preferred over 1.0 (large init worsens bound saturation) |
+| Meter | **aBAR** = fraction of actions in outer **1%** of \([-1,1]\) — Gaussian family often **10–30%**; TGaussian/SA ~**0–2%** |
+| Vs cousins | Prefer SA-TGaussian over plain TGaussian (over-avoids bounds) and over Beta/logit-normal on MuJoCo Norm; CAPG helps return but **does not** cut aBAR |
+
+**Steal for us:** optional next explore retune (beside ERA / H(a) / cool-ent): replace latent Normal+tanh with **SA-TGaussian on normalized force** \([-1,1]\) then scale by `forceLimit`. Log **aBAR** + executed entropy. Orthogonal to two-policy; helps both swing and hold nets if bound-bang is farming rail/force.
+
+#### Two-stage reward curriculum (arXiv:2603.05113) — stop stacking behavior terms too early
+
+RC-SAC / RC-TD3: phase-1 train on **task** rewards only; phase-2 unlock **behavior** terms (energy efficiency, smoothness, …). Switch when actor–critic fit stays below a threshold for a window; **recompute** replay rewards so phase-1 samples stay usable. Strongest gains when auxiliary weights are large.
+
+**Steal for our product stack:** treat Lim/Baek **product + progress** as task; defer soft-landing (\(R_\omega\), airo7 \(-\omega^2\)), CLF \(r_{\Delta V}\), cart-centre crank, and saturated-E / Fattahi modulation to a **phase-2** (or hold-net-only) once near_target at_goal/UUU is moving. Matches fawraw “widen catcher before inventing soft-landing coefs” and our live symptom (align↑ / at_goal flat under full product+progress+flip).
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing **implementation**: still absent (starter pack from 19:40 stands).
+- Serial **cart-triple** classical energy **bang-bang coeffs**: still none (NNM = joint-torque architecture, not cart force gains).
+- Force 80–100: still demoted.
+- Baek VER: no new multi-link / on-policy paper (shipping flip + optional SA-TGaussian / H(a) are the on-policy levers).
+- Rank: after v6/v7 cook, **split swing vs hold** still #1; **NNM energy-walk architecture** joins Fattahi/Dyad/EBERL under P2 swing; **SA-TGaussian \(k{=}2,d_{\min}{=}0.01\)** joins ERA / H(a) / cool-ent under explore; **task→behavior reward stages** join soft-landing / CLF under P1 hold.
+
+#### Amend recommended redesign (additions only)
+
+74. When coding classical energy swing: prefer **NNM-style** manifold stabilize + gradual energy inject (weak actuation OK) over inventing cart bang-bang; measure \(E_{\mathrm{UUU}}\) on our plant; still hand off to hold.
+75. Optional PPO action head A/B: **SA-TGaussian** on \([-1,1]\) force with \(k{=}2\), \(d_{\min}{=}0.01\), \(\sigma_{\mathrm{init}}{=}0.5\); track aBAR; prefer over another ENT wipe if bound saturation shows in aBAR/H(u).
+76. Reward staging: ship product+progress first; unlock soft-landing / CLF-ΔV / heavy centre / saturated-E on a **second phase** or on the **hold net only** (2603.05113).
+77. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented.
+
+**No code this fire** (overnight owns train / B v7b / C→v7; wait for green-light / overnight ask). NEED_USER_PING no.
