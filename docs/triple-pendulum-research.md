@@ -1,6 +1,58 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~07:56 CT.
+Last updated: 2026-09-20 ~08:33 CT.
+
+
+## Research pass (2026-09-20 ~08:33 CT) — ATRPO-lite LIVE @u60: **H pinned to ERA 0.5** + missing **APO Average Value Constraint**
+
+**Sources checked (this fire):** live TB `20260920-125844_*b-…-atrpo…` / `20260920-123008_*a` / `20260920-102255_*c-h1var` (~08:33 CT); overnight/macro @08:18 (B ATRPO ~u33 babysit); prior research 07:56 (Naik ≠ ATRPO) + 07:36 (ATRPO-before-short-ep) + 07:07 (ATRPO cookbook) + 04:59 (APO named only as cousin); **APO** Ma/Tang/Xia/Yang/Zhao arXiv:2106.03442 §4.1 / Fig.2 / Alg.1 (**Average Value Constraint**); ATRPO Zhang–Ross 2106.07329 Alg.2/App.G (ρ̂ + γ-free GAE — **no** E[V]=0 pin). Box `train_triple.py` `--avg-reward` confirmed: ρ̂=batch mean, γ-dropped GAE, adv-norm; **no** critic-mean constraint / EMA-η̂. Overnight owns slots — **no mid-kill / no train start**.
+
+**Phase focus:** P1a walls-on role split; B = H1 ATRPO-lite + ENERGY_W=0.35 RPO+ERA ENT=0.
+
+| Slot | ~u | entropy | nt_at_goal/UUU | other |
+|---|---|---|---|---|
+| **A S1** | ~**u115** | **~1.04** | nt~0.064 | hang_align/UUU **~−0.065**, hang_at_goal~0.005, OOB=0 — leave alone |
+| **B H1 ATRPO-lite** | ~**u60** | **1.77→0.529** (**= ERA H₀ 0.5 pin**) | **0.042→0.051** (tiny tick) | nt_align −0.076→**+0.165↑↑**; nt_rew 233→251↑; ρ −1.03→**+0.49**; value_loss 982→11; policy_loss healthy (−0.008); OOB=0 |
+| **C H1-var** | ~**u340** | **~0.79** | **~0.051 flat** | nt_align~0.15, OOB=0 — leave alone |
+
+### Q1 — Live failure mode: ATRPO still **visit≠hold**, now with **ERA soft-floor pin** early
+
+Same Spong class as ENERGY_W / gSDE deaths, but ρ̂ and critic look *healthy* (ρ settled ~0.49, value_loss collapsed, policy_loss not exploding). Align climbing hard while `at_goal` barely moves → approach without stay. **New signal vs 08:18:** H reached ERA floor by **u60** (overnight babysit gate was ~u80–100). Do **not** mid-kill yet — nt ticked 0.036→0.051 and ρ/value are stable — but sharpen the gate:
+
+- Through ~**u80–100**: if H stays **≲0.55** (pinned at ERA) **and** nt_UUU still ≲**0.10** with reward↑ → declare **ATRPO-lite FAIL** this stretch → next lever (not short-ep first).
+- If nt climbs past ~0.15–0.2 while H holds ≳0.5 → keep cooking toward 0.80 (ERA is doing its job as soft floor, not a death pin).
+
+### Q2 — MATERIAL: our ATRPO-lite is missing APO’s **Average Value Constraint** (critic grounding)
+
+APO 2106.03442 §4.1: with γ=1 the Bellman operator is **non-expansive**; constant offsets in the differential value **do not dissipate** (Eq.19: bias update factor → 1 when γ→1). Prop.3: ideal differential values satisfy **E_{s∼d_π}[V(s)] = 0**. APO adds **Average Value Constraint**: fit critic under batch-mean ≈0 via Lagrangian — equivalent to shifting targets \(\tilde V = \hat V - \nu b\) where \(b=\mathrm{mean}\,V_\phi\) (Eq.21). Ablation Fig.2: **+66%** with AVC; without it (\(\nu=0\)) average values **fluctuate dramatically** and poison advantages.
+
+| Knob | Our `--avg-reward` (ATRPO-lite) | APO full | Naik RC (07:56) |
+|---|---|---|---|
+| ρ̂ / η̂ | batch mean each rollout | **EMA** η̂ (α∈{0.03,0.1,0.3}) | batch / running mean |
+| GAE | γ-free (λ only) | γ-free avg TD | **keep γ** |
+| Critic grounding | **none** (only adv-norm) | **AVC** E[V]≈0 (ν∈{0.03…1}) | discounted contraction helps |
+| Empirics | live B: V_loss↓, H→ERA, nt flat | MuJoCo APO ≫ PPO on avg-reward metric | Pendulum continuing named domain |
+
+**Why it matters for B:** Naik (keep-γ) softens the *objective*; AVC grounds the *critic* under γ-free. Orthogonal levers — can stack. Live value_loss already settled (~11) so we are **not** in blow-up; AVC is the cookbook for **quiet drift / relative-value poison** that looks like healthy V_loss but still yields visit≠hold. Prefer staging AVC **inside** ATRPO-lite (or on the Naik twin) before Turcato short-ep.
+
+**Practical steal (overnight, post-gate / next natural restart only):**
+1. Log `train/critic_mean` = batch mean of \(V_\phi(s)\); watch drift even when `value_loss` is small.
+2. Cheap AVC: after computing `ret`, subtract `ν * ret.mean()` from returns (or from V targets) with ν≈**0.1–0.3** (APO grid); or EMA-smooth \(b\) like APO Alg.1 step 6.
+3. Optional: EMA ρ̂ (α≈0.1) instead of raw batch mean — APO + Naik both prefer smoother η̂.
+4. Keep ENT=0; ban MaxEnt / AR-EAPO / re-arm gSDE / ENT≥0.02 on RPO / short-ep-before-AVC-or-Naik.
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Mid-kill B ATRPO @u60 (H@ERA) | **No** — babysit to u80–100; nt ticking + ρ/value healthy | — |
+| Sharpen ATRPO FAIL gate: H≲0.55 **and** nt≲0.10 @u80–100 | **Yes** — watch criteria | **Yes** — #2 (viii) |
+| Add **APO AVC** (ν≈0.1–0.3) + optional EMA-ρ̂ as ATRPO-lite harden / post-FAIL before short-ep | **Ops note** (code on natural restart) | **Yes** — #2 (viii); order: ENERGY_W → ATRPO-lite → **AVC harden or Naik keep-γ** → Turcato short-ep |
+| Displace Naik as first ATRPO fallback | **No** — AVC and Naik are twins; either before short-ep | — |
+
+**Material:** yes — new concrete stay lever (APO Average Value Constraint) missing from live ATRPO-lite + early ERA-pin diagnostic. Does **not** beat live babysit Next. NEED_USER_PING **yes**.
+
+**Code this fire:** docs only (research + macro backlog/Next watch sharpen). No train start / no mid-kill.
 
 
 ## Research pass (2026-09-20 ~07:56 CT) — Naik **discounted reward centering** ≠ ATRPO γ-free + ATRPO reset-cost ops
