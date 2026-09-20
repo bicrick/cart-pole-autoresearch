@@ -22,6 +22,11 @@ body {
   background-size: 3.5px 3.5px;
 }
 
+html.is-dark,
+html.is-dark body {
+  background-color: #0b0c0f;
+}
+
 .page {
   position: relative;
   height: 100dvh;
@@ -29,6 +34,20 @@ body {
   background-color: var(--paper);
   background-image: radial-gradient(rgba(33, 35, 45, 0.05) 0.55px, transparent 0.6px);
   background-size: 3.5px 3.5px;
+}
+
+.page.is-dark {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.theme {
+  position: absolute;
+  top: 1.15rem;
+  right: 1.25rem;
+  z-index: 3;
+  pointer-events: auto;
+  width: 1.1em;
+  text-align: center;
 }
 
 .start {

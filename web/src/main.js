@@ -3,6 +3,7 @@ import { createInput, createKeys } from "./input.js";
 import { createCamera, draw } from "./render.js";
 import { startLoop } from "./loop.js";
 import { PLANTS, plantFromHash, nextPlantId } from "./plants.js";
+import { bindTheme } from "./theme.js";
 
 const page = document.querySelector(".page");
 const canvas = document.getElementById("stage");
@@ -195,6 +196,9 @@ async function boot() {
   policyReady = ready;
   setPolicyOn(false);
   startPlantLoop(nextPolicy, nextConstants);
+
+  const themeBtn = document.getElementById("theme-toggle");
+  if (themeBtn) bindTheme(page, themeBtn);
 
   if (policyBtn) {
     policyBtn.addEventListener("click", () => setPolicyOn(!policyOn));
