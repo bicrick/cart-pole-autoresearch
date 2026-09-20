@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~09:13 CT
+Last updated: 2026-09-20 ~09:25 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~09:13 CT):** **A = S1** ~u189 hang_align~−0.073; **B = H1 ATRPO+AVC ν=0.2** ~u24 (pid 172580) — H 1.77→1.03, nt flat~0.034, avc_bias→0, ρ→0.40; **C = H1-var** natural restart ~u10 (pid 173060). Combo mush retired. X1 staged. EMA-AVC **staged not armed**. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE / ENERGY_W-only / plain ATRPO after AVC. **Stay order:** ENERGY_W (FAIL) → ATRPO-lite (**FAIL @u100**) → **ATRPO+APO AVC ν≈0.2 LIVE** → if FAIL @u80–100: **EMA-AVC harden (Alg.1, staged)** or **Naik ρ-center+keep-γ** → Turcato short-ep only as discounted fallback.
+**Live mapping (2026-09-20 ~09:25 CT):** **A = S1 anti-DDD** (restarting after DDD hang-farm + NaN log_std @u194–220; W_DOWN=0 UU_BIAS=2 ENERGY_W=0.6, marker `.triple-a-s1-antidd-v2`); **B = H1 ATRPO+AVC ν=0.2** ~u50 (pid 172580) — H 0.59→0.54, nt flat~0.04, nt_align −0.08→+0.11, leaving DDD (nt_DDD 0.84→0.10), hang_align/UUU −0.97→−0.29; **C = H1-var** ~u30 (pid 173060). Combo mush retired. X1 staged. EMA-AVC **staged not armed**. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE / ENERGY_W-only / plain ATRPO after AVC. **Stay order:** ENERGY_W (FAIL) → ATRPO-lite (**FAIL @u100**) → **ATRPO+APO AVC ν≈0.2 LIVE** → if FAIL @u80–100: **EMA-AVC harden (Alg.1, staged)** or **Naik ρ-center+keep-γ** → Turcato short-ep only as discounted fallback.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,16 +61,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~09:13 CT):** VM `cartpole-train-od` RUNNING us-east1-b L4 ~99%/16.4GB; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c. TRACK_WALLS=1 all slots.
-  - **A = S1 walls-swing** — pid **166936** ~**u189** hang_align/UUU **~−0.073**, hang_at_goal~0.003, nt_UUU~0.049, ent **1.16→0.67↓**, policy_loss~0.09, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
-  - **B = H1 ATRPO+AVC ν=0.2** — pid **172580** ~**u24** (`…atrpo-avc02…`). nt_UUU **~0.034** flat, nt_align **−0.076→+0.021**, nt_rew~249↑, H **1.77→1.03**, avc_bias **→~0.16** (settled), ρ **−1→0.40**, OOB=0. Markers `.triple-b-h1-atrpo-avc-v1` + cold. **Babysit to u80–100** (ban mid-kill).
-  - **C = H1-var** — pid **173060** ~**u10** (natural restart after prior u400) nt_UUU **~0.053** ent **~0.75** OOB=0 — leave alone. Marker `.triple-c-h1var-walls-v1`.
+- **Live (2026-09-20 ~09:25 CT):** VM `cartpole-train-od` RUNNING us-east1-b L4 ~99%/16.4GB; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c. TRACK_WALLS=1 all slots.
+  - **A = S1 anti-DDD** — prior stretch ~**u220** hang_align/UUU **→−0.986**, hang_at_goal/DDD **→0.82**, nt_DDD **→0.94**, ent **→0.47**, policy_loss **→2.8e16**, ckpt **log_std NaN**. Mid-killed + quarantined. New recipe W_DOWN=0 UU_BIAS=2 ENERGY_W=0.6 LR=1e-4; marker `.triple-a-s1-antidd-v2` cold. Watch hang_align/UUU recover off −1.
+  - **B = H1 ATRPO+AVC ν=0.2** — pid **172580** ~**u50**. nt_UUU **~0.034–0.041** flat, nt_align **−0.08→+0.11↑**, nt_rew~254, H **0.59→0.54**, avc_bias~0, ρ~0.49, hang_align/UUU **−0.97→−0.29**, nt_DDD **0.84→0.10↓**, OOB=0. Markers `.triple-b-h1-atrpo-avc-v1` + cold. **Babysit to u80–100** (ban mid-kill).
+  - **C = H1-var** — pid **173060** ~**u30** nt_UUU **~0.049** ent **~0.73** OOB=0 — leave alone. Marker `.triple-c-h1var-walls-v1`.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire:** B still early — reward↑/hold≈0 pattern forming but **not** FAIL yet; avc_bias healthy settle. A hang not climbing + ent drift — leave (no mid-kill). C fresh. GO: **staged EMA-AVC** code+continue-b branch (marker `.triple-b-h1-atrpo-avc-ema-v1` **not touched**). Left A/B/C alone.
-- **Next micro-task:** (1) Babysit B AVC through **u80–100**. Gate: if H≲0.55 ∧ nt≲0.10 ∧ rew↑ → touch `.triple-b-h1-atrpo-avc-ema-v1` + mid-kill into **EMA-AVC α=0.1** (staged); else if γ-free family exhausted → **Naik ρ-center+keep-γ**. (2) A leave alone (watch ent→floor / hang_align). (3) C leave as H1-var control. (4) H1 nt≳0.2 → handoff smoke; gate nt≳0.80 align≳0.90 → P1b void FT.
-- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1 ATRPO+AVC LIVE** / **C H1-var**
-- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENERGY_W-only; relaunch plain ATRPO after AVC live; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN before Naik**; **skip Naik and jump to short-ep**; **re-arm ENERGY_W-only**; **mid-kill AVC before u80–100 FAIL confirm**; **arm EMA-AVC marker while AVC-lite still live**
-- **NEED_USER_PING:** **yes** — 15m think-out-loud (AVC ~u24 babysit; EMA-AVC staged)
+- **Diagnosis / actions this fire:** A dead — DDD hang-farm (wrong-eq local opt) + NaN log_std; mid-kill justified (not climbing). Staged anti-DDD S1. B early but healthy signals (align↑, leaving DDD); H near 0.55 but **not** FAIL gate yet (need u80–100). C fine. Left B/C alone.
+- **Next micro-task:** (1) Babysit B AVC through **u80–100**. Gate: if H≲0.55 ∧ nt≲0.10 ∧ rew↑ → touch `.triple-b-h1-atrpo-avc-ema-v1` + mid-kill into **EMA-AVC α=0.1** (staged); else if γ-free family exhausted → **Naik ρ-center+keep-γ**. (2) Confirm A anti-DDD cold-start live; watch hang_align/UUU + hang_at_goal/DDD (fail if DDD farm returns by ~u80). (3) C leave as H1-var control. (4) H1 nt≳0.2 → handoff smoke; gate nt≳0.80 align≳0.90 → P1b void FT.
+- **Kill list:** no double/xonly; no void TQC; slots = **A S1 anti-DDD** / **B H1 ATRPO+AVC LIVE** / **C H1-var**
+- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENERGY_W-only; relaunch plain ATRPO after AVC live; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN before Naik**; **skip Naik and jump to short-ep**; **re-arm ENERGY_W-only**; **mid-kill AVC before u80–100 FAIL confirm**; **arm EMA-AVC marker while AVC-lite still live**; **relaunch A with W_DOWN=1 after anti-DDD**
+- **NEED_USER_PING:** **yes** — 15m think-out-loud (A NaN+DDD mid-kill → anti-DDD; B AVC ~u50 babysit)
 
 
 ## Ranked backlog (pull from top when a stretch ends)
