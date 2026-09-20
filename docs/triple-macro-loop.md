@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-19 ~23:57 CT (backlog #2 sharpened ~00:00 CT research)  
+Last updated: 2026-09-20 ~00:15 CT  
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -27,22 +27,26 @@ on the no-walls plant (`forceLimit` ≥ 40N), with TensorBoard + checkpoints mir
 ## Current phase + next micro-task
 
 - **Phase:** P1 — UUU hold (near-target meter is the truth; harsh `eval/*` stays secondary)
-- **Live (~23:57 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~97%/11.4GB). TB http://34.148.138.48:6006/
-  - **A** PPO swing f50 ~**u260**/400 nt_at_goal/UUU~**0.032** align_UUU~−0.054 — still flat on hold; leave alone (no mid-kill)
-  - **B** **TQC UUU live** (`train_triple_tqc.py` pid 133757) since **03:37Z / ~22:37 CT** — run `tqc-uuu-f40-hold-wide_2`; ~**157.5k**/300k steps (ckpt @**150k** + best_model), `ep_rew_mean` −258→541→**+555** (marginal +14 since 125k; crawl not hold), success_rate **0**, ent_coef~0.013; eval@150k mean_rew~**582** (534→517→543→563→569→582) success **0**. **≥150k + success 0 + no hold lift** → stage handoff (do not mid-kill; let stretch run toward 300k)
-  - **C** PPO combo f40 ~**u260**/400 nt_at_goal/UUU~**0.050** align_UUU~0.22 ent~3.4 — leave alone
-- **Next micro-task:** **stage two-policy handoff** (do **not** mid-kill TQC — leave B running to stretch end ~300k). Prep hold catcher (TQC-UUU ckpt @150k / LQR \(Q_\theta\sim100,R\sim0.01\) / PPO-balance near_target≤0.1 rad) + swing net (slot A) + enter gate \(\|\phi_i\|<0.1\) & \(\|\omega\|_\infty<1\) + latch/hysteresis ~0.25 + soft-landing LPF. Leave A/C alone until their stretches end. If TQC suddenly shows success>0 before stretch end → abort handoff staging and stage EP specialist instead. No mid-kill.
-- **Kill list:** no double/xonly on the L4; slots = A PPO / **B TQC** / C PPO (until C stretch ends)
-- **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C while B is the specialist slot; relaunch parallel `continue-triple-tqc-uuu` (B already owns TQC)
-- **NEED_USER_PING:** **no** (quiet; gate still ≪0.80; TQC past 150k flat on hold — handoff staged in-doc only, no kill)
+- **Live (~00:15 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~88%/11.4GB). TB http://34.148.138.48:6006/
+  - **A** PPO swing f50 ~**u300**/400 nt_at_goal/UUU~**0.038** align_UUU~−0.07 — flat; leave alone (no mid-kill). ETA stretch end ~15–20m.
+  - **B** **TQC UUU live** (`train_triple_tqc.py`) since 03:37Z — run `tqc-uuu-f40-hold-wide_2`; ~**189k**/300k steps (ckpts @175k + best@150k), `ep_rew_mean`~**561** (flat crawl), success_rate **0**, ent_coef~0.0125; eval@175k mean_rew~**551** (dip from 582@150k) success **0**.
+  - **C** PPO combo f40 ~**u289**/400 nt_at_goal/UUU~**0.056** align_UUU~0.23 ent~3.42 — leave alone.
+- **Catch-basin (CPU, staged this fire):**
+  - TQC@150k: **0/9 dead** (`docs/basins/basin-tqc150k.json`) — do **not** use as hold catcher.
+  - LQR soft Qθ=100 / stiff Qθ=1e3: only **0.1 rad @ ω=0** survives (`docs/basins/basin-lqr-*.json`). RoA too small for enter-gate 0.1 alone under velocity.
+- **Code staged:** `train/lqr_uuu.py`, `train/handoff.py` (enter 0.1 / exit 0.25 / dwell / LPF τ=0.3), `scripts/measure_catch_basin.py`.
+- **Next micro-task:** (1) leave B TQC to ~300k (no mid-kill); `continue-triple-b` now auto-starts **PPO-balance** catcher on natural exit (not another wide TQC). (2) On A exit keep swing specialist. (3) Next free cycle: wire `handoff_eval` smoke (swing-A + LQR/PPO-balance catcher) + widen LQR (∫x LQI / multi-link ICs) if PPO-balance also thin. If TQC success>0 before stretch end → abort handoff, stage EP specialist instead.
+- **Kill list:** no double/xonly on the L4; slots = A PPO / **B TQC→PPO-balance** / C PPO
+- **Do not:** mid-kill improving runs; more cool-ent / entboost PPO knobs; stack a second GPU VM; put TQC on C; relaunch parallel wide TQC on B
+- **NEED_USER_PING:** **no** (quiet; gate ≪0.80; TQC basin dead confirms handoff path — no kill)
 
 ## Ranked backlog (pull from top when a stretch ends)
 
-1. **Lim TQC UUU specialist** (**LIVE on slot B** since 22:37 CT; **≥150k / success 0 @23:57 CT** — hold dead for this stretch; do not mid-kill, handoff staged). Hold mirror ladder leftovers (post-stretch only): (a) M2 tighten `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0`; (b) `ry_scale=1.0` Lim cart term; (c) **∫x obs** (Lim x₉ / LQI) + curriculum `eval/near_target/*` meters on TQC; (d) Baek VER replay flip (TQC-native); (e) optional fawraw M2 arch `[128,128]` / buffer 200k / 150k; (f) **`n_steps=3`** (SB3 NStepReplay / Raffin) after tighten; (g) **`use_sde=True sde_sample_freq=4`** (Zoo PyBullet TQC / Raffin) after n_steps, before M2-arch shrink / dead call (research 23:27). After nt mastery: BaRC **expand-with-ω** (nonzero link vel + off-centre x), not angle-noise alone (fawraw M4 basin)
-2. **Two-policy handoff** (**STAGED @23:57 CT** — TQC ≥150k flat on hold; implement when B stretch ends / next free slot) — **order:** (1) measure catch basin on TQC@150k (offsets 0.1–0.5 × vels 0–3, success≥0.8×budget) → (2) if basin dead/tiny prefer **LQR** \(Q_\theta\sim100,R\sim0.01\) (+∫x LQI / IC_ASET PI; stiffen Q_θ~10³ only if soft RoA fails) → (3) PPO-balance near_target≤0.1 → (4) TQC ckpt only if basin widens; swing: separate net (slot A / energy); enter: \(\|\phi_i\|<0.1\) **and** \(\|\omega\|_\infty<1\) (+ opt \(\bar c>0.9\) / \(E\lesssim1.08 E_{UUU}\)), **never** tol=0.3; latch=True + **hysteresis exit** \(\|\phi\|_\infty>0.25\) + dwell N≥5–10 (fawraw latch is one-way only); soft-landing + LPF τ≈0.3 (fawraw/DiffSwing/ResearchSquare/2606.28627; research 00:00). Repo still missing `handoff.py` / catch-basin / LQR module.
+1. **Lim TQC UUU specialist** (**LIVE on slot B** → finishing stretch; basin **dead** @150k). Hold mirror ladder leftovers (post-stretch only, **after** PPO-balance try): (a) M2 tighten `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0`; (b) `ry_scale=1.0`; (c) **∫x obs**; (d) Baek VER flip; (e) optional fawraw M2 arch; (f) `n_steps=3`; (g) `use_sde=True sde_sample_freq=4`.
+2. **Two-policy handoff** (**CODE STAGED + basin measured @00:15 CT**) — catcher order now data-backed: **skip TQC zip** → LQR only tiny → **PPO-balance next on B exit**. Enter \(\|\phi_i\|<0.1\) & \(\|\omega\|_\infty<1\); latch + exit 0.25 + dwell; LPF τ≈0.3. Modules: `train/handoff.py`, `train/lqr_uuu.py`, `scripts/measure_catch_basin.py`.
 3. Energy-to-goal (true E→E_UUU) if product+progress plateaus
 4. Force probe 40→60 only if OOB≈0 and plant feels underpowered
-5. 8×TQC specialists (Lim full set) after UUU TQC proves hold
+5. 8×TQC specialists (Lim full set) after UUU hold actually works
 6. Progressive/adapters from double — deferred; fresh triple policy first
 
 ## 15-minute cadence (what "adapt" means)

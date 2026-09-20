@@ -44,3 +44,10 @@ tb/
 .venv-tqc/
 policies/tqc-*-smoke*
 runs/tqc-uuu-smoke*
+
+# SB3 / large binaries
+*.zip
+policies/tqc-triple-uuu_ckpts/
+policies/tqc-triple-uuu_best/
+policies/tqc-triple-uuu-smoke_ckpts/
+policies/tqc-triple-uuu-smoke_best/

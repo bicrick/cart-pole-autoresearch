@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Loop forever: triple-B slot = Lim TQC UUU specialist (fresh approach).
-# Replaces PPO cool-from-boost v8: single-policy PPO near_target/UUU stuck ~0.05
-# across cool-ent v6 + entboost v7b (entropy saturated ~3.42). Do not mid-kill
-# the live PPO v7b — this script only takes over after that process exits.
+# Loop forever: triple-B slot.
+# Phase 1 (done): Lim TQC UUU wide (marker .triple-b-tqc-uuu-v1).
+# Phase 2 (after natural TQC exit): PPO-balance catcher near_target≤~0.1
+#   — TQC@150k catch-basin measured DEAD (0/9); soft/stiff LQR RoA only 0.1@ω=0.
+#   Do not relaunch identical wide TQC. Do not mid-kill the live TQC process.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 mkdir -p logs policies
 
-# Prefer the TQC venv when present (box + VM).
 if [[ -z "${PYTHON:-}" ]]; then
   if [[ -x "$ROOT/.venv-tqc/bin/python" ]]; then
     export PYTHON="$ROOT/.venv-tqc/bin/python"
@@ -17,7 +17,7 @@ if [[ -z "${PYTHON:-}" ]]; then
   fi
 fi
 
-# Match either legacy PPO B or the TQC trainer so we never double-start.
+# Match either TQC trainer or PPO B so we never double-start.
 find_pid() {
   ps -eo pid=,args= | awk '
     /train_triple_tqc\.py/ { print $1; exit }
@@ -25,27 +25,7 @@ find_pid() {
   '
 }
 
-while true; do
-  PID=$(find_pid || true)
-  if [[ -n "${PID}" ]]; then
-    echo "$(date -u +%FT%TZ) waiting for slot-B pid=$PID" >> logs/continue-triple-b.log
-    while kill -0 "$PID" 2>/dev/null; do sleep 30; done
-    echo "$(date -u +%FT%TZ) slot-B exited; starting TQC UUU" >> logs/continue-triple-b.log
-    sleep 5
-  fi
-  if [[ -n "$(find_pid || true)" ]]; then
-    echo "$(date -u +%FT%TZ) slot-B already running; sleep" >> logs/continue-triple-b.log
-    sleep 30
-    continue
-  fi
-
-  # One-shot wipe of the old PPO B ckpt so we do not confuse demo sync.
-  if [[ ! -f policies/.triple-b-tqc-uuu-v1 ]]; then
-    rm -f policies/checkpoint-triple-b.pt
-    touch policies/.triple-b-tqc-uuu-v1
-    echo "$(date -u +%FT%TZ) cold-start triple-b → TQC UUU v1 (Lim EP7); marker set" >> logs/continue-triple-b.log
-  fi
-
+start_tqc_wide() {
   nohup env FORCE_LIMIT="${FORCE_LIMIT:-40}" TOTAL_STEPS="${TOTAL_STEPS:-300000}" \
     INIT_MODE=near_target INIT_NOISE=0.15 HANG_FRAC=0.05 WIDE_FRAC=0.25 \
     PROGRESS_W=1.0 CART_BARRIER_COEF=10 ALPHA_TH=0.5 \
@@ -54,6 +34,58 @@ while true; do
     DEVICE="${DEVICE:-auto}" \
     bash scripts/next-train-triple-tqc-uuu.sh \
     >> logs/train-triple-b-tqc.log 2>&1 &
-  echo "$(date -u +%FT%TZ) STARTED triple-b TQC pid=$!" >> logs/continue-triple-b.log
+  echo "$(date -u +%FT%TZ) STARTED triple-b TQC wide pid=$!" >> logs/continue-triple-b.log
+}
+
+start_ppo_balance() {
+  # Hold catcher: near_target only, no hang, UUU-biased, short force40.
+  if [[ ! -f policies/.triple-b-ppo-balance-v1 ]]; then
+    rm -f policies/checkpoint-triple-b.pt
+    touch policies/.triple-b-ppo-balance-v1
+    echo "$(date -u +%FT%TZ) cold-start triple-b → PPO-balance v1; marker set" >> logs/continue-triple-b.log
+  fi
+  nohup env NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
+    REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
+    WARMUP_UPDATES=0 WARMUP_GOAL=UUU \
+    WARMUP_HANG_START_P=0.0 HANG_START_P=0.0 \
+    NEAR_GOAL_P=1.0 WRONG_EQ_P=0.0 UU_BIAS=1.0 ANNEAL_UPDATES=0 \
+    GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
+    CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
+    FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
+    INIT_MODE=near_target ENERGY_W=0.2 LR=1e-4 ENT=0.02 \
+    RUN_NAME=ft-triple-b-e8192-r256-uuu-balance-f40-nt1-bar10-prog1-flip \
+    CHECKPOINT=policies/checkpoint-triple-b.pt \
+    OUT=policies/policy-triple-b.json \
+    bash scripts/next-train-triple.sh \
+    >> logs/train-triple-b-balance.log 2>&1 &
+  echo "$(date -u +%FT%TZ) STARTED triple-b PPO-balance pid=$!" >> logs/continue-triple-b.log
+}
+
+while true; do
+  PID=$(find_pid || true)
+  if [[ -n "${PID}" ]]; then
+    echo "$(date -u +%FT%TZ) waiting for slot-B pid=$PID" >> logs/continue-triple-b.log
+    while kill -0 "$PID" 2>/dev/null; do sleep 30; done
+    echo "$(date -u +%FT%TZ) slot-B exited; picking next recipe" >> logs/continue-triple-b.log
+    sleep 5
+  fi
+  if [[ -n "$(find_pid || true)" ]]; then
+    echo "$(date -u +%FT%TZ) slot-B already running; sleep" >> logs/continue-triple-b.log
+    sleep 30
+    continue
+  fi
+
+  # First-ever: cold TQC wide (legacy path).
+  if [[ ! -f policies/.triple-b-tqc-uuu-v1 ]]; then
+    rm -f policies/checkpoint-triple-b.pt
+    touch policies/.triple-b-tqc-uuu-v1
+    echo "$(date -u +%FT%TZ) cold-start triple-b → TQC UUU v1 (Lim EP7); marker set" >> logs/continue-triple-b.log
+    start_tqc_wide
+    sleep 60
+    continue
+  fi
+
+  # After wide TQC has been started once: next (and subsequent) starts = PPO-balance.
+  start_ppo_balance
   sleep 60
 done
