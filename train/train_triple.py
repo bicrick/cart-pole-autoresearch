@@ -101,6 +101,18 @@ def parse_args():
     parser.add_argument("--gae", type=float, default=0.95)
     parser.add_argument("--clip", type=float, default=0.2)
     parser.add_argument("--ent", type=float, default=0.01)
+    parser.add_argument(
+        "--rpo-alpha",
+        type=float,
+        default=0.0,
+        help="CleanRL RPO: Uniform(-α,α) jitter on actor mean at PPO update (0=off). Try 0.01 first.",
+    )
+    parser.add_argument(
+        "--log-std-floor",
+        type=float,
+        default=0.0,
+        help="ERA soft entropy floor H₀ for 1-D Normal (0=off). Softplus/detached; try 0.5–0.8. Not a hard clamp.",
+    )
     parser.add_argument("--episode-len", type=int, default=800)
     parser.add_argument("--impulse-p", type=float, default=0.005)
     parser.add_argument(
@@ -981,7 +993,15 @@ def main():
     print(f"tensorboard --logdir {args.logdir}", flush=True)
 
     model = ActorCritic(obs_dim=OBS_DIM, hidden=constants["hidden"]).to(device)
+    # ERA soft floor applies on rollout+update; RPO α is evaluate-only (passed to evaluate).
+    _floor = float(getattr(args, "log_std_floor", 0.0) or 0.0)
+    model.log_std_floor = _floor if _floor > 0 else None
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+    print(
+        f"explore: ent={args.ent} rpo_alpha={getattr(args, 'rpo_alpha', 0.0)} "
+        f"log_std_floor={model.log_std_floor}",
+        flush=True,
+    )
     if args.checkpoint.is_file():
         ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
         state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
@@ -1196,7 +1216,13 @@ def main():
             perm = torch.randperm(n, device=device)
             for start in range(0, n, mb):
                 idx = perm[start : start + mb]
-                log_p, ent, value = model.evaluate(obs_flat[idx], raw_flat[idx])
+                _floor = getattr(args, "log_std_floor", 0.0) or 0.0
+                log_p, ent, value = model.evaluate(
+                    obs_flat[idx],
+                    raw_flat[idx],
+                    rpo_alpha=float(getattr(args, "rpo_alpha", 0.0) or 0.0),
+                    log_std_floor=_floor if _floor > 0 else None,
+                )
                 ratio = (log_p - log_flat[idx]).exp()
                 surr1 = ratio * adv_flat[idx]
                 surr2 = ratio.clamp(1 - args.clip, 1 + args.clip) * adv_flat[idx]

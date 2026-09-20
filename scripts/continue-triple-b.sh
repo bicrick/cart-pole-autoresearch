@@ -37,11 +37,17 @@ start_tqc_wide() {
 
 start_ppo_h1() {
   bash scripts/quarantine-nan-ckpt.sh policies/checkpoint-triple-b.pt logs/continue-triple-b.log
-  # H1 hold catcher: near_target only, no hang, noise=0.05, ENT=0.035 (bumped from 0.02 — entropy collapse @u48), UUU-biased, force40, walls-on.
+  # H1 hold catcher: near_target only, no hang, noise=0.05, UUU-biased, force40, walls-on.
+  # ENT=0.035 alone failed (σ→dead, nt flat) — next stretch: RPO α=0.01 + ERA H₀=0.5 soft floor
+  # (CleanRL 2212.07536 / ERA 2510.08549). Keep ENT=0.02 (not ≥0.05). Resume ckpt — no cold wipe.
   if [[ ! -f policies/.triple-b-h1-noise05-v1 ]]; then
     rm -f policies/checkpoint-triple-b.pt
     touch policies/.triple-b-h1-noise05-v1
     echo "$(date -u +%FT%TZ) cold-start triple-b → H1 walls-hold noise0.05; marker set" >> logs/continue-triple-b.log
+  fi
+  if [[ ! -f policies/.triple-b-h1-rpo01-era05-v1 ]]; then
+    touch policies/.triple-b-h1-rpo01-era05-v1
+    echo "$(date -u +%FT%TZ) arming H1 RPO=0.01 + ERA H0=0.5 (ENT=0.02); marker set" >> logs/continue-triple-b.log
   fi
   nohup env TRACK_WALLS=1 NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
     REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
@@ -51,14 +57,14 @@ start_ppo_h1() {
     GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
-    INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.2 LR=1e-4 ENT=0.035 \
-    VEL_COST_COEF=0.015 \
-    RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-ent035-bar10-prog1-flip \
+    INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.2 LR=1e-4 ENT=0.02 \
+    VEL_COST_COEF=0.015 RPO_ALPHA=0.01 LOG_STD_FLOOR=0.5 \
+    RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-rpo01-era05-ent02-bar10-prog1-flip \
     CHECKPOINT=policies/checkpoint-triple-b.pt \
     OUT=policies/policy-triple-b.json \
     bash scripts/next-train-triple.sh \
     >> logs/train-triple-b-balance.log 2>&1 &
-  echo "$(date -u +%FT%TZ) STARTED triple-b H1 walls-hold pid=$!" >> logs/continue-triple-b.log
+  echo "$(date -u +%FT%TZ) STARTED triple-b H1 walls-hold RPO+ERA pid=$!" >> logs/continue-triple-b.log
 }
 
 while true; do
