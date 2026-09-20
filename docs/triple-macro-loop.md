@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~12:45 CT (continuous cart-pole loop — not overnight)
+Last updated: 2026-09-20 ~12:55 CT (continuous cart-pole loop — not overnight)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -83,12 +83,22 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 
-- **Status:** **LIVE sq1b** (2026-09-20 ~12:45 CT KEEP). After hard kill of in005 @u100, agent iterates **one simpler wheel** (no wait-on-user): same locked hold recipe with **tighter ICs** `INIT_NOISE=0.02` (was 0.05). Run `sq1b-h1-walls-ent0-nt1-in002` via `scripts/continue-sq1-h1.sh` → `next-train-triple-hold-sq1.sh`. A/C remain DISARMED. Cold start (`.sq1b-h1-cold-v1`; **no** FAIL quarantine ckpt).
-- **Prior fail (in005 @u100):** nt_UUU **~0.03**, visit≠hold, DDD farm, reward↑. Archive: `runs_archive/20260920-pre-squareone`; failed run `runs/20260920-162321_sq1-h1-walls-ent0-nt1-in005`; quarantine `policies/quarantine/checkpoint-sq1-h1-FAIL-u100-20260920-165701.pt`.
-- **Phase:** Square-one hold gate — **retry with tighter basin** (walls, near-only, PPO ENT=0, f40, hang=0, product). Kill rule unchanged: u100–150 nt≲0.15 ∧ reward↑ → STOP → next simpler wheel.
-- **Next micro-task:** **Babysit sq1b in002** to u100–150. Hard kill if `near_target/at_goal/UUU` ≲ **0.15** ∧ reward↑; then iterate next wheel. Gate to leave still nt ≳ 0.80 / align ≳ 0.90.
-- **Do not:** swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT>0, resume FAIL quarantine, stack GPU VMs, Mac.
+- **Status:** **LIVE sq1b** (2026-09-20 ~12:55 CT KEEP). Run `sq1b-h1-walls-ent0-nt1-in002` (INIT_NOISE=0.02) pid **4586** ~**u80**. A/C DISARMED. Cold `.sq1b-h1-cold-v1`. Approaching hard-kill window (~4 min to u100 @ ~12.6s/u).
+- **Prior fail (in005 @u100):** nt_UUU **~0.03**, visit≠hold, DDD farm, reward↑. Quarantine `policies/quarantine/checkpoint-sq1-h1-FAIL-u100-20260920-165701.pt`.
+- **Phase:** Square-one hold gate — tighter basin retry (walls, near-only, PPO ENT=0, f40, hang=0, product). Kill: u100–150 nt≲0.15 ∧ reward↑ → STOP → next simpler wheel (**planned:** `INIT_NOISE=0.01` / sq1c — one change only).
+- **Next micro-task:** Babysit sq1b to **u100–150**. If nt_UUU≲0.15 ∧ reward↑ → hard kill + quarantine + launch sq1c in001. Gate still nt ≳ 0.80 / align ≳ 0.90.
+- **Do not:** mid-kill before u100, swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT>0, resume FAIL quarantine, stack GPU VMs, Mac.
 
+
+## Fire log — 2026-09-20 ~12:55 CT (Cart-pole loop)
+
+- **Observe:** VM `cartpole-train-od` RUNNING us-east1-b L4; GPU ~13%/5.5GB; TB :6006 **200**. Single slot pid **4586** `sq1b-h1-walls-ent0-nt1-in002` (INIT_NOISE=0.02, ENT=0, walls, near-only). A/C DISARMED. ~12.6s/u → **~u80** (~4 min to u100).
+- **Meters (TB `20260920-173101_sq1b…`, u1→u80):** nt_UUU **0.037→0.036 flat** (range 0.032–0.038); nt_align/UUU **−0.075→−0.032**; nt_DDD **0.89→0.27↓**; eval/reward **52→225↑**; train/entropy **1.44→−0.30↓** (σ collapse); OOB=0; hang_UUU=0.
+- **Diagnosis:** Confirmed **visit≠hold** (reward↑ / hold≈0 / entropy dive) — same class as in005 FAIL. Still **under** hard-kill window (u100–150); no mid-kill.
+- **Decision:** **KEEP**
+- **Action:** Left alone. Next fire will likely hit u100–150 → hard kill if still nt≲0.15 ∧ reward↑, then launch **sq1c** `INIT_NOISE=0.01` (one change).
+- **W0 gate:** not closer (nt~0.03 vs 0.80).
+- **Next check:** ~13:10 CT (expect kill window).
 
 ## Fire log — 2026-09-20 ~12:45 CT (Cart-pole loop)
 
