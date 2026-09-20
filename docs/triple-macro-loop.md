@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~12:55 CT (continuous cart-pole loop — not overnight)
+Last updated: 2026-09-20 ~12:56 CT (research: quiet-basin floors — not in001)
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -85,9 +85,9 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 - **Status:** **LIVE sq1b** (2026-09-20 ~12:55 CT KEEP). Run `sq1b-h1-walls-ent0-nt1-in002` (INIT_NOISE=0.02) pid **4586** ~**u80**. A/C DISARMED. Cold `.sq1b-h1-cold-v1`. Approaching hard-kill window (~4 min to u100 @ ~12.6s/u).
 - **Prior fail (in005 @u100):** nt_UUU **~0.03**, visit≠hold, DDD farm, reward↑. Quarantine `policies/quarantine/checkpoint-sq1-h1-FAIL-u100-20260920-165701.pt`.
-- **Phase:** Square-one hold gate — tighter basin retry (walls, near-only, PPO ENT=0, f40, hang=0, product). Kill: u100–150 nt≲0.15 ∧ reward↑ → STOP → next simpler wheel (**planned:** `INIT_NOISE=0.01` / sq1c — one change only).
-- **Next micro-task:** Babysit sq1b to **u100–150**. If nt_UUU≲0.15 ∧ reward↑ → hard kill + quarantine + launch sq1c in001. Gate still nt ≳ 0.80 / align ≳ 0.90.
-- **Do not:** mid-kill before u100, swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT>0, resume FAIL quarantine, stack GPU VMs, Mac.
+- **Phase:** Square-one hold gate — tighter basin retry (walls, near-only, PPO ENT=0, f40, hang=0, product). Kill: u100–150 nt≲0.15 ∧ reward↑ → STOP → next simpler wheel.
+- **Next micro-task:** Babysit sq1b to **u100–150**. If nt_UUU≲0.15 ∧ reward↑ → hard kill + quarantine + launch **sq1c quiet-basin** (drop `near_target` ω floor 0.1→0 and cart floor 0.05→0 / proportional; keep INIT_NOISE=0.02). **Not** angle-only in001 — floors already bind at in002 so in001 is a no-op on rates/cart (research 12:56). Gate still nt ≳ 0.80 / align ≳ 0.90.
+- **Do not:** mid-kill before u100, swing slot, ATRPO/gSDE/RPO/ERA/AVC/ENERGY crank, ENT>0, resume FAIL quarantine, stack GPU VMs, Mac, another angle-only INIT_NOISE tick.
 
 
 ## Fire log — 2026-09-20 ~12:55 CT (Cart-pole loop)
@@ -96,7 +96,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 - **Meters (TB `20260920-173101_sq1b…`, u1→u80):** nt_UUU **0.037→0.036 flat** (range 0.032–0.038); nt_align/UUU **−0.075→−0.032**; nt_DDD **0.89→0.27↓**; eval/reward **52→225↑**; train/entropy **1.44→−0.30↓** (σ collapse); OOB=0; hang_UUU=0.
 - **Diagnosis:** Confirmed **visit≠hold** (reward↑ / hold≈0 / entropy dive) — same class as in005 FAIL. Still **under** hard-kill window (u100–150); no mid-kill.
 - **Decision:** **KEEP**
-- **Action:** Left alone. Next fire will likely hit u100–150 → hard kill if still nt≲0.15 ∧ reward↑, then launch **sq1c** `INIT_NOISE=0.01` (one change).
+- **Action:** Left alone. Next fire will likely hit u100–150 → hard kill if still nt≲0.15 ∧ reward↑, then launch **sq1c quiet-basin** (drop ω/cart floors; keep in002 angles — research 12:56). **Not** in001.
 - **W0 gate:** not closer (nt~0.03 vs 0.80).
 - **Next check:** ~13:10 CT (expect kill window).
 

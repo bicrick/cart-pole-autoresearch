@@ -2842,3 +2842,49 @@ Already noted at a high level; this pass locks the **steal for the hold half**:
 ## Walls-first UUU curriculum (2026-09-20 ~00:45 CT)
 
 Patrick: no-walls triple demo looks like center/void farming, not upright. Adopt double’s path — **P1a hard inelastic track walls** (cart clamp + \(\dot x=0\), no pole impulse), then **P1b void FT**. Flag: `trackWalls` / `--track-walls`. See macro loop P1a/P1b and paper-training-lessons (ap).
+
+## Research pass (2026-09-20 ~12:56 CT) — sq1b: **near_target ω/cart floors defeat angle-only tighten**
+
+**Wheel:** LIVE sq1b `INIT_NOISE=0.02` walls ENT=0 nt1 (main loop KEEP @u40–43; early visit≠hold). Overnight owns babysit/kill — **no train start/kill this fire**.
+
+**Sources:** box `train/train_triple.py` `near_target` sampler (lines ~525–540 / ~604–615); local LQR basin tables `docs/basins/basin-lqr-*.json`; fawraw `docs/m4_findings.md` catch-basin (CDN: reliable only ~0.1 rad **and near-zero ω**); BaRC arXiv:1806.06161 (start inside goal, expand rates later); square-one lock (no ENERGY/ATRPO/gSDE/RPO/ERA/AVC crank).
+
+### Q1 — Why in005→in002 may not be a real simpler wheel
+
+`near_target` scales rates from `init_noise`, but **hard floors bind below ~0.02**:
+
+```text
+n_ang = init_noise
+n_x   = min(0.5, max(0.05, n_ang * 2))   # floor 0.05 m
+n_xd  = min(0.5, max(0.05, n_ang * 2))   # floor 0.05 m/s
+n_w   = min(0.8, max(0.1,  n_ang * 5))   # floor 0.1 rad/s  ← binds
+```
+
+| INIT_NOISE | n_ang | n_x / n_xd | n_w | floors bind? |
+|---|---|---|---|---|
+| 0.05 (sq1 FAIL) | 0.05 | 0.10 | **0.25** | no |
+| **0.02 (sq1b LIVE)** | 0.02 | **0.05** | **0.10** | **yes (x+w)** |
+| 0.01 / 0.005 | 0.01/0.005 | **0.05** | **0.10** | **yes — identical rates/cart** |
+
+So another angle-only tick (**in001**) is a **no-op** on ω/cart. sq1b still injects up to **±0.1 rad/s** on every link plus ±0.05 m / ±0.05 m/s cart — while our own LQR RoA smoke is **1.0 only at (0.1 rad, ω=0)** and **0.0 at (0.1, ω=1)**. fawraw M3 table same story: hold only at near-zero velocity. BaRC wants mastery **inside** the quiet basin before expanding rates.
+
+in005→in002 did cut ω 0.25→0.10 (real step). Further angle-only tighten does **not**.
+
+### Steal (one-change simpler wheel after sq1b kill)
+
+**sq1c — quiet-basin ICs** (still walls, near-only, ENT=0, product, f40 — **no paper-lever crank**):
+
+1. Drop / proportionalize floors: e.g. `n_w = n_ang * 5` with **floor 0** (or 0.01), `n_x = n_xd = n_ang * 2` with **floor 0** (or 0.01). Keep `INIT_NOISE=0.02` (or 0.05) so angles stay in RoA.
+2. Optional CLI `--init-rate-scale` / `--init-cart-scale` (default 5 / 2) so overnight can one-knob quiet without forking sampler logic twice (train + near_goal paths).
+3. Eval `near_target` must use the **same** quiet sampler — otherwise train learns quiet hold and eval still scores noisy starts.
+4. **Do not** stage in001 angle-only; **do not** ENERGY/ATRPO/ENT>0 on this square-one stretch.
+
+After quiet mastery (nt≳0.5): BaRC-expand ω then cart (reverse of today’s accidental “rates floor first”).
+
+### Next (suggestion for main loop — do not act until kill)
+
+- **Now:** babysit sq1b → u100–150 (unchanged).
+- **On hard kill:** launch **sq1c quiet-basin** (floor drop), not in001.
+- Gate to leave W0 still nt≳0.80 / align≳0.90.
+
+NEED_USER_PING: **yes** (material: explains flat in002 trajectory + locks next wheel).
