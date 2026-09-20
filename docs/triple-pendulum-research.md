@@ -1,7 +1,50 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~22:34 CT.
+Last updated: 2026-09-19 ~23:01 CT.
 
+
+
+## Research pass (2026-09-19 ~23:01 CT) — P1 UUU-hold: live TQC gap audit + n-step / eval-meter / LQR-PI
+
+**Sources checked (this fire):** fawraw `m2_upright_tqc.yaml` (raw reconfirm); sb3-contrib TQC `n_steps` / NStepReplayBuffer docs; Kuznetsov TQC truncation notes; IC_ASET 2025 PI/VI+LQR triple (IEEE); Cambridge Robotica 2026 CSAC-QI (∫θ reward, already logged); IJMLC 2025 LQR+SAC residual; arXiv:2606.22145 curriculum DR (timeout on full HTML — abstract/prior notes only); Baek VER / Lim Table 1 already in 21:56–22:34. Skimmed live `train_triple_tqc.py` + `next-train-triple-tqc-uuu.sh` vs macro Next.
+
+**Phase focus:** P1 UUU **hold**. Live Next = **meter TQC only** on B (leave A/C). Gate ≪0.80. Overnight owns slots — no train start.
+
+### Q1 — What is the running TQC missing vs Lim / fawraw M2?
+
+Code audit of `train/train_triple_tqc.py` (live B path) against Lim Table 1 + fawraw M2 yaml:
+
+| Lever | Lim / fawraw M2 | Live TQC trainer | If early-flat (~50–150k) |
+|---|---|---|---|
+| Hypers | Lim: buffer 1e6, π 400→300, qf 3×512, N=25 drop2; M2: buffer **200k**, net **[128,128]**, N=**20**, **150k** steps | Matches **Lim** sized; 300k steps; noise **0.15** hang **0.05** wide **0.25** | Keep Lim arch first stretch. Ladder already: **(a)** M2 tighten noise=0.05 hang=0 wide=0 → **(e)** M2 arch/buffer/150k |
+| `train_freq` / `gradient_steps` | 1 / 1 | SB3 defaults (=1/1) | No change |
+| **`n_steps`** | Not in Lim/M2 yaml; Raffin/FastTD3 notes (this log ~15:xx) favor **n_steps=3** on hard continuous control | **Unset (=1)** — no CLI | **New ladder step:** after M2 tighten still flat, try `n_steps=3` before declaring TQC dead / before M2 arch shrink |
+| VER / flip | Baek off-policy native; Lim none | **No** replay flip | Stays **(d)** |
+| Obs ∫x / reward ∫θ | Lim x₉=∫y; CSAC-QI ∫θ in **reward** | Neither | ∫x obs = **(c)**; CSAC-QI ∫θ reward = optional **after** nt moves (orthogonal to cart integral) |
+| `ry_scale` Lim cart | meter Lim | product uses track_limit soft scale; no TQC CLI | Stays **(b)** |
+| **P1 eval meter** | Curriculum near_target | `EvalCallback` on **same** train init mix — **no** `eval/near_target/at_goal/UUU` | **Ops gap:** overnight cannot read P1 gate from TQC TB the way PPO does. Stage curriculum eval env for TQC when coding next ladder patch |
+
+### Q2 — Hold catcher extras (backlog #2 only; do not interrupt B)
+
+1. **IC_ASET 2025** (Policy Iteration / Value Iteration inside LQR on linearized cart-triple) — PI damps faster, VI smoother effort. Cheap classical **UUU catcher** alternative to ResearchSquare LQR Q/R if we stage two-policy after TQC~150k flat.
+2. IJMLC 2025 residual SAC-on-LQR (friction) — still sim2real-tilted; keep as residual form of #2, not a P1 displace.
+3. CSAC-QI ∫θ reward — hold polish after nt rises; not a reason to mid-kill TQC.
+
+### Q3 — Beats live Next / backlog?
+
+| Candidate | Beats live Next (meter TQC)? | Beats / sharpens backlog? |
+|---|---|---|
+| Keep metering to ~150k | — | Status quo |
+| M2 tighten / ry_scale / ∫x / VER / M2 arch | No | Already #1 (a–e) |
+| **`n_steps=3`** after tighten | No | **Sharpens #1** (new (f)) |
+| Curriculum `eval/near_target/*` on TQC | No | **Sharpens #1 ops** (gate visibility) |
+| IC_ASET PI/VI+LQR catcher | No | Sharpens #2 classical hold half |
+| CSAC-QI ∫θ / residual SAC | No | Optional after nt moves / #2 form |
+| Force 40→60 / energy E→E_UUU | No | Stay #4 / #3 |
+
+**Nothing clearly beats** the live Next micro-task. Stay the course: meter B TQC; no mid-kill; no entropy/PPO knobs; two-policy only if ~150k flat after hold ladder.
+
+**Promote?** Macro backlog **#1** only — append ladder **(f) `n_steps=3`** + note curriculum eval-meter ops. **Do not** rewrite Next (overnight running). NEED_USER_PING no.
 
 ## Research pass (2026-09-19 ~22:34 CT) — P1 UUU-hold: Lim PDF deep-read + fawraw M2 yaml + ∫x / VER ladder
 
