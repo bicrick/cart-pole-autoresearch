@@ -1,6 +1,58 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~07:36 CT.
+Last updated: 2026-09-20 ~07:56 CT.
+
+
+## Research pass (2026-09-20 ~07:56 CT) — Naik **discounted reward centering** ≠ ATRPO γ-free + ATRPO reset-cost ops
+
+**Sources checked (this fire):** overnight/macro @07:45 (B ENERGY_W=0.35 ~u38 H 1.77→0.64↓↓, nt~0.035 flat, nt_rew 228→243↑); prior research 07:36 (ATRPO-before-short-ep order beat) + 07:07 (ATRPO cookbook); **Reward Centering** Naik/Wan/Tomar/Sutton arXiv:2405.09999 (Pendulum continuing + PPO App.C); **continuing-tasks empirics** Wan/Korenkevych/Zhu arXiv:2501.06937 + [facebookresearch/DeepRL-continuing-tasks](https://github.com/facebookresearch/DeepRL-continuing-tasks); ATRPO Zhang–Ross 2106.07329 §6.2 / App.G / App.H (reset cost=100, large truncate N). Overnight owns slots — **no mid-kill / no train start**.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (from overnight-status ~07:45 CT — research did not SSH):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | other |
+|---|---|---|---|---|
+| **A S1** | ~**u26** | **~1.14** | nt_UUU~0.057 | hang_align/UUU **~−0.047**, OOB=0 — leave alone |
+| **B H1 ENERGY_W=0.35 RPO+ERA ENT=0** | ~**u38** | **1.77→0.64↓↓** | **~0.035 flat** | nt_rew **228→243↑**, rollout −1→0.45↑, OOB=0 — **same visit≠hold / reward↑-hold≈0**; babysit → u60–80 |
+| **C H1-var** | ~**u259** | **~0.85** | ~0.058 | leave alone |
+
+### Q1 — Live failure mode unchanged: ENERGY_W stretch still visit≠hold + entropy dive
+
+Same class as early gSDE / ENT=0 deaths: H diving ~0.03/u toward ERA floor, nt stuck ~0.03–0.04, reward climbing. Still **under** the u60–80 babysit gate → research must **not** arm `.triple-b-h1-atrpo-v1` or mid-kill. Spong ENERGY_W on near_target noise=0.05 remains a weak stay lever when |E−E★| is already tiny (07:36 note stands).
+
+### Q2 — MATERIAL: **Naik reward centering** is a distinct lever from staged ATRPO-lite
+
+Live `--avg-reward` = ATRPO-lite = **ρ̂ batch-mean − then γ-free GAE** (drop γ entirely). Naik 2405.09999 / Wan 2501.06937 is **different**:
+
+| Knob | ATRPO-lite (staged) | Naik discounted reward centering |
+|---|---|---|
+| Subtract ρ̂ | yes (batch mean on-policy) | yes (running / batch mean on-policy; TD-based ρ̂ for off-policy) |
+| GAE / critic | **γ = 0** (λ only ≈0.95) | **keep γ** (e.g. 0.995); δ = (r−ρ̂) + γV(s′) − V(s) |
+| Objective | true average-reward / differential bias | discounted continuing with Laurent offset removed |
+| Empirics | MuJoCo locomotion ATRPO ≫ TRPO on long traj | PPO App.C slight↑ on continuing MuJoCo; 2501.06937 scales RC across PPO/SAC/TD3/DQN; Pendulum upright continuing is a named Naik domain |
+
+**Why it matters for B:** full γ-free ATRPO is the correct *next* after ENERGY_W fail (07:36 order stands). But if ATRPO-lite is unstable (value blow / ρ̂ chase / policy_loss spike), **do not jump to Turcato short-ep first** — try Naik **ρ-center + keep γ** as a softer continuing fix (same ρ̂ plumbing, one-line GAE change). Orthogonal to our existing advantage normalization (Naik App.D: centering helps the *critic offset*, adv-norm helps the *actor*).
+
+**Practical steal when coding (overnight, post-gate only):**
+1. Flag sketch: `--reward-center` = subtract ρ̂, **keep** `--gamma` in GAE (vs `--avg-reward` = subtract ρ̂ + drop γ).
+2. On-policy ρ̂ = batch mean (already in ATRPO-lite) or EMA with small β; log `train/avg_reward_rho`.
+3. Keep ENT=0; ban MaxEnt / AR-EAPO pair / re-arm gSDE.
+
+### Q3 — ATRPO §6.2 reset-cost cookbook (ops fill for staged arm)
+
+ATRPO trains as **continuing**: on “fall”, incur **reset cost ≈100** (results insensitive in App.I.2) and **reseed + continue the trajectory** — do **not** early-terminate before large truncate N. Our walls H1 still uses episodic `done` masks (OOB terminate; EPISODE_LEN truncate). Walls-on OOB≈0 today, so the urgent gap is: when arming ATRPO, **keep EPISODE_LEN ≥1200** (already) and treat flop-out-of-basin as **penalty + near_target reseed inside the rollout** rather than hard episode end, if easy — else at least avoid shortening N. Do **not** invent a mid-P1a plant rewrite from research; stage as ATRPO arming note for overnight.
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| Declare ENERGY_W dead @u38 / arm ATRPO now | **No** — babysit to u60–80 | — |
+| Add Naik ρ-center+keep-γ as **ATRPO-lite fallback** (before short-ep) | **Sharpen only** | **Yes** — #2 (viii) |
+| ATRPO arming: reset-cost / continue-traj spirit | **Ops note** | **Yes** — #2 (viii) |
+| Displace ENERGY_W→ATRPO→short-ep order | **No** — 07:36 order still correct; Naik slots *beside* ATRPO as softer twin | — |
+
+**Material:** yes — new distinct stay lever (Naik discounted RC) + ATRPO reset-cost ops fill. Does **not** beat live babysit Next. NEED_USER_PING **yes**.
+
+**Code this fire:** docs only (research + macro backlog sharpen). No train start / no mid-kill.
 
 
 ## Research pass (2026-09-20 ~07:36 CT) — non-MaxEnt stay **ORDER beat**: ATRPO-lite **before** short-ep (do not shorten then AR)
