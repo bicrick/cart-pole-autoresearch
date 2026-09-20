@@ -85,6 +85,13 @@ def parse_args():
     p.add_argument("--eval-freq", type=int, default=10_000)
     p.add_argument("--n-eval-episodes", type=int, default=10)
     p.add_argument("--smoke", action="store_true", help="Tiny run for box smoke test")
+    p.add_argument(
+        "--bc-checkpoint",
+        type=str,
+        default="",
+        help="Optional BC .pt (policies/bc-lqr-uuu.pt) to warm-start TQC actor (latent_pi + mu). "
+        "log_std left at TQC init. Arch must match --policy-arch.",
+    )
     return p.parse_args()
 
 
@@ -136,6 +143,82 @@ class AtGoalRateCallback:
                 return True
 
         return _CB()
+
+
+def load_bc_into_actor(model, bc_path: str) -> dict:
+    """Warm-start TQC actor (latent_pi + mu) from BCActor .pt checkpoint.
+
+    BC saves Sequential net.0/2/4 (Linear layers); TQC Actor has latent_pi.0/2 + mu.
+    log_std is left unchanged (exploration). Returns a small report dict.
+    """
+    import torch
+
+    path = Path(bc_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"BC checkpoint not found: {path}")
+    payload = torch.load(path, map_location="cpu", weights_only=False)
+    if not isinstance(payload, dict) or "state_dict" not in payload:
+        raise ValueError(f"BC ckpt must be dict with state_dict: {path}")
+    bc_sd = payload["state_dict"]
+    arch = list(payload.get("arch") or [])
+    actor = model.policy.actor
+    actor_sd = actor.state_dict()
+
+    # Map BC Linear indices (0,2,4,...) → latent_pi then mu
+    bc_linear_idxs = sorted(
+        int(k.split(".")[1])
+        for k in bc_sd
+        if k.startswith("net.") and k.endswith(".weight")
+    )
+    if len(bc_linear_idxs) < 2:
+        raise ValueError(f"BC net has too few Linear layers: {bc_linear_idxs}")
+
+    mapped: list[str] = []
+    with torch.no_grad():
+        # Hidden layers → latent_pi even indices 0,2,4,...
+        for i, bc_i in enumerate(bc_linear_idxs[:-1]):
+            dest_i = i * 2
+            for suffix in ("weight", "bias"):
+                src_k = f"net.{bc_i}.{suffix}"
+                dst_k = f"latent_pi.{dest_i}.{suffix}"
+                if src_k not in bc_sd:
+                    raise KeyError(src_k)
+                if dst_k not in actor_sd:
+                    raise KeyError(
+                        f"TQC actor missing {dst_k}; check --policy-arch vs BC arch={arch}"
+                    )
+                if actor_sd[dst_k].shape != bc_sd[src_k].shape:
+                    raise ValueError(
+                        f"shape mismatch {src_k}{tuple(bc_sd[src_k].shape)} → "
+                        f"{dst_k}{tuple(actor_sd[dst_k].shape)}"
+                    )
+                actor_sd[dst_k].copy_(bc_sd[src_k])
+                mapped.append(f"{src_k}→{dst_k}")
+        # Final Linear → mu
+        bc_last = bc_linear_idxs[-1]
+        for suffix in ("weight", "bias"):
+            src_k = f"net.{bc_last}.{suffix}"
+            dst_k = f"mu.{suffix}"
+            if actor_sd[dst_k].shape != bc_sd[src_k].shape:
+                raise ValueError(
+                    f"shape mismatch {src_k}{tuple(bc_sd[src_k].shape)} → "
+                    f"{dst_k}{tuple(actor_sd[dst_k].shape)}"
+                )
+            actor_sd[dst_k].copy_(bc_sd[src_k])
+            mapped.append(f"{src_k}→{dst_k}")
+        actor.load_state_dict(actor_sd)
+
+    report = {
+        "bc_path": str(path),
+        "bc_arch": arch,
+        "obs_dim": payload.get("obs_dim"),
+        "act_dim": payload.get("act_dim"),
+        "mapped": mapped,
+        "left_untouched": ["log_std.weight", "log_std.bias"],
+    }
+    print(f"[warm-start] loaded BC actor from {path}", flush=True)
+    print(f"[warm-start] mapped {len(mapped)} tensors: {mapped}", flush=True)
+    return report
 
 
 def main() -> None:
@@ -256,6 +339,11 @@ def main() -> None:
         device=args.device,
         tensorboard_log=str(Path(args.logdir)),
     )
+
+    if args.bc_checkpoint:
+        ws = load_bc_into_actor(model, args.bc_checkpoint)
+        meta["warm_start"] = ws
+        (log_path / "run_meta.json").write_text(json.dumps(meta, indent=2))
 
     save_every = max(args.save_freq // max(args.n_envs, 1), 1)
     eval_every = max(args.eval_freq // max(args.n_envs, 1), 1)

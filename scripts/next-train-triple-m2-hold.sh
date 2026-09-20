@@ -47,6 +47,7 @@ CHECKPOINT="${CHECKPOINT:-policies/tqc-m2-uuu-hold.zip}"
 # Walls ON by default for our plant
 TRACK_WALLS="${TRACK_WALLS:-1}"
 
+BC_CHECKPOINT="${BC_CHECKPOINT:-}"
 SMOKE_FLAG=()
 if [[ "${SMOKE:-0}" == "1" ]]; then
   SMOKE_FLAG+=(--smoke)
@@ -69,11 +70,17 @@ elif [[ "${TRACK_WALLS}" == "0" || "${TRACK_WALLS}" == "false" || "${TRACK_WALLS
   WALLS_ARGS+=(--no-track-walls)
 fi
 
+BC_ARGS=()
+if [[ -n "${BC_CHECKPOINT}" ]]; then
+  BC_ARGS+=(--bc-checkpoint "$BC_CHECKPOINT")
+fi
+
 echo "=== launch M2 UUU hold ===" >&2
 echo "  TOTAL_STEPS=$TOTAL_STEPS INIT_NOISE=$INIT_NOISE walls=$TRACK_WALLS" >&2
 echo "  net=[$POLICY_ARCH] buffer=$BUFFER_SIZE n_quantiles=$N_QUANTILES" >&2
 echo "  PRIMARY: survival_success (ep_len>=0.8*max); also at_goal; progress_w=$PROGRESS_W" >&2
 echo "  ckpt=$CHECKPOINT run=$RUN_NAME device=$DEVICE" >&2
+if [[ -n "${BC_CHECKPOINT}" ]]; then echo "  bc_warmstart=$BC_CHECKPOINT" >&2; fi
 
 exec "$PYTHON" train/train_triple_tqc.py \
   --total-steps "$TOTAL_STEPS" \
@@ -104,4 +111,5 @@ exec "$PYTHON" train/train_triple_tqc.py \
   --checkpoint "$CHECKPOINT" \
   "${SMOKE_FLAG[@]}" \
   "${WALLS_ARGS[@]}" \
+  "${BC_ARGS[@]}" \
   "$@"
