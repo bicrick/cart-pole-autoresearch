@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~08:45 CT
+Last updated: 2026-09-20 ~08:56 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~08:45 CT):** **A = S1** ~u130 hang_align~−0.054; **B = H1 ATRPO-lite** ~u84 FAIL-gate (H=0.52 ERA-pin, nt=0.058, rew↑) — AVC ν=0.2 staged, no mid-kill; **C = H1-var** ~u360. ATRPO+AVC armed. Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE / ENERGY_W-only / plain ATRPO after AVC. **Stay order:** ENERGY_W (FAIL) → ATRPO-lite (**FAIL @u80**) → **ATRPO+APO AVC ν≈0.2 LIVE staged** → if FAIL: **Naik ρ-center+keep-γ** → Turcato short-ep only as discounted fallback.
+**Live mapping (2026-09-20 ~08:56 CT):** **A = S1** ~u158 hang_align~−0.056; **B = H1 ATRPO+AVC ν=0.2** just cold-started (pid 172580) after ATRPO-lite **FAIL confirm @u100–102** (H=0.517 ERA-pin, nt≈0.056, ρ≈0.46); **C = H1-var** ~u384/400. Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE / ENERGY_W-only / plain ATRPO after AVC. **Stay order:** ENERGY_W (FAIL) → ATRPO-lite (**FAIL @u100**) → **ATRPO+APO AVC ν≈0.2 LIVE** → if FAIL @u80–100: **Naik ρ-center+keep-γ** → Turcato short-ep only as discounted fallback.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,16 +61,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~08:45 CT):** VM `cartpole-train-od` RUNNING us-east1-b L4 ~99%/16.5GB; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c. TRACK_WALLS=1 all slots.
-  - **A = S1 walls-swing** — pid **166936** ~**u130** hang_align/UUU **~−0.054**, hang_at_goal~0.004, nt_UUU~0.054, ent **~1.03**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
-  - **B = H1 ATRPO-lite + ENERGY_W=0.35 RPO+ERA ENT=0** — pid **169207** ~**u84** (`--avg-reward`, EP=1200): nt_UUU **0.035→0.058**, nt_align −0.025→**+0.165**, nt_rew ~241→254→245, ρ **−1.03→+0.48**, H **1.77→0.517 (ERA pin hard)**, OOB=0 — **FAIL gate HIT @u80** (H≲0.55 ∧ nt≲0.10 ∧ reward↑). **No mid-kill** (still ≤u100 window; ρ/align not crashing). **Staged ATRPO+APO AVC ν=0.2** for natural restart. Markers `.triple-b-h1-atrpo-v1` + cold; **new** `.triple-b-h1-atrpo-avc-v1` armed on VM.
-  - **C = H1-var** — pid **158583** ~**u360**/400 nt_UUU **~0.050** ent **~0.77** OOB=0 — leave alone (near natural end). Marker `.triple-c-h1var-walls-v1`.
+- **Live (2026-09-20 ~08:56 CT):** VM `cartpole-train-od` RUNNING us-east1-b L4 ~99%/16.5GB; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c. TRACK_WALLS=1 all slots.
+  - **A = S1 walls-swing** — pid **166936** ~**u158** hang_align/UUU **~−0.056**, hang_at_goal~0.005, nt_UUU~0.053, ent **~1.01**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`.
+  - **B = H1 ATRPO+AVC ν=0.2** — pid **172580** just cold-started (`--avg-reward --avc-nu 0.2`, EP=1200, run `…atrpo-avc02…`). Prior ATRPO-lite **FAIL confirm @u100–102**: nt_UUU **0.035→0.060→0.056**, nt_align →**+0.173**, ρ~**0.46**, H **0.517 ERA-pin hard**, nt_rew flat~246, OOB=0. Mid-killed into AVC; cold wipe `.triple-b-h1-atrpo-avc-cold-v1`. Markers `.triple-b-h1-atrpo-avc-v1` + cold.
+  - **C = H1-var** — pid **158583** ~**u384**/400 nt_UUU **~0.048** ent **~0.76** OOB=0 — leave alone (natural end imminent). Marker `.triple-c-h1var-walls-v1`.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire:** B ATRPO-lite shows classic visit≠hold at FAIL gate (ERA-pinned H, flat nt, reward↑). Missing piece = APO AVC (critic E[V]≈0). Implemented `--avc-nu` + continue-b AVC branch; synced; **left A/B/C alone** (no mid-kill). Next fire @~u100: if still FAIL → optional mid-kill into AVC cold, else wait natural u400.
-- **Next micro-task:** (1) Babysit B ATRPO to **u100** confirm FAIL → natural exit or mid-kill into **ATRPO+AVC ν=0.2** (marker armed). Watch `train/avc_bias` after restart. If AVC FAIL @u80–100 (same meters) → **Naik ρ-center+keep-γ** next (not short-ep yet). (2) A leave alone. (3) C natural restart as H1-var control. (4) H1 nt≳0.2 → handoff smoke; gate nt≳0.80 align≳0.90 → P1b void FT.
-- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1 ATRPO → next ATRPO+AVC** / **C H1-var**
-- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENERGY_W-only; relaunch plain ATRPO after AVC armed; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN before AVC/Naik**; **skip AVC / Naik and jump to short-ep**; **re-arm ENERGY_W-only**; **mid-kill climbing ATRPO before u100 confirm**
-- **NEED_USER_PING:** **yes** — 15m think-out-loud (ATRPO FAIL-gate + AVC staged)
+- **Diagnosis / actions this fire:** B ATRPO-lite FAIL gate **confirmed past u100** (H pinned, nt flat ~0.055, visit≠hold). GO: mid-kill B → continue-b cold-started **ATRPO+AVC ν=0.2**. A/C left alone.
+- **Next micro-task:** (1) Babysit B AVC — watch `train/avc_bias` + nt_UUU/align/H/ρ through **u80–100**. Gate same: if H≲0.55 ∧ nt≲0.10 ∧ rew↑ → **Naik ρ-center+keep-γ** next (not short-ep). (2) A leave alone. (3) C natural restart as H1-var control. (4) H1 nt≳0.2 → handoff smoke; gate nt≳0.80 align≳0.90 → P1b void FT.
+- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1 ATRPO+AVC LIVE** / **C H1-var**
+- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENERGY_W-only; relaunch plain ATRPO after AVC live; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**; **shorten EPISODE_LEN before Naik**; **skip Naik and jump to short-ep**; **re-arm ENERGY_W-only**; **mid-kill AVC before u80–100 FAIL confirm**
+- **NEED_USER_PING:** **yes** — 15m think-out-loud (ATRPO FAIL@u100 → mid-kill AVC live)
 
 
 ## Ranked backlog (pull from top when a stretch ends)
