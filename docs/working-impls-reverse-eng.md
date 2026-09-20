@@ -1,6 +1,6 @@
 # Working triple-pendulum implementations — reverse engineering
 
-Last updated: 2026-09-20 ~15:10 CT  
+Last updated: 2026-09-20 ~15:15 CT  
 Purpose: stop circling. Copy what already held UUU / hit 56.
 
 ## Who actually succeeded
@@ -52,8 +52,24 @@ Do **not** resume ATRPO/gSDE/ENT ladder. Do **not** start GCP VM until oracle PA
    ```bash
    bash scripts/lqr-oracle-uuu.sh          # CPU; PASS → policies/lqr-uuu-demos.npz
    ```
-3. **M2 hold trainer** — `train/train_triple_tqc.py` defaults: quiet basin, `progress_w=0`, survival primary. Launch: `scripts/next-train-triple-m2-hold.sh` (walls ON). Smoke only until oracle PASS + green-light.
-4. **Eval primary (M2):** `rollout/success_rate` = **survival_success**; also `rollout/at_goal`.
+3. **BC from LQR demos** — `train/bc_lqr_uuu.py` / `scripts/bc-lqr-uuu.sh` → `policies/bc-lqr-uuu.pt` (PASS @ 0.01/0.02)
+4. **M2 hold trainer** — `train/train_triple_tqc.py` defaults: quiet basin, `progress_w=0`, survival primary. Launch: `scripts/next-train-triple-m2-hold.sh` (walls ON). Smoke only until oracle PASS + green-light.
+5. **Eval primary (M2):** `rollout/success_rate` = **survival_success**; also `rollout/at_goal`.
+
+
+## Oracle → BC status (2026-09-20)
+
+| Gate | Status | Notes |
+|---|---|---|
+| **LQR oracle** | **PASS** | survival 1.0 @ init_noise 0.01 & 0.02 (N=50); demos `policies/lqr-uuu-demos.npz` (80 eps, actions in Newtons) |
+| **BC** | **PASS** | `train/bc_lqr_uuu.py` / `scripts/bc-lqr-uuu.sh` — MLP [128,128] on 11-D `observe` features, actions Newtons→[-1,1]; ckpt `policies/bc-lqr-uuu.pt` |
+| BC eval @ 0.01 | survival **1.00** / at_goal **1.00** (N=50) | |
+| BC eval @ 0.02 | survival **1.00** / at_goal **1.00** (N=50) | |
+| **TQC FT** | ready (not started) | needs user GPU green-light; do **not** start GCP yet |
+
+```bash
+bash scripts/bc-lqr-uuu.sh   # CPU; train + eval → policies/bc-lqr-uuu.pt
+```
 
 ## Lim recipe (for later, after hold)
 

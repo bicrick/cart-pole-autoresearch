@@ -54,3 +54,6 @@ policies/tqc-triple-uuu-smoke_best/
 
 # Local TB archives (never commit)
 runs_archive/
+
+# Keep BC warm-start checkpoint (small)
+!policies/bc-lqr-uuu.pt
