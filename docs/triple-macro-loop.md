@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~03:45 CT
+Last updated: 2026-09-20 ~03:55 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~03:45 CT):** **A = S1** walls-swing (**LR=1e-4** after NaN @u228 on prior 3e-4 stretch; NaN-guard on continues); **B = H1** walls-hold (tight `INIT_NOISE=0.05`, live ENT=0.02 **dead≈−0.14 @u230**, **ENT=0.035 staged** for next restart); **C = H1-var** walls-hold (lr/ent/noise variant). Combo mush retired. X1 handoff_eval staged. `VEL_COST=0.015` + B `ENT=0.035` apply on **natural restart only**. Do not relaunch wide void TQC.
+**Live mapping (2026-09-20 ~03:55 CT):** **A = S1** walls-swing (**LR=1e-4** cold restart @08:46Z — hang_align −0.97→−0.83 @u16, ent~1.68, no NaN yet); **B = H1** walls-hold (tight `INIT_NOISE=0.05`, live ENT=0.02 **dead≈−0.24 @u258**, **ENT=0.035 staged** for next restart ~05:15 CT); **C = H1-var** walls-hold (lr/ent/noise variant, ent~1.50). Combo mush retired. X1 handoff_eval staged. `VEL_COST=0.015` + B `ENT=0.035` apply on **natural restart only**. Do not relaunch wide void TQC.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,13 +61,13 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~03:45 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~99%/15.6GB, uptime ~2d). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
-  - **A = S1 walls-swing** — **NaN blowup @u228** (policy_loss~1e29, all weights NaN @u230 ckpt). Mid-killed; poison ckpt quarantined; cold restart with **LR=1e-4** (was 3e-4) + `scripts/quarantine-nan-ckpt.sh` on A/B/C continues. Marker `.triple-a-s1-walls-v1`. Hang_align had been healthy (−0.98→−0.06) before collapse.
-  - **B = H1 walls-hold (tight)** — pid **145275** / w **147599** — near_goal_p=1.0, hang=0, `INIT_NOISE=0.05`, product, walls, **live ENT=0.02** (next restart **ENT=0.035** + VEL_COST=0.015). Marker `.triple-b-h1-noise05-v1`. ~**u230** nt_UUU →**0.051** nt_align/UUU →**0.167** (slow↑) ent **≈−0.14** (terminal). **Entropy dead + reward↑/hold≈0; do not mid-kill** — ENT bump staged.
-  - **C = H1-var walls-hold** — pid **145280** / w **146717** — LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1`. ~**u220** nt_align/UUU →**0.153** nt_UUU **~0.045** ent **~1.59**. Best H1 signal — leave alone.
+- **Live (2026-09-20 ~03:55 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~97%/16.6GB, uptime ~2d). TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
+  - **A = S1 walls-swing** — prior NaN @u228 quarantined; **LR=1e-4 cold restart pid 153439** @08:46Z. ~**u16** hang_align/UUU **−0.97→−0.83**, ent **~1.68**, policy_loss sane — **restart healthy so far**. Marker `.triple-a-s1-walls-v1`.
+  - **B = H1 walls-hold (tight)** — pid **145275** / w **147599** — near_goal_p=1.0, hang=0, `INIT_NOISE=0.05`, product, walls, **live ENT=0.02** (next restart **ENT=0.035** + VEL_COST=0.015). Marker `.triple-b-h1-noise05-v1`. ~**u258** nt_UUU **~0.054** nt_align/UUU **~0.16** reward~179 ent **≈−0.24** (still collapsing). **Entropy dead + reward↑/hold≈0; do not mid-kill** — stretch ETA ~**05:15 CT** → ENT bump.
+  - **C = H1-var walls-hold** — pid **145280** / w **146717** — LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1`. ~**u250** nt_align/UUU **~0.15** nt_UUU **~0.050** ent **~1.50**. Leave alone.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2 (B/C still ~0.05). Soft-land `VEL_COST_COEF=0.015` already in continue-b/c.
-- **Diagnosis / actions this fire:** A numerical collapse after entropy drop (1.45→0.84) then policy_loss explosion — not climbing, so mid-kill OK. Hardened NaN quarantine so continue never resumes poison. Dropped A LR to 1e-4. B still dead-σ but align inching; finish stretch → ENT=0.035. C healthy control. OOB=0.
-- **Next micro-task:** (1) Confirm A LR=1e-4 cold restart healthy (hang_align climbing, no NaN). (2) Babysit B to stretch end (~u400 / ~05:00 CT): confirm ENT=0.035 continue; if H still ↓ + nt flat ~u80 → **RPO α≈0.01** or **ERA soft log_std** before cold wipe / C-recipe promote. (3) A hang_align toward 0 / hang_at_goal↑ → when any H1 nt≳0.2 run `eval-handoff-uuu.sh`. (4) C keep as H1-var control. (5) H1 gate nt≳0.80 align≳0.90 → keep H1, then P1b void FT. Never void-FT before walls hold. Never mid-kill B/C.
+- **Diagnosis / actions this fire:** A restart looks good (hang climbing, no NaN) — leave alone. B still dead-σ / flopping (reward flat-high, hold≈0); finish stretch → ENT=0.035. C healthy control. OOB=0. No mid-kills.
+- **Next micro-task:** (1) Keep watching A through ~u80 for second NaN (if policy_loss explodes → mid-kill + further LR drop / grad clip). (2) Babysit B to stretch end (~u400 / ~05:15 CT): confirm ENT=0.035 continue; if H still ↓ + nt flat ~u80 → **RPO α≈0.01** or **ERA soft log_std** before cold wipe / C-recipe promote. (3) A hang_align toward 0 / hang_at_goal↑ → when any H1 nt≳0.2 run `eval-handoff-uuu.sh`. (4) C keep as H1-var control. (5) H1 gate nt≳0.80 align≳0.90 → keep H1, then P1b void FT. Never void-FT before walls hold. Never mid-kill B/C.
 - **Kill list:** no double/xonly; no void TQC; slots = **A S1 swing** / **B H1 hold** / **C H1-var hold**
 - **Do not:** mid-kill B/C; relaunch wide TQC; stack GPU; run void during P1a; resume from NaN ckpt
 - **NEED_USER_PING:** **yes** — standing think-out-loud every fire (user 2026-09-20)
