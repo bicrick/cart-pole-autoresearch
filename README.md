@@ -1,140 +1,89 @@
-# double-cart-pole
+# cart-pole-autoresearch
 
-Browser cart + double pendulum. A trained **goal-conditioned** policy runs **on the page** (phone or laptop). You grab the cart or either link and shove it. The sim does not reset.
+*(GitHub still: `bicrick/double-cart-pole` — rename pending.)*
 
-Pick one of the four plant equilibria; the same MLP drives toward that goal while you poke it:
+Autonomous research + training loop for **cart–multi-link inverted pendulums**: browser demos, shared physics, GPU PPO/TQC training on GCP, and a standing overnight bot that diagnoses failure modes and iterates without waiting for a human to poke the demo.
 
-| id | configuration |
-| --- | --- |
-| `UU` | both links upright (`θ1=0`, `θ2=0`) |
-| `UD` | lower up, upper hanging (`θ1=0`, `θ2=π`) |
-| `DU` | lower hanging, upper up (`θ1=π`, `θ2=0`) |
-| `DD` | both hanging (`θ1=π`, `θ2=π`) |
+## What this is
 
-Convention: `θ = 0` is upright (Xin / IFAC 2008 plant). Cart `x` near the origin is a soft shaping term, not a fifth discrete goal.
+| Plant | Equilibria | Status |
+| --- | --- | --- |
+| **Double** (2 links) | 4: UU / UD / DU / DD | Strong no-walls keeper (`policies/checkpoint-nowalls-best.pt`, min_at_goal ~0.65). Transition-only (`xonly`) explored. |
+| **Triple** (3 links) | 8: DDD … UUU → **56** directed transitions | Active focus. Walls-first then void FT (same path that worked on double). Lim-style TQC specialists + swing→hold handoff in flight. |
 
-A later grok-bot loop is meant to own training, checkpoints, and policy swaps. This repo is the gym, the browser, and the paper shelf that loop should read.
+Goal: interactive demos where you drag the cart/links mid-episode, switch discrete goals on the fly, and the policy recovers — eventually all 56 triple transitions without precomputed trajectories.
+
+## Autoresearch loop (the point)
+
+A Grok Bot agent (`cart-pole`) owns:
+
+1. **Infra** — keep the L4 VM + public TensorBoard alive  
+2. **Measure** — near-target / hang hold meters, entropy, OOB, catch basins  
+3. **Self-debug** — catch reward hacks (center farming, reward↑/hold=0, dead basins, wrong plant phase) *before* a human notices in the demo  
+4. **Iterate** — paper-backed recipe changes, push `main`, sync VM, stage next stretch  
+
+Game plan lives in [`docs/triple-macro-loop.md`](docs/triple-macro-loop.md). Paper notes: [`docs/triple-pendulum-research.md`](docs/triple-pendulum-research.md), [`docs/paper-training-lessons.md`](docs/paper-training-lessons.md). PDFs: [`papers/`](papers/) + [`papers/CITATIONS.txt`](papers/CITATIONS.txt).
+
+**Curriculum lesson (both plants):** train **with inelastic sidewalls first**, get upright/hold good, **then** remove walls for a void / respawn fine-tune. Jumping straight to no-walls invites center + not-dying farming.
 
 ## Layout
 
 ```
-shared/constants.json   # masses, lengths, dt, force clip, obs bounds (shared truth)
-train/physics.py        # batched PyTorch step (GPU worlds)
-train/goals.py          # UU/UD/DU/DD encodings, goal reward, nearest-goal / HER helpers
-web/src/physics.js      # same equations in the browser
-web/src/goals.js        # same discrete goals + encoding for the picker
-train/ppo.py            # actor-critic + JSON export
-train/train.py          # goal-conditioned PPO (`--smoke` locally)
-train/gcp/              # create / sync / train / pull / teardown a GCE GPU VM
-web/                    # Vite + Canvas demo + goal picker
-policies/policy.json    # exported weights the page loads (plain JS MLP)
-papers/                 # PDFs the trainer / bot should cite
+shared/constants.json          # double plant constants (shared train ↔ web)
+shared/constants-triple.json   # triple plant (+ trackWalls)
+train/physics.py               # double batched torch step
+train/physics_triple.py        # triple batched torch step
+train/goals.py / goals_triple.py
+train/train.py                 # double goal-conditioned PPO
+train/train_triple.py          # triple PPO (product reward, flip-augment, …)
+train/train_triple_tqc.py      # Lim-style TQC UUU specialist (sb3-contrib)
+train/handoff.py / lqr_uuu.py  # swing→hold handoff scaffolding
+web/                           # Vite + Canvas demos
+policies/                      # checkpoints + exported policy.json for the page
+scripts/next-train*.sh         # recipes + continue-* watchers
+docs/                          # macro loop, research, lessons
+papers/                        # PDFs the loop should cite
 ```
 
-## Papers
+## Double demo (browser)
 
-PDFs live in [`papers/`](papers/). Index and “why we have this” notes: [`papers/CITATIONS.txt`](papers/CITATIONS.txt).
-
-Shipped architecture:
-
-1. **Goal-conditioned policy** (UVFA): observe state **and** goal. Discrete goal id (one-hot) plus target `sin/cos` of the two link angles. One net; the picker just changes `g`.
-2. **HER** on failed episodes: relabel with the equilibrium actually nearest at episode end so misses teach other goals (`papers/CITATIONS.txt` → HER / UVFA).
-3. Dense shaping as auxiliary: cos-alignment to target angles, soft `x` penalty, action cost, plus a sparse at-goal bonus.
-4. Inference stays a tiny MLP in plain JS. No ONNX. No TF.js. No server.
-
-Specialist weights per goal are a fallback if one net will not cover all four. Prefer one conditioned policy so the picker is a UI, not a model zoo.
-
-## Observation layout
-
-`obs_dim = 16`:
-
-```
-[x, xd, sinθ1, cosθ1, sinθ2, cosθ2, θ1d, θ2d,
- onehot_UU, onehot_UD, onehot_DU, onehot_DD,
- sinθ1*, cosθ1*, sinθ2*, cosθ2*]
+```bash
+cd web && npm install && npm run dev
 ```
 
-Exported in `policy.json` as `obs_layout`, `goals`, and `layers` (same linear/tanh format the web loader already understands).
+Loads `web/public/policy.json` as a plain JS MLP (no TF.js / no server). Pick UU/UD/DU/DD, drag cart or links, `P` mutes policy. No episode reset — void off-track respawns when walls are off.
 
-## Play it (pygame)
-
-Uses the same Python physics the trainer steps:
+Pygame (same Python physics):
 
 ```bash
 python3 -m pip install -r requirements.txt
 python3 train/play.py
 ```
 
-Loads `policies/checkpoint.pt` if present (hot-reloads when that file changes). Mouse-drag the cart or either pole. A/D or arrows shove the cart. Click a goal chip, or `1`–`4` / Tab, to change the desired pose (`UU` / `UD` / `DU` / `DD`). `P` toggles the policy. The faint ghost is the target configuration.
-
-## Run the browser demo
-
-```bash
-cd web
-npm install
-npm run dev
-```
-
-Open the printed localhost URL. The exported `web/public/policy.json` runs in the page as a plain JS MLP — no backend, no TF.js. Click `UU` / `UD` / `DU` / `DD` (or `1`–`4` / Tab) to change the desired pose. The faint ghost is the target. Drag the cart or either pole. `P` mutes the policy; `A`/`D` shoves the cart. There is no reset control.
-
-## Train
-
-Local smoke (CPU / MPS) — writes a loadable goal-conditioned `policy.json`:
+## Train (local smoke)
 
 ```bash
 python3 -m pip install -r requirements.txt
-python3 train/train.py --smoke
+python3 train/train.py --smoke                 # double
+python3 train/train_triple.py --smoke          # triple PPO
+SMOKE=1 bash scripts/next-train-triple-tqc-uuu.sh   # triple TQC (needs sb3-contrib)
 ```
 
-That writes `policies/policy.json` and `web/public/policy.json`. Event files go under `runs/`.
+GPU recipes: `scripts/next-train.sh`, `next-train-transitions.sh`, `next-train-triple*.sh`. Watch: [TensorBoard](http://34.148.138.48:6006/) on the training VM (static IP) or `tensorboard --logdir runs`.
 
-Watch a run:
+## GCP
 
-```bash
-tensorboard --logdir runs --port 6006
-```
+Project `cartpole-demo`, bot SA `cartpole-bot@cartpole-demo.iam.gserviceaccount.com`, bucket `gs://cartpole-demo-413636930404`. Helpers under `train/gcp/`. Key path (local only): `~/.config/gcloud/cartpole-bot-cartpole-demo.json` — see `train/gcp/bot.env.example`.
 
-Scalars: `train/rollout_reward`, `train/policy_loss`, `train/value_loss`, `train/entropy`, `train/goal_frac/{UU,UD,DU,DD}`, `eval/reward`, `eval/align`, `eval/upright` (UU align), plus per-goal `eval/reward|align|at_goal/{goal}`.
+One on-demand L4 (`cartpole-train-od`, `us-east1-b`) is the usual trainer. Do not stack GPU VMs; do not train on unrelated projects.
 
-Real run: batched worlds on a GPU, not SB3 over one numpy env.
+## Physics notes
 
-```bash
-python3 train/train.py --num-envs 4096 --updates 400 --logdir runs
-```
-
-Optional: `--her-ratio 0.8` (default) controls how often failed episodes are relabeled with the nearest achieved equilibrium.
-
-GCP scripts (personal account, project `cartpole-demo`, sibling to `qwop-wr`):
-
-```bash
-./train/gcp/create.sh
-./train/gcp/sync.sh
-./train/gcp/train.sh
-./train/gcp/status.sh
-./train/gcp/pull.sh
-./train/gcp/teardown.sh    # delete the training VM when done
-```
-
-Do not train on `pumpkin-minecraft-server`.
-
-### Bot service account
-
-Persistent SA on `cartpole-demo` (not the Minecraft project):
-
-- Email: `cartpole-bot@cartpole-demo.iam.gserviceaccount.com`
-- Roles: Compute Admin, Storage Admin, Service Account User, Logging Admin, Monitoring Admin, Service Usage Admin, Secret Manager Admin, OS Admin Login, IAP tunnel
-- Can attach the Compute default SA to VMs it creates
-- OS Login is on for the project; IAP SSH firewall `allow-iap-ssh` (tcp:22 from `35.235.240.0/20`)
-- Bucket: `gs://cartpole-demo-413636930404` (`configs/`, `checkpoints/`, `policies/`)
-- JSON key (local only, not in git): `~/.config/gcloud/cartpole-bot-cartpole-demo.json`
-- GPU: `GPUS_ALL_REGIONS` is 1 (T4 can launch). Request in flight to 4 (`cartpole-gpus-all-regions-1`).
-
-Grok-bot should set `GOOGLE_APPLICATION_CREDENTIALS` to that key path. See [`train/gcp/bot.env.example`](train/gcp/bot.env.example).
-
-## Physics convention
-
-State is `[x, xdot, theta1, theta1dot, theta2, theta2dot]`. `theta = 0` is **upright**. Episodes do not die when a pole falls. Training may time-cap; the browser never resets. `train/physics.py` and `web/src/physics.js` stay bit-for-bit equivalent via `shared/constants.json`.
+- `θ = 0` is **upright** (Xin / IFAC convention).  
+- State double: `[x, ẋ, θ1, θ̇1, θ2, θ̇2]`. Triple adds link 3.  
+- **Walls:** when enabled, cart-only inelastic endstops (clamp `x`, `ẋ=0`) — poles are not propped by wall impulse.  
+- **No walls:** cart may leave `|x| > trackLimit` → episode end / demo void respawn; hard `oob_penalty` after reward clip.
 
 ## License / papers
 
-Code is for this project. The PDFs in `papers/` remain under their original publishers’ terms (ICML / NeurIPS / IEEE / IFAC / arXiv author versions).
+Code for this project. PDFs in `papers/` remain under their publishers’ terms.
