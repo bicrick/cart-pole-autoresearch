@@ -1,6 +1,82 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-20 ~04:02 CT.
+Last updated: 2026-09-20 ~04:37 CT.
+
+## Research pass (2026-09-20 ~04:37 CT) — H1: ERA **1-D Listing-2 pin** footgun + MaxEnt-misleads (2506.05615) + RPO α ladder for *hold*
+
+**Sources checked (this fire):** live TB A/B/C (~04:37 CT); overnight/macro @04:23; prior research 04:02 (MaxEnt ban / C ENT null) + 03:28 (RPO α≈0.01) + 01:58 (ERA H₀≈0.5–0.8); **ERA** arXiv:2510.08549 Listing 2 / Eq.11 / PPO-ERA H₀=−0.3A (App A.1.4); **When MaxEnt Misleads** arXiv:2506.05615 (Entropy Bifurcation Extension + soft-Q vs plain-Q); CleanRL RPO dm_control `cartpole-balance-v0` vs IDP α tables; Actor `train/ppo.py` global `log_std` act_dim=1 clamp −5…2. Overnight owns slots — no train start / no mid-kill.
+
+**Phase focus:** P1a walls-on role split. Fresh meters (~04:37 CT; TB HTTP 200):
+
+| Slot | ~u | entropy | nt_at_goal/UUU | nt_align/UUU | other |
+|---|---|---|---|---|---|
+| **A S1** (LR1e-4) | 80–90 | **~2.09** | 0.047 | 0.168 | hang_align/UUU **−0.97→−0.052** @u80; hang_at_goal~0.003; policy_loss~0.013 — **past u80 clean, still climbing** |
+| **B H1** | 330 | **−0.51↓↓** (σ≈0.15) | **flat ~0.049** | **0.169** | oob=0; visit≠hold; ENT035 still staged (~05:14 CT) |
+| **C H1-var** | 320 | **1.31** | **~0.050** | 0.154 | ENT=0.05 null reconfirmed (H healthy, nt≈B) |
+
+### Q1 — ERA on *our* Actor: do **not** paste Listing 2
+
+Paper continuous recipe (Listing 2 / Eq.11) does:
+
+```text
+k = −D · (log_std_max + H₀ + log√(2πe))
+log_stds = k · softmax(pre_stds) + log_std_max
+```
+
+For **D=1** (our cart force), `softmax([pre])≡1`, so `log_std` collapses to the **constant** `−H₀ − log√(2πe)` (then clipped). That is a **hard pin**, not a soft floor — same failure class as rsl_rl hard `log_std.clamp(min=floor)` on a global Parameter (zeros free explore; already warned @02:33).
+
+Also: paper default `H₀=−dim(A)/2` = **−0.5** for D=1 ⇒ σ≈0.15 — *exactly* where live B already sits (H≈−0.51). PPO-ERA main runs use `H₀=−0.3A` (=−0.3) with `ent_coef=0.01` still on. Macro/backlog **H₀≈0.5–0.8** (σ≳0.4–0.54) is the right *behavioral* hold floor — **above** paper defaults — but only if implemented as a **soft** bound.
+
+**Steal for H1 (when coding after ENT035 fails):**
+
+1. Keep learnable global `log_std` (do not replace with Listing-2 softmax for D=1).
+2. Soft floor that keeps grads when above the bound, e.g. `log_std_eff = log_σ_min + softplus(log_std − log_σ_min)` with `log_σ_min = log(σ)` for target H₀∈[0.5,0.8], **or** `log_std = torch.maximum(log_std, log_σ_min.detach())`-style detached hinge — never bare `.clamp(min=floor)` on the Parameter alone.
+3. Keep `--ent` small (0.01–0.035); ERA's point is reward objective stays clean — do not stack ENT≥0.05 (C already null'd that).
+4. Optional δ compensation for tanh bias (Eq.12) is overkill for first try on 1-D walls-hold.
+
+### Q2 — MaxEnt misleads (2506.05615) → reinforce ban + AdaEnt-style *anneal*
+
+Zhang/Chang/Gao formalize why MaxEnt fights upright stay (complements AI Olympics 2503.15290 §III-B already logged @04:02):
+
+- At **critical low-entropy states** (narrow feasible action set — upright balance), soft-Q elevates mediocre high-entropy neighbors that drift into irrecoverable flop; plain-Q prefers the narrow precise action. PPO can learn hold; SAC/MaxEnt soft-Q can converge wrong.
+- **Entropy Bifurcation Extension**: MaxEnt-optimal policy can be arbitrarily misaligned with true optimal at targeted states while leaving the rest unchanged — not just "slow explore," but wrong *at convergence*.
+- Their SAC-AdaEnt: when soft-Q landscape diverges from plain-Q, drop entropy pressure for that update. **H1 port (cheap):** after RPO/ERA restore σ and `nt` starts moving, **anneal `ENT→0`** (or gate entropy bonus off near upright) rather than keep a permanent MaxEnt/entropy-advantage term on the catcher. Still **ban** full AR-EAPO MaxEnt / entropy-advantage on H1.
+
+Average-reward *without* MaxEnt remains the only AR-EAPO half worth stealing later (short ep / ENERGY_W / optional gain-ρ soft bias) — AR-EAPO itself couples avg-reward **with** MaxEnt (2409.08938); do not ship the pair on H1.
+
+### Q3 — RPO α ladder: hold ≠ IDP
+
+CleanRL: α=**0.5** is fine on `dm_control/cartpole-balance-v0` (PPO~790 → RPO~795) but **catastrophic** on InvertedDoublePendulum (~5644 → ~297). H1 is a **near-upright hold specialist** (closer to balance than IDP swing+balance). Fail stack stays:
+
+1. ENT=0.035 natural (staged) — unchanged.
+2. If H↓ + nt flat ~u80 → **RPO α≈0.01** first (safe IDP number; perturb **raw pre-tanh μ** on update only) **or** ERA soft floor above.
+3. If α=0.01 is a no-op on hold: ladder **0.01 → 0.05 → 0.1** (more justified for pure-balance H1 than for swing) — **stop well below 0.5**.
+4. If visit≠hold persists → Spong `ENERGY_W` 0.2→0.35 / Turcato `EPISODE_LEN` 800→600–800 / avg-reward soft bias **without** MaxEnt → then cold wipe / C-recipe (lr/noise) promote.
+
+### Ranked levers (post-ENT035; unchanged order, sharper recipes)
+
+| Rank | Lever | Concrete | Note |
+|---|---|---|---|
+| 1 | **RPO α≈0.01** | CleanRL: sample unperturbed; update `μ'=μ+U(−α,α)`; α ladder 0.01→0.05→0.1 if no-op | Tiny patch; IDP-safe first |
+| 2 | **ERA soft log_std floor** | H₀≈0.5–0.8 via softplus/detached hinge on global Parameter — **not** Listing-2 softmax | Avoids D=1 hard pin |
+| 3 | **Non-MaxEnt stay** | ENERGY_W 0.2→0.35; EPISODE_LEN 600–800; later avg-reward bias only | Visit≠hold branch |
+| 4 | **ENT anneal→0** once nt moves | AdaEnt spirit (2506.05615) after explore restored | Do not keep MaxEnt on catcher |
+| — | AR-EAPO MaxEnt / ENT≥0.05 / hard log_std clamp | **Banned on H1** | C + 2503/2506 |
+
+### Promote?
+
+| Change | Next micro-task? | Backlog? |
+|---|---|---|
+| ERA: soft floor H₀≈0.5–0.8; **ban Listing-2 paste on D=1** | Sharpen fail branch (2) wording only | **Yes** — #2 (viii) |
+| Cite 2506.05615 + ENT anneal after nt moves | No (post-signal) | **Yes** — #2 (viii) |
+| RPO hold ladder 0.01→0.05→0.1 (not 0.5) | Already ≈0.01; add ladder note | **Yes** |
+| Mid-kill B / ENT≥0.05 / void / TQC / AR-EAPO MaxEnt on H1 | No | Banned |
+| Babysit + ENT035 natural | No (already Next) | — |
+
+**Nothing displaces** babysit → ENT=0.035. **Corrects a dangerous ERA coding footgun** (Listing-2 → hard pin at collapse σ) and adds a second MaxEnt-ban pillar before overnight implements the fail stack. NEED_USER_PING **yes** — material recipe footgun + live B H≈−0.51 @u330.
+
+**No code this fire** (overnight owns train; ENT035 already staged).
+
 
 ## Research pass (2026-09-20 ~04:02 CT) — H1 fail-stack: AR-EAPO **MaxEnt fights hold**; C ENT=0.05 is a null for nt
 
