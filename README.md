@@ -5,7 +5,9 @@ GitHub: [`bicrick/cart-pole-autoresearch`](https://github.com/bicrick/cart-pole-
 
 Autonomous research + training loop for **cart–multi-link inverted pendulums**: browser demos, shared physics, GPU PPO/TQC training on GCP, and a standing overnight bot that diagnoses failure modes and iterates without waiting for a human to poke the demo.
 
-![Browser demo](docs/demo.gif)
+<p align="center">
+  <img src="docs/demo.gif" alt="Browser demo" width="800">
+</p>
 
 ## What this is
 
