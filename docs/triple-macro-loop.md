@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~07:07 CT
+Last updated: 2026-09-20 ~07:20 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -42,7 +42,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20 ~07:07 CT):** **A = S1** walls-swing (~u366 hang_align **−0.037**, clean); **B = H1 RPO+ERA+gSDE ENT=0 LIVE** (pid 164727; prior ENT=0 mid-killed @u30; gSDE ~u10 ent **1.59→0.96↓**, nt~0.045, reward↑); **C = H1-var** (~u190 ent~0.91). Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm ENT=0-without-gSDE on B. gSDE babysit gate now **u30–40** (not u100).
+**Live mapping (2026-09-20 ~07:20 CT):** **A = S1** walls-swing (~u387 hang_align **−0.026**, clean); **B = H1 ENERGY_W=0.35 RPO+ERA ENT=0 (no gSDE)** rearming after **gSDE FAIL** @u30 (H **1.59→0.58**, nt flat ~0.04, reward↑); **C = H1-var** (~u211 ent~0.89). Combo mush retired. X1 staged. Do not relaunch wide void TQC. **Do not** put AR-EAPO / ENT≥0.02 on RPO. **Do not** blind-resume floor-σ. **Do not** re-arm gSDE / ENT=0-no-gSDE-pre-energy on B.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -61,16 +61,16 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 - **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
-- **Live (2026-09-20 ~07:07 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
-  - **A = S1 walls-swing** — LR=1e-4 ~**u366**/400 hang_align/UUU **−0.037**, nt_UUU~0.056, ent **~1.21**, OOB=0 — leave alone. Marker `.triple-a-s1-walls-v1`. ETA ~0.2h.
-  - **B = H1 RPO+ERA+gSDE ENT=0** — **LIVE** pid 164727 ~**u10**: ent **1.59→0.96↓↓** (faster than prior ENT=0 @u30), nt_UUU **0.045** (@u1 only), rollout_reward↑ / eval_reward↑, OOB=0. Marker `.triple-b-h1-gsde-ent0-v1`. Commit `a7a764f`. ETA ~2.3h.
-  - **C = H1-var** — ~**u190** ENT=0.05 ent **~0.91** nt~0.051 — leave alone. Marker `.triple-c-h1var-walls-v1`. ETA ~1.2h.
+- **Live (2026-09-20 ~07:20 CT):** VM `cartpole-train-od` RUNNING us-east1-b; TB http://34.148.138.48:6006/ HTTP 200. Watchers continue-a/b/c.
+  - **A = S1 walls-swing** — LR=1e-4 ~**u387**/400 hang_align/UUU **−0.026**, nt_UUU~0.065, ent **~1.18**, OOB=0, policy_loss OK — leave alone (natural end soon). Marker `.triple-a-s1-walls-v1`.
+  - **B = H1 ENERGY_W=0.35 RPO+ERA ENT=0 (no gSDE)** — **rearming** after gSDE FAIL @u30 (H **1.59→0.58**, nt **~0.04 flat**, reward↑/hold≈0). Marker `.triple-b-h1-energy035-v1`. Prior gSDE marker kept (do not re-arm).
+  - **C = H1-var** — ~**u211** ENT=0.05 ent **~0.89** nt~0.050 — leave alone. Marker `.triple-c-h1var-walls-v1`. ETA ~1.1h.
 - **X1 handoff:** staged. Smoke deferred until H1 nt≳0.2.
-- **Diagnosis / actions this fire (research):** gSDE not stopping entropy dive yet (1.59→0.96 @u10). Our gSDE is sample-path only (isotropic log_prob/entropy). Locked ATRPO-lite stay cookbook (ρ-center + γ-free GAE). **No mid-kill** — overnight owns u30–40 gate.
-- **Next micro-task:** (1) Babysit live B **gSDE** with **tight gate ~u30–40**: if H still diving ≲1.0 **or** nt flat + reward↑ → declare gSDE explore-fail → **non-MaxEnt stay** next: ENERGY_W 0.2→0.35 → EPISODE_LEN 600–800 → **ATRPO-lite** (ρ-center rewards + γ-free GAE, ENT=0) — **not** another ENT crank / not AR-EAPO. If H stabilizes ≳1.0 + nt climbs, cook to u80+. (2) Never ENT≥0.02 on RPO / AR-EAPO / blind-resume floor-σ / re-arm ENT=0-no-gSDE. (3) Watch A stretch end (~0.2h): if policy_loss explode mid-kill+LR; else natural → flat-eval ladder branch. (4) C = H1-var control. (5) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
-- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1+gSDE** / **C H1-var**
-- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch ENT=0 without gSDE; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **wait to u100 if gSDE H already diving at u10–30**
-- **NEED_USER_PING:** **yes** — research: gSDE entropy diving @u10 + ATRPO-lite stay cookbook
+- **Diagnosis / actions this fire:** gSDE explore-fail at u30 gate (same reward↑/hold≈0 pattern as ENT=0 / ENT=0.02). Shipped non-MaxEnt stay step 1: ENERGY_W 0.2→0.35, dropped gSDE, cold ckpt, mid-killed B.
+- **Next micro-task:** (1) Babysit B **ENERGY_W=0.35** to ~u60–80: if nt still flat + reward↑ → next **EPISODE_LEN 600–800** then **ATRPO-lite** (ρ-center + γ-free GAE, ENT=0) — **not** ENT crank / not AR-EAPO / not gSDE again. If nt climbs, cook. (2) Never ENT≥0.02 on RPO / AR-EAPO / blind-resume floor-σ / re-arm gSDE. (3) A natural exit: flat-eval ladder (ENERGY_W already 0.5 — prefer EPISODE_LEN soft or soft-land later; bar10→50 only if rail-park). (4) C = H1-var control. (5) H1 nt≳0.2 → `eval-handoff-uuu.sh`; gate nt≳0.80 align≳0.90 → P1b void FT.
+- **Kill list:** no double/xonly; no void TQC; slots = **A S1** / **B H1+ENERGY_W=0.35** / **C H1-var**
+- **Do not:** relaunch ENT035; relaunch ENT=0.02-on-RPO; relaunch gSDE; relaunch ENT=0 without energy bump; relaunch wide TQC; stack GPU; void during P1a; resume NaN ckpt; hard-clamp Listing-2 D=1; **blind-resume floor-σ without RESET_LOG_STD**; **stack ENT β ≥0.02 on RPO**; **re-arm gSDE after FAIL**
+- **NEED_USER_PING:** **yes** — gSDE FAIL @u30 → ENERGY_W=0.35 live
 
 
 ## Ranked backlog (pull from top when a stretch ends)
