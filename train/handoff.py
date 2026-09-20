@@ -157,3 +157,37 @@ def wrap_lqr_catcher(lqr) -> ActionFn:
 def zero_swing(_: np.ndarray) -> np.ndarray:
     """Placeholder swing (no thrust) for basin / LQR-only smoke tests."""
     return np.array([0.0], dtype=np.float32)
+
+
+def wrap_ppo_policy(checkpoint: str, *, force_limit: float = 40.0, goal: str = "UUU", device: str = "cpu"):
+    """Load PPO ActorCritic .pt and return ActionFn -> Gym [-1,1]."""
+    from pathlib import Path
+
+    import torch
+
+    from goals_triple import GOAL_INDEX, conditioned_obs
+    from physics_triple import load_constants, normalize_obs, observe
+    from ppo import ActorCritic, tanh_action
+
+    constants = dict(load_constants())
+    constants["forceLimit"] = float(force_limit)
+    path = Path(checkpoint)
+    payload = torch.load(path, map_location=device, weights_only=False)
+    obs_dim = int(payload.get("obs_dim", 25)) if isinstance(payload, dict) else 25
+    model = ActorCritic(obs_dim=obs_dim, hidden=constants["hidden"]).to(device)
+    state_dict = payload["model"] if isinstance(payload, dict) and "model" in payload else payload
+    model.load_state_dict(state_dict)
+    model.eval()
+    gid = int(GOAL_INDEX[goal])
+
+    def _fn(state) -> "np.ndarray":
+        z = torch.as_tensor(state, dtype=torch.float32, device=device).reshape(1, 8)
+        goals = torch.full((1,), gid, device=device, dtype=torch.long)
+        obs = normalize_obs(conditioned_obs(observe(z), goals), constants)
+        with torch.no_grad():
+            raw = model.deterministic(obs)
+            force = tanh_action(raw, constants["forceLimit"]).reshape(-1)[0]
+        a = float(force.item()) / float(force_limit)
+        return np.array([np.clip(a, -1.0, 1.0)], dtype=np.float32)
+
+    return _fn

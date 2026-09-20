@@ -260,6 +260,15 @@ def parse_args():
         help="Reset prior: mixed=curriculum mix; bottom=hang; near_target; wide=Lim-ish ICs",
     )
     parser.add_argument(
+        "--init-noise",
+        type=float,
+        default=0.3,
+        help=(
+            "Near-target / near-goal angle half-range (rad). H1 hold uses ~0.05; "
+            "default 0.3 matches legacy ±0.3. Also scales cart/rate noise for near_target."
+        ),
+    )
+    parser.add_argument(
         "--warmup-hang-start-p",
         type=float,
         default=0.0,
@@ -367,6 +376,9 @@ def default_run_name(args) -> str:
     init = getattr(args, "init_mode", "mixed")
     if init and init != "mixed":
         parts.append(init)
+    noise = getattr(args, "init_noise", 0.3)
+    if noise is not None and abs(float(noise) - 0.3) > 1e-9:
+        parts.append(f"in{float(noise):g}".replace(".", ""))
     return "-".join(parts)
 
 
@@ -414,6 +426,7 @@ def random_states(
     fold_pair_p=0.0,
     transition_only=False,
     init_mode="mixed",
+    init_noise=0.3,
 ):
     """Reset distribution.
 
@@ -426,6 +439,8 @@ def random_states(
       bottom      — all near hanging DDD (swing-up from bottom)
       near_target — near assigned goal; hang_start_p overlays hang ICs for swing-up
       wide        — Lim-style wide random ICs (full angle, larger rates)
+
+    init_noise: angle half-range (rad) for near_target / near-goal spawns (default 0.3).
     """
     mode = (init_mode or "mixed").lower()
 
@@ -454,15 +469,20 @@ def random_states(
 
     if mode == "near_target" and goals is not None:
         # Hold prior near assigned goal; optional hang_start_p overlays swing-up ICs.
+        # init_noise = angle half-range (H1 ~0.05; legacy default 0.3).
+        n_ang = max(float(init_noise), 1e-4)
+        n_x = min(0.5, max(0.05, n_ang * 2.0))
+        n_xd = min(0.5, max(0.05, n_ang * 2.0))
+        n_w = min(0.8, max(0.1, n_ang * 5.0))
         angles = goal_angles(goals, device=device, dtype=torch.float32)
-        x = torch.empty(n, device=device).uniform_(-0.5, 0.5)
-        xd = torch.empty(n, device=device).uniform_(-0.5, 0.5)
-        th1 = angles[:, 0] + torch.empty(n, device=device).uniform_(-0.3, 0.3)
-        th2 = angles[:, 1] + torch.empty(n, device=device).uniform_(-0.3, 0.3)
-        th3 = angles[:, 2] + torch.empty(n, device=device).uniform_(-0.3, 0.3)
-        th1d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
-        th2d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
-        th3d = torch.empty(n, device=device).uniform_(-0.8, 0.8)
+        x = torch.empty(n, device=device).uniform_(-n_x, n_x)
+        xd = torch.empty(n, device=device).uniform_(-n_xd, n_xd)
+        th1 = angles[:, 0] + torch.empty(n, device=device).uniform_(-n_ang, n_ang)
+        th2 = angles[:, 1] + torch.empty(n, device=device).uniform_(-n_ang, n_ang)
+        th3 = angles[:, 2] + torch.empty(n, device=device).uniform_(-n_ang, n_ang)
+        th1d = torch.empty(n, device=device).uniform_(-n_w, n_w)
+        th2d = torch.empty(n, device=device).uniform_(-n_w, n_w)
+        th3d = torch.empty(n, device=device).uniform_(-n_w, n_w)
         if hang_start_p > 0:
             hit = torch.rand(n, device=device) < hang_start_p
             if hit.any():
@@ -526,14 +546,18 @@ def random_states(
         if hit.any():
             angles = goal_angles(goals, device=device, dtype=torch.float32)
             n_hit = int(hit.sum())
-            x[hit] = torch.empty(n_hit, device=device).uniform_(-0.5, 0.5)
-            xd[hit] = torch.empty(n_hit, device=device).uniform_(-0.5, 0.5)
-            th1[hit] = angles[hit, 0] + torch.empty(n_hit, device=device).uniform_(-0.3, 0.3)
-            th2[hit] = angles[hit, 1] + torch.empty(n_hit, device=device).uniform_(-0.3, 0.3)
-            th3[hit] = angles[hit, 2] + torch.empty(n_hit, device=device).uniform_(-0.3, 0.3)
-            th1d[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
-            th2d[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
-            th3d[hit] = torch.empty(n_hit, device=device).uniform_(-0.8, 0.8)
+            n_ang = max(float(init_noise), 1e-4)
+            n_x = min(0.5, max(0.05, n_ang * 2.0))
+            n_xd = min(0.5, max(0.05, n_ang * 2.0))
+            n_w = min(0.8, max(0.1, n_ang * 5.0))
+            x[hit] = torch.empty(n_hit, device=device).uniform_(-n_x, n_x)
+            xd[hit] = torch.empty(n_hit, device=device).uniform_(-n_xd, n_xd)
+            th1[hit] = angles[hit, 0] + torch.empty(n_hit, device=device).uniform_(-n_ang, n_ang)
+            th2[hit] = angles[hit, 1] + torch.empty(n_hit, device=device).uniform_(-n_ang, n_ang)
+            th3[hit] = angles[hit, 2] + torch.empty(n_hit, device=device).uniform_(-n_ang, n_ang)
+            th1d[hit] = torch.empty(n_hit, device=device).uniform_(-n_w, n_w)
+            th2d[hit] = torch.empty(n_hit, device=device).uniform_(-n_w, n_w)
+            th3d[hit] = torch.empty(n_hit, device=device).uniform_(-n_w, n_w)
             claimed |= hit
 
     # Hang / near-DDD: forces energy pumping toward whatever goal is assigned.
@@ -949,7 +973,7 @@ def main():
         f"uu_bias={args.uu_bias} anneal={args.anneal_updates} near_goal_p={args.near_goal_p} "
         f"hang_start_p={args.hang_start_p} wrong_eq_p={args.wrong_eq_p} "
         f"goal_switch_p={args.goal_switch_p} fold_pair_p={args.fold_pair_p} "
-        f"init_mode={args.init_mode} fall_grace={args.fall_grace_steps} "
+        f"init_mode={args.init_mode} init_noise={args.init_noise} fall_grace={args.fall_grace_steps} "
         f"start_grace={args.start_grace_steps} angle_fall={args.angle_fall} "
         f"transition_only={args.transition_only} her_ratio={args.her_ratio}",
         flush=True,
@@ -984,6 +1008,7 @@ def main():
         fold_pair_p=args.fold_pair_p,
         transition_only=args.transition_only,
         init_mode=args.init_mode,
+        init_noise=args.init_noise,
     )
     steps_left = torch.randint(1, args.episode_len + 1, (args.num_envs,), device=device)
     # Episode age (steps since last reset) for fall/oob grace
@@ -1083,6 +1108,7 @@ def main():
                     fold_pair_p=args.fold_pair_p,
                     transition_only=args.transition_only,
                     init_mode=args.init_mode,
+                    init_noise=args.init_noise,
                 )
                 next_state = torch.where(done.unsqueeze(-1), reset, next_state)
                 goals = reset_goals

@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Loop forever: triple-B slot.
-# Phase 1 (done): Lim TQC UUU wide (marker .triple-b-tqc-uuu-v1).
-# Phase 2 (after natural TQC exit): PPO-balance catcher near_target, P1a walls-on.
-#   — TQC@150k catch-basin measured DEAD (0/9); soft/stiff LQR RoA only 0.1@ω=0.
-#   Void balance v1 was a miss (wrong plant phase). TRACK_WALLS=1 required for P1a.
-#   Do not relaunch identical wide TQC.
+# Loop forever: triple-B = H1 walls-on hold specialist (near-only, tight init noise).
+# Phase 1 (done): Lim TQC UUU wide (marker .triple-b-tqc-uuu-v1) — do not relaunch.
+# Phase 2: PPO-balance walls → H1 with INIT_NOISE=0.05 (marker .triple-b-h1-noise05-v1).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -38,13 +35,12 @@ start_tqc_wide() {
   echo "$(date -u +%FT%TZ) STARTED triple-b TQC wide pid=$!" >> logs/continue-triple-b.log
 }
 
-start_ppo_balance() {
-  # Hold catcher: near_target only, no hang, UUU-biased, force40, P1a walls-on.
-  # Void v1 (.triple-b-ppo-balance-v1) was a miss — curriculum lock is walls first.
-  if [[ ! -f policies/.triple-b-ppo-balance-walls-v1 ]]; then
+start_ppo_h1() {
+  # H1 hold catcher: near_target only, no hang, noise=0.05, UUU-biased, force40, walls-on.
+  if [[ ! -f policies/.triple-b-h1-noise05-v1 ]]; then
     rm -f policies/checkpoint-triple-b.pt
-    touch policies/.triple-b-ppo-balance-walls-v1
-    echo "$(date -u +%FT%TZ) cold-start triple-b → PPO-balance walls-on P1a; marker set" >> logs/continue-triple-b.log
+    touch policies/.triple-b-h1-noise05-v1
+    echo "$(date -u +%FT%TZ) cold-start triple-b → H1 walls-hold noise0.05; marker set" >> logs/continue-triple-b.log
   fi
   nohup env TRACK_WALLS=1 NUM_ENVS="${NUM_ENVS:-8192}" FORCE_LIMIT=40 \
     REWARD_MODE=product PROGRESS_W=1.0 FLIP_AUGMENT=1 \
@@ -54,13 +50,13 @@ start_ppo_balance() {
     GOAL_SWITCH_P=0.0 FOLD_PAIR_P=0.0 \
     CART_BARRIER_COEF=10 W_UP=5.0 W_DOWN=1.0 ALPHA_TH=0.5 \
     FALL_GRACE_STEPS=20 START_GRACE_STEPS=40 \
-    INIT_MODE=near_target ENERGY_W=0.2 LR=1e-4 ENT=0.02 \
-    RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-balance-f40-nt1-bar10-prog1-flip \
+    INIT_MODE=near_target INIT_NOISE=0.05 ENERGY_W=0.2 LR=1e-4 ENT=0.02 \
+    RUN_NAME=ft-triple-b-e8192-r256-uuu-walls-hold-h1-f40-nt1-in005-bar10-prog1-flip \
     CHECKPOINT=policies/checkpoint-triple-b.pt \
     OUT=policies/policy-triple-b.json \
     bash scripts/next-train-triple.sh \
     >> logs/train-triple-b-balance.log 2>&1 &
-  echo "$(date -u +%FT%TZ) STARTED triple-b PPO-balance walls pid=$!" >> logs/continue-triple-b.log
+  echo "$(date -u +%FT%TZ) STARTED triple-b H1 walls-hold pid=$!" >> logs/continue-triple-b.log
 }
 
 while true; do
@@ -77,7 +73,7 @@ while true; do
     continue
   fi
 
-  # First-ever: cold TQC wide (legacy path).
+  # First-ever: cold TQC wide (legacy path; already marked on VM — skipped).
   if [[ ! -f policies/.triple-b-tqc-uuu-v1 ]]; then
     rm -f policies/checkpoint-triple-b.pt
     touch policies/.triple-b-tqc-uuu-v1
@@ -87,7 +83,7 @@ while true; do
     continue
   fi
 
-  # After wide TQC has been started once: next (and subsequent) starts = PPO-balance.
-  start_ppo_balance
+  # After wide TQC has been started once: H1 PPO-balance walls-hold.
+  start_ppo_h1
   sleep 60
 done

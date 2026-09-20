@@ -1,6 +1,6 @@
 # Triple pendulum — macro loop
 
-Last updated: 2026-09-20 ~01:28 CT
+Last updated: 2026-09-20 ~01:35 CT
 Owner: overnight routine (every 15m). Edit this file when the next micro-task changes.
 
 ## Overarching goal
@@ -38,7 +38,7 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 | **E8 — 8 specialists** | One policy per EP (Lim) | Walls then void | Clone H1 recipe per eq | Each EP hold gate | After UUU path works |
 | **T56 — Transitions** | Directed A→B or shared conditional | Void | Only after E8 / solid multi-eq | 56-pair eval | Last |
 
-**Live mapping (2026-09-20):** B = H1 walls-balance; A = walls-hold (treat as H1 sibling until hold gate, then retarget to S1); C = walls-combo exploration (kill/repurpose if it stays flat past ~u150). Do not relaunch wide void TQC.
+**Live mapping (2026-09-20 ~01:35 CT):** **A = S1** walls-swing; **B = H1** walls-hold (tight `INIT_NOISE=0.05`); **C = H1-var** walls-hold (lr/ent/noise variant). Combo mush retired. X1 handoff_eval staged. Do not relaunch wide void TQC.
 
 **Compose rule:** never void-FT a policy that cannot hold on walls. Never ask swing to also be the catcher.
 
@@ -57,28 +57,23 @@ Do **not** train one mega-policy to swing + hold + recover. Split by **role**, p
 
 ## Current phase + next micro-task
 
-- **Phase:** P1a — walls-on UUU (**A+B+C ALL LIVE walls-on**)
-- **Live (~01:25 CT):** VM `cartpole-train-od` RUNNING us-east1-b (L4 ~98–99%/14.2GB of 22.5GB; uptime ~46.5h). TB http://34.148.138.48:6006/ HTTP 200. continue-a/b/c watchers alive. Scripts md5-match box.
-  - **A** walls-on UUU hold LIVE (pid **142589**, ~**u50–56**/400) — `--track-walls` / `TRACK_WALLS=1`; marker `.triple-a-walls-v1`. **nt_UUU~0.036** (flat early); **align_UUU~+0.123** (from −0.07 @u1 → +0.06 @u40 → +0.12 @u50); train reward peaked ~229 @u10 then settling ~155; **entropy~1.94** healthy; **oob_rate=0**. Hang UUU still ~0.
-  - **B** **CONFIRMED walls-on PPO-balance** LIVE (pid **143661**, ~**u10** train / eval@u1) — run `…-walls-balance…`; marker `.triple-b-ppo-balance-walls-v1` (06:19Z); `track_walls=True`; nt_UUU~**0.037** align~**−0.075**; ent~**1.45**; **oob=0**. Prior void balance (pids 142965/143446) exited; TQC exited earlier (reward-hack) — do not relaunch.
-  - **C** walls-on combo LIVE (pid **143053**, ~**u10–20**/400) — `track_walls=True`; marker `.triple-c-walls-v1`; nt_UUU~**0.0345** align~**−0.055** (slightly up from −0.064); reward~227 @u10; **entropy~2.25**; **oob=0**. Early — leave alone.
-- **Diagnosis this fire (~01:25 CT):**
-  1. **Plant phase OK:** all three live jobs have `--track-walls` + `TRACK_WALLS=1`. **B is walls-on now** (prior void mis-arm closed).
-  2. **Reward↑ hold≈0:** A reward up then settling while hold still ~0.036 — **expected <u100**, not classic hack (align climbing strongly +, unlike TQC reward-hack with success≈0). C/B too early to call.
-  3. **Center farm:** oob=0 on walls plant; no thrash/void-death signal. No action.
-  4. **Entropy:** A~1.94 / B~1.45 / C~2.25 — not collapsed, not saturated (~3.4 was prior bad pattern).
-  5. **Actions:** none — leave A/B/C cooking; no mid-kill; no TQC relaunch; no code change (continue-b already walls-v1 on box+VM, md5 match).
-- **Catch-basin:** TQC zip dead; LQR tiny RoA; **PPO-balance walls-on on B** is the live catcher path.
-- **Watchers:** continue-a (142090) / continue-b (143647) / continue-c (142091) alive.
-- **Next micro-task:** (1) Babysit **A+B+C walls-on** through ~u100 — watch nt_UUU / align_UUU / entropy / oob; no mid-kill. (2) If A nt stays flat past ~u150 with align plateau, stage natural-exit ladder (bar10→50 / ENERGY_W↑) — never mid-kill. (3) After P1a gate (nt≳0.80 align≳0.90) → P1b nowalls FT from best walls ckpt.
-- **Kill list:** no double/xonly; slots = **A walls-hold** / **B walls-balance** / **C walls-combo**
-- **Do not:** mid-kill healthy stretches; relaunch wide TQC; stack GPU; treat TQC zip as catcher; run void during P1a
-- **NEED_USER_PING:** **no** — first walls live already reported; B walls confirm is ops babysit; gate not clear; no strategy flip.
+- **Phase:** P1a — walls-on UUU via **role split** (S1 / H1 / H1-var), not one mega-policy
+- **Live (~01:35 CT):** VM `cartpole-train-od` RUNNING us-east1-b. TB http://34.148.138.48:6006/. Watchers continue-a/b/c. **Training breakup GO** (user authorized).
+  - **A = S1 walls-swing** — `INIT_MODE=bottom`, hang_p=0.85, near_goal_p=0.10, warmup=0, progress_w=1, product, `TRACK_WALLS=1`, ENT=0.05 LR=3e-4. Marker `.triple-a-s1-walls-v1` (cold). Run `…-walls-swing-s1-…`
+  - **B = H1 walls-hold (tight)** — `INIT_MODE=near_target`, near_goal_p=1.0, hang=0, warmup=0, **`INIT_NOISE=0.05`**, product, `TRACK_WALLS=1`, ENT=0.02 LR=1e-4. Marker `.triple-b-h1-noise05-v1` (cold). Run `…-walls-hold-h1-…-in005-…`
+  - **C = H1-var walls-hold** — same near-only recipe as B but LR=5e-5 ENT=0.05 INIT_NOISE=0.08. Marker `.triple-c-h1var-walls-v1` (cold). Prefer second H1 over combo mush (documented choice).
+- **X1 handoff:** `train/handoff.py` + `scripts/handoff_eval.py` + `scripts/eval-handoff-uuu.sh`. Smoke S1→H1 when A/B ckpts exist (`bash scripts/eval-handoff-uuu.sh`). capture_tol=0.1.
+- **Code:** PPO `--init-noise` added + wired in `next-train-triple.sh` (default 0.3 = legacy ±0.3).
+- **Diagnosis / actions this fire:** Roles were merged (A hold sibling, B loose-IC balance, C combo). User authorized GO — cold-restart A→S1, B→H1@noise0.05, C→H1-var. Prefer correct roles over preserving early ~u50 flat walls stretches. No TQC relaunch.
+- **Next micro-task:** (1) Confirm A/B/C PIDs + run names match S1/H1/H1-var; watchers loop; TB up. (2) Babysit meters: B/C `eval/near_target/at_goal/UUU` + align; A `eval/hang/*` align climbing. (3) When A+B ckpts exist, run `eval-handoff-uuu.sh` smoke. (4) H1 gate nt≳0.80 align≳0.90 → keep H1, then P1b void FT from best walls hold. Never void-FT before walls hold works.
+- **Kill list:** no double/xonly; no void TQC; slots = **A S1 swing** / **B H1 hold** / **C H1-var hold**
+- **Do not:** mid-kill healthy H1 stretches after they cook; relaunch wide TQC; stack GPU; treat TQC zip as catcher; run void during P1a
+- **NEED_USER_PING:** **no** — GO was authorized; report PIDs/run names/commit in overnight-status
 
 ## Ranked backlog (pull from top when a stretch ends)
 
 1. **Lim TQC UUU specialist** (**DONE / exited**; basin **dead** @150k; reward-hack confirmed — do not relaunch). Hold mirror ladder leftovers (post-stretch only, **after** walls PPO-balance try): (a) M2 tighten `INIT_NOISE=0.05 HANG_FRAC=0 WIDE_FRAC=0`; (b) `ry_scale=1.0`; (c) **∫x obs**; (d) Baek VER flip; (e) optional fawraw M2 arch; (f) `n_steps=3`; (g) `use_sde=True sde_sample_freq=4`.
-2. **Two-policy handoff** (**CODE STAGED + basin measured**) — catcher order: **skip TQC zip** → LQR only tiny → **PPO-balance walls-on LIVE on B**. Enter \(\|\phi_i\|<0.1\) & \(\|\omega\|_\infty<1\); latch + exit 0.25 + dwell; LPF τ≈0.3. Ops leftovers: (i) `handoff_eval.py` smoke capture_tol=**0.1**; (ii) PPO-balance `--init-noise` 0.05 + `--vel-cost-coef` 0.01–0.02 (**still open** — no PPO CLI for init-noise; vel-cost unused on live B — stage on natural restart only); (iii) if thin → LQI ∫x; (iv) **P1a: PPO-balance `TRACK_WALLS=1`** (**DONE**); (v) P1a flat-eval ladder if A stays flat past ~u150 (natural exit only) — **branch**: bar10→50 if rail-park (\|x\|@limit + flop), else ENERGY_W 0.2→0.35 if align↑/mid + nt flat (Spong visit≠hold), optional EPISODE_LEN 1200→600–800 third rung (Turcato); never mid-kill / hang / force60 mid-P1a; (vi) after A has hold signal: soft-land delivery (−w_ω / cart-centre / V_aug ẋ→0) so handoff lands in B RoA (fawraw M4 / 2606.28627).
+2. **Two-policy handoff** (**CODE STAGED + basin measured**) — catcher order: **skip TQC zip** → LQR only tiny → **PPO-balance walls-on LIVE on B**. Enter \(\|\phi_i\|<0.1\) & \(\|\omega\|_\infty<1\); latch + exit 0.25 + dwell; LPF τ≈0.3. Ops leftovers: (i) `handoff_eval.py` smoke capture_tol=**0.1** (**STAGED** `scripts/handoff_eval.py` + `eval-handoff-uuu.sh`); (ii) PPO-balance `--init-noise` 0.05 + `--vel-cost-coef` 0.01–0.02 (**still open** — no PPO CLI for init-noise; vel-cost unused on live B — stage on natural restart only); (iii) if thin → LQI ∫x; (iv) **P1a: PPO-balance `TRACK_WALLS=1`** (**DONE**); (v) P1a flat-eval ladder if A stays flat past ~u150 (natural exit only) — **branch**: bar10→50 if rail-park (\|x\|@limit + flop), else ENERGY_W 0.2→0.35 if align↑/mid + nt flat (Spong visit≠hold), optional EPISODE_LEN 1200→600–800 third rung (Turcato); never mid-kill / hang / force60 mid-P1a; (vi) after A has hold signal: soft-land delivery (−w_ω / cart-centre / V_aug ẋ→0) so handoff lands in B RoA (fawraw M4 / 2606.28627).
 3. Energy-to-goal (true E→E_UUU) if product+progress plateaus
 4. Force probe 40→60 only if OOB≈0 and plant feels underpowered
 5. 8×TQC specialists (Lim full set) after UUU hold actually works

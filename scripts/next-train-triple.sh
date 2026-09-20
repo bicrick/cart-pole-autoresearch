@@ -34,6 +34,7 @@ ALPHA_TH="${ALPHA_TH:-0.5}"
 FALL_GRACE_STEPS="${FALL_GRACE_STEPS:-20}"
 START_GRACE_STEPS="${START_GRACE_STEPS:-0}"
 INIT_MODE="${INIT_MODE:-mixed}"
+INIT_NOISE="${INIT_NOISE:-0.3}"
 FORCE_LIMIT="${FORCE_LIMIT:-40}"
 PROGRESS_W="${PROGRESS_W:-}"
 FLIP_AUGMENT="${FLIP_AUGMENT:-1}"
@@ -83,6 +84,7 @@ exec python3 train/train_triple.py \
   --fall-grace-steps "${FALL_GRACE_STEPS}" \
   --start-grace-steps "${START_GRACE_STEPS}" \
   --init-mode "${INIT_MODE}" \
+  --init-noise "${INIT_NOISE}" \
   --align-w 1.5 \
   --energy-w "${ENERGY_W}" \
   --spin-w 0.0003 \
