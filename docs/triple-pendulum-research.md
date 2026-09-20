@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~18:36 CT.
+Last updated: 2026-09-19 ~19:00 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -1144,3 +1144,84 @@ Starter scales (retune): \(\lambda\) slightly below CLF rate \(\alpha\); \(\beta
 63. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented — live v6 align↑/at_goal flat is the empirical confirmation.
 
 **No code this fire** (overnight owns train / B v7b; wait for green-light / overnight ask). NEED_USER_PING no.
+
+
+### Research pass (2026-09-19 ~19:00 CT) — ERA entropy floor + Fattahi energy-mod PPO + SimbaV2 fills
+
+Digged ERA (arXiv:2510.08549 + nothingbutbut.github.io/era), Fattahi UniPD thesis *Learning-based Energy Control of Underactuated Robots* (Padova, July 2026 PDF), MPC-informed residual RL (KU Leuven LearnOpTra / Furuta 2026 poster), SimbaV2 cookbook fills (arXiv:2502.15280; FastTD3 already named it). Re-checked fawraw (GitHub API rate-limited this fire; last known *code* still **2026-06-25** / docs **2026-07-02**). Overnight owns train (cool-ent v6 / B v7b staged earlier); research does not mid-kill. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (fills entropy-floor + energy-residual cookbooks under existing P1/P2; does not displace handoff as #1).
+
+#### ERA (arXiv:2510.08549) — entropy floor via *activation*, not β crank
+
+Our cool-ent / AE-PPO / axPPO path still fights collapse by **raising the entropy *coefficient***. ERA instead constrains sampling entropy with a specially designed **output activation** on the actor’s `log_std`, so the PPO/SAC *loss stays pure reward* (no objective distortion from a large β). Continuous Gaussian recipe (their Listing 2, JAX):
+
+```text
+# h_0: target entropy (fixed or learnable); default −dim(A)/2
+# pre_stds: raw actor head
+k = −action_dim * (log_std_max + h_0 + log(sqrt(2*π*e)))
+log_stds = k * softmax(pre_stds, axis=−1) + log_std_max
+log_stds = clip(log_stds, log_std_min, log_std_max)
+```
+
+vs the usual tanh squash of `log_std` into `[log_std_min, log_std_max]`. Provable lower bound on policy entropy; <7% overhead; +25–30% on hard DMC / HumanoidBench SAC; also ships PPO hypers (Table 6: clip 0.2, ent_coef **0.01**, γ0.99, λ0.95, batch 2048 / mb 64 — generic).
+
+**Steal for us:** if v6/v7b entropy cools again under fixed `--ent`, prefer **ERA on the Gaussian head** (or ERA + modest β) over another cold wipe + higher ENT. Orthogonal to two-policy; works on **both** swing and hold nets. Code: https://nothingbutbut.github.io/era
+
+#### Fattahi UniPD thesis (July 2026) — PPO *modulates* energy, does not output raw force
+
+Closest published **on-policy energy residual** to our P2 E→E_UUU + EBERL bias ideas. Plant is Acrobot/Pendubot (joint torque), **not** cart-triple — steal the *architecture*, retune numbers on `physics_triple` / \(U_{\mathrm{UUU}}\approx0.736\,\mathrm{J}\).
+
+| Piece | Recipe |
+|---|---|
+| Action | Policy outputs scalar \(a\in[-1,1]\); applied \(u=\mathrm{clip}(\tau_{\mathrm{PD}}+a\,\bar u_{\max}\phi(x),\,\pm u_{\max})\) with \(\bar u_{\max}=0.7\,u_{\max}\) |
+| Energy gain | \(\phi=\tanh\bigl((E-E^\star)/\sigma_E\bigr)\), \(\sigma_E=e_{\mathrm{scale}}\sigma_V\), \(e_{\mathrm{scale}}=0.3\); \(\sigma_V=\|V(x_0)-V^\star\|\) |
+| PD co-term | Collocated on actuated joint (Acrobot \(k_p{=}0.60,k_d{=}0.10\); Pendubot \(1.20/0.25\)) — leaves headroom so sum rarely saturates |
+| Obs | \(\sin/\cos\) joints + \(\dot q\) + \(\tanh((T-T^\star)/\sigma_T)\) + \(\tanh((V-V^\star)/\sigma_V)\) (+ VecNormalize ±10, freeze after train) |
+| Reward | \(r=-(E-E^\star)^2/\sigma_V^2 + w_H H(q) - \lambda_u (a\bar u_{\max}/u_{\max})^2 + c_1 e^{-5e_1^2}+c_2 e^{-5e_2^2}\) (\(w_H{=}1\), \(\lambda_u{=}10^{-3}\)) |
+| PPO (Table 4.4) | nets [256,256]; **8** envs; \(n_{\mathrm{steps}}{=}4096\); batch 512; 20 epochs; γ**0.995**; λ0.98; clip **0.1**; lr \(3{\times}10^{-4}\) const; ent \(10^{-3}\); **gSDE** sample freq **4**; grad clip 0.5; 1e5 / 3e5 steps |
+| Starts | Near-bottom random (not Lim-wide); early-term on upright success |
+| Classical sibling | EnergyLQR (Xin-style swing) → LQR with **latch** + outer safeguard re-swing; capture e.g. Acrobot \(\delta{=}0.05\), \(\omega\approx0.03\)–0.10 |
+
+**Steal for cart-triple swing slot A (when green-lit):**
+
+1. Expose plant \(E=T+U\) from `physics_triple` mass matrix (already planned 15:14 / 17:07).
+2. Replace raw force head with **\(a\)-modulated** \(\bar F_{\max}\phi(E)\) + light cart PD (\(k_x,k_v\) from Dyad 17:33) — same role as EBERL \(u_{\mathrm{eb}}\) mean-bias, but **PPO-native** and residual-capped at 70% forceLimit.
+3. Append \(\tanh((E-E_{\mathrm{UUU}})/\sigma_E)\) (and optional \(T,V\) splits) to obs; keep product+progress as outer reward **or** swap swing reward to energy-dominated form above during a specialist swing stretch.
+4. Still hand off to a **hold** net / LQR / CLF-RL once basin∩energy∩low-\(\omega\) (rank #1 unchanged).
+
+Optional velocity-direction multiplier on \(\phi\) (classical \(\mathrm{sign}(\dot\phi\cos\phi)\)) was tried in the thesis and **not** used in the reported controllers — keep Dyad/EBERL sign form as a separate A/B, not default.
+
+#### MPC-informed residual (LearnOpTra 2026) — same residual family, heavier base
+
+Furuta with domain-randomized tip mass: \(a = a_{\mathrm{MPC}} + a_{\mathrm{RL}}\) with **MPC planned sequence + predicted traj in the RL obs**. Converges ~400k steps vs ~600k plain residual vs ~3.5M plain RL. **Too heavy** for overnight (MPC each step), but validates the residual pattern: classical energy/Dyad/EBERL as \(a_0\), PPO residual as \(a_{\mathrm{RL}}\) — Fattahi is the cheap sim-native version.
+
+#### SimbaV2 fills (for optional P2 FastTD3/SAC slot)
+
+18:36 named FastTD3+SimbaV2; missing cookbook:
+
+| Knob | Steal |
+|---|---|
+| Norm | Replace LayerNorm with **hyperspherical** \(\ell_2\) feature + project weights onto unit sphere after each update |
+| Critic | **Distributional** + **reward scaling** (stable grads under reward magnitude swings — relevant if we mix product + energy + CLF) |
+| Default compute | **UTD=2**, batch **256**, Adam **no** weight decay, lr linear **1e-4 → 3e-5** |
+| Widths | Actor ~128 / critic ~512 (scale critic first) |
+| Reset | Periodic reinit **hurts** SimbaV2 — skip |
+
+Prefer with Raffin low-RR / FastTD3 large-batch at our 8192 envs; still **never CrossQ** for sparse UUU.
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing **numeric** coefs: still unspecified (CLF-RL / ASAP remain substitutes).
+- Serial **cart-triple** classical energy bang-bang coeffs: still none (Fattahi/Dyad/EBERL = Acrobot/Pendubot/Furuta/single-pole — scale + measure).
+- Force 80–100: still demoted.
+- Baek VER: no new multi-link / on-policy paper.
+- Rank: after v6 cook, **split swing vs hold** still #1; **ERA log_std floor** joins cool-ent / AE-PPO / axPPO under explore; **Fattahi energy-mod PPO** joins saturated-E / EBERL-bias / Dyad \(E_{\mathrm{margin}}\) under P2 swing; SimbaV2 hypers fill P2 off-policy.
+
+#### Amend recommended redesign (additions only)
+
+64. If entropy collapses again under fixed `--ent`: try **ERA** on the Gaussian `log_std` head (target \(\mathcal{H}_0\approx-\dim(\mathcal{A})/2\)) before another ENT cold wipe — keeps reward objective clean.
+65. When coding P2 energy swing: prefer **Fattahi structured action** \(u=\tau_{\mathrm{PD}}+a\cdot 0.7 F_{\max}\cdot\tanh((E-E_{\mathrm{UUU}})/\sigma_E)\) + energy-error obs features over raw-force PPO with only an energy *reward* term.
+66. Optional residual ladder: Dyad/EBERL classical \(a_0\) → Fattahi-style learned modulation → (heavy) MPC-informed residual only if sim energy residual stalls.
+67. Optional P2 FastTD3/SAC: pair with **SimbaV2** hyperspherical + reward scaling + UTD≈2 (or Raffin low-RR at our env count); skip weight-decay resets.
+68. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented after v6 — align↑ / at_goal flat from 18:36 still the empirical confirmation.
+
+**No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
