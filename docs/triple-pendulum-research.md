@@ -1,6 +1,6 @@
 # Cart-triple-pendulum research notes
 
-Last updated: 2026-09-19 ~19:00 CT.
+Last updated: 2026-09-19 ~19:40 CT.
 
 
 ## Implementation status (2026-09-19 ~14:35 CT)
@@ -1225,3 +1225,80 @@ Prefer with Raffin low-RR / FastTD3 large-batch at our 8192 envs; still **never 
 68. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented after v6 — align↑ / at_goal flat from 18:36 still the empirical confirmation.
 
 **No code this fire** (overnight owns train; wait for green-light / overnight ask). NEED_USER_PING no.
+
+
+### Research pass (2026-09-19 ~19:40 CT) — Mon verticality switch + cart-triple LQR Q/R + soft-landing pack
+
+Digged Mon Machines 2025 PPO→SMC verticality formula (MDPI), ResearchSquare 2026 *Dynamics and LQR Control of a Triple Inverted Pendulum on a Cart* (rs-10173980/v1), and re-confirmed fawraw `m4_findings.md` via CDN (still mid-2026; GitHub API rate-limited). Live: overnight owns train (cool-ent v6 / B entboost **v7b** ENT0.08 LR5e-5 / C entboost **v7** staged); research does not mid-kill. **Direction unchanged.** Top *unimplemented* lever remains **two-policy swing↔hold**. No user ping (fills switch + hold-LQR + soft-landing gaps under existing P1; does not displace handoff as #1).
+
+#### Mon Machines 2025 — concrete verticality switch (was table-only)
+
+Already had "PPO swing → SMC hold" as a classical catcher option (16:40). Missing cookbook:
+
+| Piece | Steal |
+|---|---|
+| Verticality (Acrobot) | \(V = \bigl[-\cos\theta_1-\cos(\theta_1+\theta_2)\bigr]/2\) |
+| Switch PPO→SMC | \(V > 0.9\) |
+| Near-success after switch | \(V > 0.98\) within ~30 steps |
+| Cart-pole sibling | angle error \(<0.5^\circ\) after SMC catch; long-horizon balance OK |
+| Acrobot caveat | **SMC failed sustained upright** (chatter / unmodeled dyn) — near-vertical OK, indefinite hold not |
+
+**For our UUU:** analogous mean uprightness \(\bar c = \tfrac13\sum_i\cos\phi_i\) (world angles, θ=0 upright) with switch \(\bar c > 0.9\) ≈ mean |φ| ≲ 25.8°. **Do not use as the sole gate** — fawraw measured basin is ≤0.1 rad / ~0 ω; Mon's 0.9 is a *delivery* meter for swing, not a proven triple catch RoA. Prefer: enter on **measured basin ∩ energy ∩ low-ω** (17:07 / 17:33); treat \(\bar c>0.9\) as an optional *progress* soft-landing cue on the swing net.
+
+**Hold choice:** given Mon's SMC chatter on Acrobot, prefer **LQR / CLF-RL / RL hold (slot B)** over SMC for cart-triple unless we add a chatter-robust sliding law. Rank #1 (split nets) unchanged.
+
+#### ResearchSquare 2026 — first *cart-triple* LQR numeric cookbook
+
+Closest published **serial cart-triple upright LQR** with open Q/R / force numbers (stabilization only — not swing-up; still the right hold-half teacher):
+
+| Case | \(Q_\theta\) diag | \(R\) | Settle \(\theta_1\) | Notes |
+|---|---|---|---|---|
+| LQR-1 | 10 | 0.01 | ~4.2 s | Slow / gentle |
+| **LQR-2 baseline** | **100** | **0.01** | **~2.8 s** | Reported baseline |
+| Hot | →1000 | 0.01 | ~70% faster vs Q=10 | Diminishing returns **beyond \(Q_\theta\approx 200\)** |
+
+Other locks from the same preprint:
+
+- Peak force ≈ **18 N** in the first 0.5 s for simultaneous small 3-angle ICs (~±5° class); sat ±50 N never hit.
+- Linear LQR **fails beyond ~±15°** (actuator sat + linearization) — need nonlinear / RL outside that cone.
+- Controllability: full-rank Kalman on 8-state linearization about UUU with single cart force.
+
+**Steal for hold half (when coding two-policy / LQR catch):**
+
+1. Start Riccati with \(Q_\theta\sim 100\), \(R\sim 0.01\), cart-pos weight ≪ angle weights; retune on our \(m_c,m_i,\ell_i\) (do not copy K blindly).
+2. Train / gate **hold ICs inside ~0.1–0.26 rad** (fawraw basin ∪ LQR validity) — matches "widen catcher before soft-landing" (11:06 / m4).
+3. Peak-18 N on a similar mass scale **re-confirms forceLimit 40–50 is ample for hold**; still demote 80–100 (Glück+Baek+this).
+4. Pair with CLF-RL \(r_V+r_{\Delta V}\) (18:36) using the LQR Riccati quadratic as \(V\) once linearized.
+
+#### Soft-landing **numeric pack** (fills empty fawraw M4 coefs)
+
+fawraw still has **no** soft-landing implementation (CDN `m4_findings.md` unchanged: plan only — arrive slow + cart-centred). Compose a starter from published pieces already adjacent in this doc — **not** invented weights:
+
+| Term | Starter | Source |
+|---|---|---|
+| Angle calm near UUU | Baek \(e(\dot\theta)=\alpha_e+(1-\alpha_e)\exp(-c_e\dot\theta^2)\), \(\alpha_e=0.50\), \(c_e=0.09\); take **min** over links | Baek EAAI 2024 (already in product) |
+| Rate product (Lim lineage) | \(R_\omega=\exp(-0.02\|\omega\|)\) per link | MDPI Machines 2025 double / Lim cousin |
+| Additive near-upright brake | \(-0.05\,\dot\theta^2\) (scale to 3 links) once \(\bar c>0.9\) | airo7 saturated-E PPO (17:07) |
+| Cart centre | Baek \(g(x)\) with \(c_g=0.57\) **or** Lim \(R_y=\exp(-0.3\|y\|)\) | Already locked |
+| Delivery gate (swing→hold) | \(\bar c>0.9\) **and** \(\|\omega\|_\infty < \omega_{\mathrm{catch}}\) **and** \(\|x\|\) small; latch + hysteresis exit | Mon 0.9 + fawraw vel gate + 2606.22145 |
+| Action smoothness | LPF \(\tau\approx 0.3\) first; ASAP \(\lambda_T\) if still bangy | 15:42 / 17:33 |
+
+**Order of operations (unchanged):** (1) widen catcher init_noise / nonzero ω / off-centre x, (2) measure basin, (3) add soft-landing pack on **swing** only near target, (4) hand off with tol ≤ measured basin (never code default 0.3).
+
+#### Still empty / unchanged
+
+- fawraw M4 soft-landing **implementation**: still absent (we now have a *starter pack* from cousins; no fawraw ground truth).
+- Serial cart-triple **classical energy bang-bang** coeffs: still none (Glück=feedforward; Xin/Fattahi/Dyad/EBERL = other plants).
+- Force 80–100: still demoted (now also by cart-triple LQR peak ~18 N).
+- Baek VER: no new multi-link / on-policy paper.
+- Rank: after v6/v7 cook, **split swing vs hold** still #1; **Mon \(\bar c>0.9\)** + **LQR Q_θ≈100/R≈0.01** + **soft-landing pack** join ASAP/E-gate/CLF-RL/catch-basin under P1 handoff.
+
+#### Amend recommended redesign (additions only)
+
+69. When coding handoff enter: optional Mon-style \(\bar c>0.9\) as a *swing delivery* cue, always AND'd with measured basin ≤0.1 rad + low-ω (+ optional E-gate); never replace the measured RoA with 0.9 alone.
+70. Hold classical catcher starter: cart-triple LQR with \(Q_\theta\sim 100\), \(R\sim 0.01\), ICs inside ~±15° / prefer ≤0.1 rad; escalate to CLF-RL / RL hold if linear RoA is too small.
+71. Soft-landing on swing near UUU: enable Baek \(c_e=0.09\) / Lim \(R_\omega\) / airo7 \(-0.05\omega^2\) **gated by** \(\bar c>0.9\) (or align threshold), plus cart centre — before inventing new coefs.
+72. Prefer LQR/CLF-RL hold over Mon SMC for triple (SMC chatter on Acrobot).
+73. Rank unchanged: **two-policy swing↔hold** still highest-ROI unimplemented.
+
+**No code this fire** (overnight owns train / B v7b / C v7; wait for green-light / overnight ask). NEED_USER_PING no.
