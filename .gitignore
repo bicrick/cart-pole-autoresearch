@@ -55,5 +55,8 @@ policies/tqc-triple-uuu-smoke_best/
 # Local TB archives (never commit)
 runs_archive/
 
+# Vendor reference (fawraw clone; do not merge into train/)
+vendor/
+
 # Keep BC warm-start checkpoint (small)
 !policies/bc-lqr-uuu.pt

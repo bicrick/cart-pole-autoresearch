@@ -38,6 +38,11 @@ export function atGoal(state, goalId, cosThresh = 0.95) {
   return a1 > cosThresh && a2 > cosThresh && a3 > cosThresh;
 }
 
+export function equilibriumState(goalId) {
+  const [th1, th2, th3] = GOAL_ANGLES[goalId] ?? GOAL_ANGLES.DDD;
+  return { x: 0, xd: 0, th1, th1d: 0, th2, th2d: 0, th3, th3d: 0 };
+}
+
 export function ghostTips(cartX, goalId, constants) {
   const [th1, th2, th3] = GOAL_ANGLES[goalId] ?? GOAL_ANGLES.UUU;
   const l1 = constants.poleLength1;

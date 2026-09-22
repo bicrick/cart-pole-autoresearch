@@ -27,7 +27,24 @@ for p in (_ROOT, _TRAIN):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from envs.triple_gym import make_triple_uuu_env  # noqa: E402
+from envs.triple_vec import make_triple_uuu_vec  # noqa: E402
+from goals_triple import GOAL_IDS, parse_goal  # noqa: E402
+from tqc_bc_anchor import TQCWithBCAnchor  # noqa: E402
+from tqc_ver import VERReplayBuffer  # noqa: E402
+
+
+def resolve_device(name: str) -> str:
+    """auto → cuda, else Apple Silicon MPS, else cpu."""
+    import torch
+
+    if name and name != "auto":
+        return name
+    if torch.cuda.is_available():
+        return "cuda"
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 def _parse_arch(s: str) -> list[int]:
@@ -36,11 +53,17 @@ def _parse_arch(s: str) -> list[int]:
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="TQC UUU hold — fawraw M2 recipe (quiet-basin near_target)"
+        description="TQC hold — fawraw M2 recipe, one Lim specialist (default UUU)"
     )
     # fawraw m2_upright_tqc.yaml defaults
     p.add_argument("--total-steps", type=int, default=150_000)
-    p.add_argument("--learning-starts", type=int, default=1_000)
+    p.add_argument(
+        "--learning-starts",
+        type=int,
+        default=0,
+        help="SB3 random-action warmup. Must be 0 when BC-warm-starting a hold "
+        "or the first 1k steps are ±Fmax and knock UUU over.",
+    )
     p.add_argument("--buffer-size", type=int, default=200_000)
     p.add_argument("--batch-size", type=int, default=256)
     p.add_argument("--lr", type=float, default=3e-4)
@@ -60,6 +83,15 @@ def parse_args():
         default=True,
         help="Inelastic walls ON (our plant). Lim/fawraw use rail limits; we use walls as training wheels.",
     )
+    p.add_argument(
+        "--goal",
+        "--target-ep",
+        dest="goal",
+        type=str,
+        default="UUU",
+        help="Lim specialist target (DDD…UUU or 0..7). Default UUU. "
+        "Not a one-hot UVFA — one net per EP.",
+    )
     p.add_argument("--init-mode", type=str, default="near_target")
     p.add_argument(
         "--init-noise",
@@ -67,15 +99,75 @@ def parse_args():
         default=0.05,
         help="Quiet-basin angle/cart half-range; rates xd/ω FIXED ±0.01 (fawraw M2).",
     )
+    p.add_argument(
+        "--init-noise-min",
+        type=float,
+        default=0.0,
+        help="If >0 and < --init-noise, train ICs sample the half-range uniformly in "
+        "[min, max]. Eval env stays at fixed --init-noise. W2 mix: 0.02 with max 0.04.",
+    )
     p.add_argument("--hang-frac", type=float, default=0.0, help="M2 hold: 0 (no hang mix)")
     p.add_argument("--wide-frac", type=float, default=0.0, help="M2 hold: 0 (no wide mix)")
     p.add_argument("--progress-w", type=float, default=0.0,
-                    help="M2 hold: 0 (fawraw progress_reward_coef=0; no swing progress)")
+                    help="M2 hold: 0. M4 swing: 1, on weighted error² (not cos-align).")
     p.add_argument("--cart-barrier-coef", type=float, default=10.0)
+    p.add_argument(
+        "--reward-mode",
+        type=str,
+        default="product",
+        help="product = Lim hold. m4 = fawraw swing cost (error² + vel + cart + barrier).",
+    )
+    p.add_argument("--vel-cost-coef", type=float, default=0.02,
+                    help="M4 swing only. Probe yaml 0.02.")
+    p.add_argument("--cart-cost-coef", type=float, default=0.2,
+                    help="M4 swing only. Probe yaml 0.2.")
+    p.add_argument("--transition-bonus", type=float, default=0.0,
+                    help="M4 one-shot arrival bonus. Probe yaml 200. Hold stays 0.")
+    p.add_argument("--transition-tol", type=float, default=0.3,
+                    help="M4 arrival tolerance (rad). Probe yaml 0.3. Enter-gate stays 0.03.")
+    p.add_argument("--transition-steps", type=int, default=100,
+                    help="Consecutive in-tol steps before the M4 bonus. Probe yaml 100.")
     p.add_argument("--alpha-th", type=float, default=0.5)
     p.add_argument("--w-up", type=float, default=5.0)
     p.add_argument("--w-down", type=float, default=1.0)
+    p.add_argument(
+        "--sparse-bonus",
+        type=float,
+        default=1.0,
+        help="W1 stay pressure: add this when at_goal. 0 disables.",
+    )
+    p.add_argument(
+        "--log-std-init",
+        type=float,
+        default=-4.0,
+        help="Actor log_std pin after BC / at init. -4 → σ≈0.018 on [-1,1].",
+    )
+    p.add_argument(
+        "--ent-coef",
+        type=str,
+        default="0.001",
+        help="TQC entropy temperature. Float or 'auto'. Hold recipe: small fixed.",
+    )
+    p.add_argument(
+        "--target-entropy",
+        type=str,
+        default="auto",
+        help="Only used when --ent-coef auto. Hold: try -0.1.",
+    )
+    p.add_argument(
+        "--actor-freeze-steps",
+        type=int,
+        default=20_000,
+        help="Keep BC actor frozen while critics learn. 0 = never freeze.",
+    )
     p.add_argument("--n-envs", type=int, default=1)
+    p.add_argument(
+        "--gradient-steps",
+        type=int,
+        default=1,
+        help="TQC updates per vec-step. Set equal to --n-envs to keep 1 update per env-step.",
+    )
+    p.add_argument("--env-device", type=str, default="", help="Physics device (default: same as --device)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--logdir", type=str, default="runs")
@@ -91,6 +183,36 @@ def parse_args():
         default="",
         help="Optional BC .pt (policies/bc-lqr-uuu.pt) to warm-start TQC actor (latent_pi + mu). "
         "log_std left at TQC init. Arch must match --policy-arch.",
+    )
+    p.add_argument(
+        "--bc-reg-coef",
+        type=float,
+        default=0.0,
+        help="TD3+BC-style MSE to the snapped BC actor, scaled by |Q|. "
+        "0 disables. Hold stay after unfreeze: 2.5.",
+    )
+    p.add_argument(
+        "--resume-from",
+        type=str,
+        default="",
+        help="Load an existing TQC zip and continue (W2+). Does not overwrite --checkpoint.",
+    )
+    p.add_argument(
+        "--ver",
+        action="store_true",
+        help="Baek VER: store left–right flipped (obs, action) in the replay buffer.",
+    )
+    p.add_argument(
+        "--hard-ic-path",
+        type=str,
+        default="",
+        help="NPZ of early-death 8-D ICs (train/hard_ics.py). Train env only.",
+    )
+    p.add_argument(
+        "--hard-ic-frac",
+        type=float,
+        default=0.0,
+        help="Fraction of train resets drawn from --hard-ic-path (+ mirrors).",
     )
     return p.parse_args()
 
@@ -145,11 +267,76 @@ class AtGoalRateCallback:
         return _CB()
 
 
-def load_bc_into_actor(model, bc_path: str) -> dict:
+def freeze_actor_callback(freeze_steps: int, log_std_init: float):
+    from stable_baselines3.common.callbacks import BaseCallback
+
+    class _Freeze(BaseCallback):
+        """Train critics on BC hold data before touching the actor."""
+
+        def __init__(self):
+            super().__init__(verbose=1)
+            self.freeze_steps = int(freeze_steps)
+            self.log_std_init = float(log_std_init)
+            self._frozen = False
+
+        def _actor_params(self):
+            return list(self.model.actor.parameters())
+
+        def _freeze(self) -> None:
+            for p in self._actor_params():
+                p.requires_grad = False
+            self._frozen = True
+            print(
+                f"[hold] actor FROZEN for first {self.freeze_steps} steps (critics only)",
+                flush=True,
+            )
+
+        def _unfreeze(self) -> None:
+            for p in self._actor_params():
+                p.requires_grad = True
+            pin_actor_log_std(self.model, self.log_std_init)
+            self._frozen = False
+            print(f"[hold] actor UNFROZEN at step {self.num_timesteps}", flush=True)
+
+        def _on_training_start(self) -> None:
+            if self.freeze_steps > 0:
+                self._freeze()
+
+        def _on_step(self) -> bool:
+            if self._frozen and self.num_timesteps >= self.freeze_steps:
+                self._unfreeze()
+            return True
+
+    return _Freeze()
+
+
+def pin_actor_log_std(model, log_std_init: float) -> None:
+    """Force near-deterministic actions: log_std(s) ≈ log_std_init.
+
+    SB3 uses a Linear log_std head. Random init ≈ σ=1 on [-1,1] and immediately
+    knocks a BC/LQR hold over. Zero the weights and set the bias.
+    """
+    import torch
+
+    actor = model.policy.actor
+    log_std = getattr(actor, "log_std", None)
+    if log_std is None:
+        return
+    with torch.no_grad():
+        if hasattr(log_std, "weight") and log_std.weight is not None:
+            log_std.weight.zero_()
+        if hasattr(log_std, "bias") and log_std.bias is not None:
+            log_std.bias.fill_(float(log_std_init))
+        elif torch.is_tensor(log_std):
+            log_std.fill_(float(log_std_init))
+    print(f"[hold] pinned actor log_std ≈ {log_std_init} (σ≈{2.71828 ** float(log_std_init):.4f})", flush=True)
+
+
+def load_bc_into_actor(model, bc_path: str, log_std_init: float = -4.0) -> dict:
     """Warm-start TQC actor (latent_pi + mu) from BCActor .pt checkpoint.
 
     BC saves Sequential net.0/2/4 (Linear layers); TQC Actor has latent_pi.0/2 + mu.
-    log_std is left unchanged (exploration). Returns a small report dict.
+    log_std is pinned low so the cloned hold is not destroyed by σ≈1 noise.
     """
     import torch
 
@@ -207,6 +394,7 @@ def load_bc_into_actor(model, bc_path: str) -> dict:
             actor_sd[dst_k].copy_(bc_sd[src_k])
             mapped.append(f"{src_k}→{dst_k}")
         actor.load_state_dict(actor_sd)
+        pin_actor_log_std(model, log_std_init)
 
     report = {
         "bc_path": str(path),
@@ -214,7 +402,7 @@ def load_bc_into_actor(model, bc_path: str) -> dict:
         "obs_dim": payload.get("obs_dim"),
         "act_dim": payload.get("act_dim"),
         "mapped": mapped,
-        "left_untouched": ["log_std.weight", "log_std.bias"],
+        "log_std_init": float(log_std_init),
     }
     print(f"[warm-start] loaded BC actor from {path}", flush=True)
     print(f"[warm-start] mapped {len(mapped)} tensors: {mapped}", flush=True)
@@ -230,17 +418,19 @@ def main() -> None:
         args.save_freq = 5_000
         args.eval_freq = 1_000
         args.n_eval_episodes = 3
-        args.n_envs = 1
-        args.device = "cpu"
+        args.n_envs = max(1, min(int(args.n_envs), 4))
+        args.gradient_steps = min(int(args.gradient_steps), args.n_envs)
+
+    args.device = resolve_device(args.device)
+    args.env_device = resolve_device(args.env_device or args.device)
+    goal_id = parse_goal(args.goal)
+    goal_name = GOAL_IDS[goal_id]
 
     from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
-    from stable_baselines3.common.monitor import Monitor
-    from stable_baselines3.common.vec_env import DummyVecEnv
-    from sb3_contrib import TQC
 
     walls_tag = "walls" if args.track_walls else "nowalls"
     run_name = args.run_name or (
-        f"m2-hold-uuu-f{args.force_limit:g}-{walls_tag}-"
+        f"m2-hold-{goal_name.lower()}-f{args.force_limit:g}-{walls_tag}-"
         f"nt{args.init_noise:g}-tqc"
     )
     log_path = Path(args.logdir) / run_name
@@ -248,14 +438,23 @@ def main() -> None:
     ckpt_path = Path(args.checkpoint)
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _make():
-        env = make_triple_uuu_env(
+    def _make_vec(
+        n: int,
+        seed: int,
+        noise_min: float = 0.0,
+            hard_ic_path: str = "",
+            hard_ic_frac: float = 0.0,
+        ):
+        return make_triple_uuu_vec(
+            goal=goal_name,
+            n_envs=n,
             force_limit=args.force_limit,
             max_steps=args.max_steps,
             track_limit=args.track_limit,
             track_walls=bool(args.track_walls),
             init_mode=args.init_mode,
             init_noise=args.init_noise,
+            init_noise_min=float(noise_min),
             hang_frac=args.hang_frac,
             wide_frac=args.wide_frac,
             progress_w=args.progress_w,
@@ -263,25 +462,58 @@ def main() -> None:
             alpha_th=args.alpha_th,
             w_up=args.w_up,
             w_down=args.w_down,
-            device="cpu",
-            seed=args.seed,
+            sparse_bonus=args.sparse_bonus,
+            reward_mode=args.reward_mode,
+            vel_cost_coef=args.vel_cost_coef,
+            cart_cost_coef=args.cart_cost_coef,
+            transition_bonus=args.transition_bonus,
+            transition_tol=args.transition_tol,
+            transition_steps=args.transition_steps,
+            device=args.env_device,
+            seed=seed,
+            hard_ic_path=hard_ic_path,
+            hard_ic_frac=hard_ic_frac,
+            # fawraw M4: bottom swing-up must not angle-fall at step 0.
+            # Near-target hold keeps the fall kill.
+            angle_fall=(args.init_mode or "near_target").lower() != "bottom",
         )
-        return Monitor(env)
 
-    env = DummyVecEnv([_make for _ in range(max(1, args.n_envs))])
-    eval_env = DummyVecEnv([_make])
+    env = _make_vec(
+        max(1, args.n_envs),
+        args.seed,
+        noise_min=args.init_noise_min,
+        hard_ic_path=args.hard_ic_path,
+        hard_ic_frac=float(args.hard_ic_frac),
+    )
+    eval_env = _make_vec(1, args.seed + 1, noise_min=0.0)
+    if args.hard_ic_path:
+        print(
+            f"[hold] hard-IC oversample path={args.hard_ic_path} "
+            f"frac={args.hard_ic_frac:g} (eval env uniform)",
+            flush=True,
+        )
 
     # Shared [128,128] for pi and qf (fawraw M2); n_critics / n_quantiles via policy_kwargs
     policy_kwargs = dict(
         net_arch=dict(pi=_parse_arch(args.policy_arch), qf=_parse_arch(args.critic_arch)),
         n_critics=args.n_critics,
         n_quantiles=args.n_quantiles,
+        log_std_init=float(args.log_std_init),
     )
+    try:
+        ent_coef: float | str = float(args.ent_coef)
+    except ValueError:
+        ent_coef = args.ent_coef
+    try:
+        target_entropy: float | str = float(args.target_entropy)
+    except ValueError:
+        target_entropy = args.target_entropy
 
     meta = {
         "algo": "TQC",
-        "goal": "UUU",
-        "recipe": "fawraw M2 upright hold (m2_upright_tqc.yaml) on our plant",
+        "goal": goal_name,
+        "goal_id": goal_id,
+        "recipe": "fawraw M2 hold (m2_upright_tqc.yaml) + Lim one specialist per EP",
         "source": "fawraw/triple-pendulum-sim2real + Lim/Ju/Lee KIEE 2025 product reward",
         "hypers": {
             "lr": args.lr,
@@ -299,14 +531,32 @@ def main() -> None:
             "track_limit": args.track_limit,
             "max_steps": args.max_steps,
             "total_steps": args.total_steps,
-            "reward": "product",
+            "n_envs": args.n_envs,
+            "gradient_steps": args.gradient_steps,
+            "device": args.device,
+            "env_device": args.env_device,
+            "reward": args.reward_mode,
+            "vel_cost_coef": args.vel_cost_coef,
+            "cart_cost_coef": args.cart_cost_coef,
+            "transition_bonus": args.transition_bonus,
+            "transition_tol": args.transition_tol,
+            "transition_steps": args.transition_steps,
+            "sparse_bonus": args.sparse_bonus,
+            "log_std_init": args.log_std_init,
+            "ent_coef": args.ent_coef,
+            "bc_reg_coef": args.bc_reg_coef,
+            "ver": bool(args.ver),
+            "hard_ic_path": args.hard_ic_path or None,
+            "hard_ic_frac": float(args.hard_ic_frac),
+            "resume_from": args.resume_from or None,
         },
         "init": {
             "mode": args.init_mode,
             "noise": args.init_noise,
+            "noise_min": args.init_noise_min,
             "hang_frac": args.hang_frac,
             "wide_frac": args.wide_frac,
-            "quiet_basin": "θ,x ±init_noise; xd,ω FIXED ±0.01; fall-kill |θ|>0.6",
+            "quiet_basin": "θ ~ target ±init_noise; x ±init_noise; xd,ω FIXED ±0.01; fall UP 0.6 / DOWN 1.5",
             "progress_w": args.progress_w,
         },
         "eval_primary": {
@@ -315,7 +565,8 @@ def main() -> None:
         },
     }
     (log_path / "run_meta.json").write_text(json.dumps(meta, indent=2))
-    print("=== M2 UUU hold (fawraw) ===", flush=True)
+    print(f"=== M2 {goal_name} hold (fawraw M2 + Lim specialist) ===", flush=True)
+    print(f"device={args.device} env_device={args.env_device} n_envs={args.n_envs}", flush=True)
     print(json.dumps(meta, indent=2), flush=True)
     print(
         "Primary metrics: rollout/success_rate, rollout/at_goal, eval/success_rate "
@@ -323,31 +574,66 @@ def main() -> None:
         flush=True,
     )
 
-    model = TQC(
-        "MlpPolicy",
-        env,
-        learning_rate=args.lr,
-        buffer_size=args.buffer_size,
-        learning_starts=args.learning_starts,
-        batch_size=args.batch_size,
-        tau=args.tau,
-        gamma=args.gamma,
-        top_quantiles_to_drop_per_net=args.top_quantiles_to_drop,
-        policy_kwargs=policy_kwargs,
-        verbose=1,
-        seed=args.seed,
-        device=args.device,
-        tensorboard_log=str(Path(args.logdir)),
-    )
-
-    if args.bc_checkpoint:
-        ws = load_bc_into_actor(model, args.bc_checkpoint)
-        meta["warm_start"] = ws
-        (log_path / "run_meta.json").write_text(json.dumps(meta, indent=2))
+    resume = (args.resume_from or "").strip()
+    if resume:
+        load = Path(resume)
+        load_s = str(load.with_suffix("") if load.suffix == ".zip" else load)
+        model = TQCWithBCAnchor.load(load_s, env=env, device=args.device)
+        model.bc_reg_coef = float(args.bc_reg_coef)
+        model.learning_starts = int(args.learning_starts)
+        model.gradient_steps = max(1, int(args.gradient_steps))
+        model.batch_size = int(args.batch_size)
+        model.tensorboard_log = str(Path(args.logdir))
+        print(f"[hold] resumed TQC from {resume}", flush=True)
+        pin_actor_log_std(model, args.log_std_init)
+        if args.ver:
+            model.replay_buffer = VERReplayBuffer(
+                model.buffer_size,
+                model.observation_space,
+                model.action_space,
+                device=model.device,
+                n_envs=model.n_envs,
+            )
+            print("[hold] VER replay buffer attached after resume", flush=True)
+    else:
+        rb_kwargs: dict[str, Any] = {}
+        if args.ver:
+            rb_kwargs["replay_buffer_class"] = VERReplayBuffer
+        model = TQCWithBCAnchor(
+            "MlpPolicy",
+            env,
+            learning_rate=args.lr,
+            buffer_size=args.buffer_size,
+            learning_starts=args.learning_starts,
+            batch_size=args.batch_size,
+            tau=args.tau,
+            gamma=args.gamma,
+            top_quantiles_to_drop_per_net=args.top_quantiles_to_drop,
+            gradient_steps=max(1, int(args.gradient_steps)),
+            ent_coef=ent_coef,
+            target_entropy=target_entropy,
+            policy_kwargs=policy_kwargs,
+            verbose=1,
+            seed=args.seed,
+            device=args.device,
+            tensorboard_log=str(Path(args.logdir)),
+            bc_reg_coef=float(args.bc_reg_coef),
+            **rb_kwargs,
+        )
+        pin_actor_log_std(model, args.log_std_init)
+        if args.ver:
+            print("[hold] VER replay flip ON (each transition stored + mirrored)", flush=True)
+        if args.bc_checkpoint:
+            ws = load_bc_into_actor(model, args.bc_checkpoint, log_std_init=args.log_std_init)
+            meta["warm_start"] = ws
+            (log_path / "run_meta.json").write_text(json.dumps(meta, indent=2))
+    if float(args.bc_reg_coef) > 0:
+        model.snapshot_actor_anchor()
 
     save_every = max(args.save_freq // max(args.n_envs, 1), 1)
     eval_every = max(args.eval_freq // max(args.n_envs, 1), 1)
     callbacks = [
+        freeze_actor_callback(args.actor_freeze_steps, args.log_std_init),
         AtGoalRateCallback.make(log_every=5 if not args.smoke else 1, verbose=1),
         CheckpointCallback(
             save_freq=save_every,

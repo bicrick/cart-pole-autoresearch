@@ -21,17 +21,41 @@ from physics_triple import load_constants, observe, step
 STATE_DIM = 8  # x, xd, th1, th1d, th2, th2d, th3, th3d
 
 
+def _wrap_angle(a: np.ndarray) -> np.ndarray:
+    return (a + np.pi) % (2.0 * np.pi) - np.pi
+
+
+def equilibrium_state(goal: str = "UUU") -> np.ndarray:
+    """8-D plant state at a named equilibrium. UUU is the origin."""
+    from goals_triple import GOAL_ANGLES, parse_goal
+
+    angles = GOAL_ANGLES[parse_goal(goal)].detach().cpu().numpy().astype(np.float64)
+    z = np.zeros(STATE_DIM, dtype=np.float64)
+    z[2], z[4], z[6] = angles
+    return z
+
+
+def state_error(state: np.ndarray, z_eq: np.ndarray) -> np.ndarray:
+    """Deviation from equilibrium. Angles wrapped into (-π, π]."""
+    e = np.asarray(state, dtype=np.float64).reshape(-1)[:STATE_DIM] - np.asarray(z_eq, dtype=np.float64)
+    for i in (2, 4, 6):
+        e[i] = float(_wrap_angle(np.array(e[i])))
+    return e
+
+
 def _uuu_eq() -> np.ndarray:
-    return np.zeros(STATE_DIM, dtype=np.float64)
+    return equilibrium_state("UUU")
 
 
 def _finite_diff_AB(
     constants: dict,
+    z_eq: np.ndarray | None = None,
     eps_state: float = 1e-5,
     eps_force: float = 1e-3,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Discrete A,B around UUU: z_{t+1} = A z_t + B u_t (u in Newtons)."""
-    z0 = torch.zeros(1, STATE_DIM, dtype=torch.float64)
+    """Discrete A,B around z_eq: δ_{t+1} = A δ_t + B u_t (u in Newtons)."""
+    eq = np.zeros(STATE_DIM, dtype=np.float64) if z_eq is None else np.asarray(z_eq, dtype=np.float64)
+    z0 = torch.tensor(eq, dtype=torch.float64).reshape(1, STATE_DIM)
     u0 = torch.zeros(1, dtype=torch.float64)
     consts = dict(constants)
     # Keep forceLimit high during linearization so clamp doesn't bite.
@@ -105,17 +129,19 @@ def build_Q(
 
 @dataclass
 class LQRUUU:
-    """u = clip(-K @ z, ±force_limit). z is the 8-D plant state."""
+    """u = clip(-K @ (z - z_eq), ±force_limit). z is the 8-D plant state."""
 
     K: np.ndarray
     force_limit: float = 40.0
+    z_eq: Optional[np.ndarray] = None
     A: Optional[np.ndarray] = None
     B: Optional[np.ndarray] = None
     P: Optional[np.ndarray] = None
 
     def force(self, state: np.ndarray) -> float:
-        z = np.asarray(state, dtype=np.float64).reshape(-1)[:STATE_DIM]
-        u = float((-self.K @ z).ravel()[0])
+        z_eq = np.zeros(STATE_DIM) if self.z_eq is None else self.z_eq
+        e = state_error(state, z_eq)
+        u = float((-self.K @ e).ravel()[0])
         return float(np.clip(u, -self.force_limit, self.force_limit))
 
     def action_normed(self, state: np.ndarray) -> np.ndarray:
@@ -138,16 +164,18 @@ def design_lqr_uuu(
     q_xd: float = 1.0,
     q_omega: float = 1.0,
     constants: Optional[dict] = None,
+    goal: str = "UUU",
 ) -> LQRUUU:
     consts = dict(constants or load_constants())
     consts["forceLimit"] = float(force_limit)
-    A, B = _finite_diff_AB(consts)
+    z_eq = equilibrium_state(goal)
+    A, B = _finite_diff_AB(consts, z_eq=z_eq)
     Q = build_Q(q_x=q_x, q_xd=q_xd, q_theta=q_theta, q_omega=q_omega)
     R = np.array([[float(r)]], dtype=np.float64)
     P = solve_dare(A, B, Q, R)
     S = R + B.T @ P @ B
     K = np.linalg.solve(S, B.T @ P @ A)
-    return LQRUUU(K=K, force_limit=float(force_limit), A=A, B=B, P=P)
+    return LQRUUU(K=K, force_limit=float(force_limit), z_eq=z_eq, A=A, B=B, P=P)
 
 
 def state_from_env(env) -> np.ndarray:

@@ -11,10 +11,10 @@ export const TRIPLE_CONSTANTS = {
   jointDamping1: 0.002,
   jointDamping2: 0.002,
   jointDamping3: 0.002,
-  forceLimit: 20.0,
+  forceLimit: 40.0,
   dt: 0.008333333333333333,
   hidden: 128,
-  obsDim: 25,
+  obsDim: 11,
   nLinks: 3,
   obsLow: [
     -4.0, -6.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -12.0, -12.0, -12.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0,

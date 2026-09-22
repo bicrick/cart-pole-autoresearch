@@ -13,6 +13,28 @@ export const HANGING_TRIPLE = {
   th3d: 0.12,
 };
 
+export const UPRIGHT_TRIPLE = {
+  x: 0,
+  xd: 0,
+  th1: 0,
+  th1d: 0,
+  th2: 0,
+  th2d: 0,
+  th3: 0,
+  th3d: 0,
+};
+
+export const DOWN_TRIPLE = {
+  x: 0,
+  xd: 0,
+  th1: Math.PI,
+  th1d: 0,
+  th2: Math.PI,
+  th2d: 0,
+  th3: Math.PI,
+  th3d: 0,
+};
+
 export function createFalloff(constants, hanging = HANGING) {
   const track = constants.trackLimit ?? 2.4;
   const g = constants.gravity ?? 9.81;

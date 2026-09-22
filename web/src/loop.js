@@ -8,6 +8,7 @@ export function startLoop({
   plant,
   input,
   policy,
+  getPolicy,
   constants,
   getGoal,
   getPolicyOn,
@@ -16,8 +17,9 @@ export function startLoop({
   initialState,
   onFrame,
 }) {
-  let state = { ...(initialState || plant.hanging) };
-  const fall = createFalloff(constants, plant.hanging);
+  const spawn = initialState || plant.initialState || plant.hanging;
+  let state = { ...spawn };
+  const fall = createFalloff(constants, spawn);
   let last = performance.now();
   let acc = 0;
   const dtMs = (constants.dt ?? 1 / PHYS_HZ) * 1000;
@@ -35,14 +37,19 @@ export function startLoop({
     try {
       while (acc >= dtMs) {
         const started = typeof getStarted !== "function" || getStarted();
-        const control = started && fall.inControl();
+        if (!started) {
+          acc = 0;
+          break;
+        }
+        const control = fall.inControl();
         let extraQ = null;
         if (control && pointer.active && pointer.body) {
           extraQ = plant.grabForces(state, pointer.world, pointer.body, STIFFNESS, DAMPING, constants);
         }
         const obs = plant.normalizeObs(plant.conditionedObs(plant.observe(state), goalId), constants);
+        const actor = typeof getPolicy === "function" ? getPolicy() : policy;
         let force = 0;
-        if (control && policy && driving) force = policy.act(obs);
+        if (control && actor && driving) force = actor.act(obs);
         const manual = control && typeof getManualForce === "function" ? getManualForce() : 0;
         force = Math.max(-fmax, Math.min(fmax, force + manual));
         lastForce = control ? force : 0;

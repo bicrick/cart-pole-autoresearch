@@ -18,6 +18,26 @@ GOAL_INDEX = {name: i for i, name in enumerate(GOAL_IDS)}
 NUM_GOALS = len(GOAL_IDS)  # 8
 NUM_TRANSITIONS = NUM_GOALS * (NUM_GOALS - 1)  # 56
 
+
+def parse_goal(name_or_id) -> int:
+    """Accept 'UUU' / 'ddd' / 7 / '7'. Lim specialist index, not a one-hot UVFA."""
+    if isinstance(name_or_id, bool):
+        raise ValueError(f"invalid goal: {name_or_id!r}")
+    if isinstance(name_or_id, int):
+        i = int(name_or_id)
+        if 0 <= i < NUM_GOALS:
+            return i
+        raise ValueError(f"goal id {i} out of range 0..{NUM_GOALS - 1}")
+    s = str(name_or_id).strip()
+    if not s:
+        raise ValueError("empty goal")
+    key = s.upper()
+    if key in GOAL_INDEX:
+        return int(GOAL_INDEX[key])
+    if s.isdigit() or (s[0] == "-" and s[1:].isdigit()):
+        return parse_goal(int(s))
+    raise ValueError(f"unknown goal {name_or_id!r}; use one of {GOAL_IDS} or 0..7")
+
 # Target angles (th1*, th2*, th3*). U=0, D=π; bits th1|th2|th3 with D=0 U=1
 # in the GOAL_IDS order above (DDD=000 … UUU=111 under that bit map).
 _PI = math.pi
@@ -115,6 +135,14 @@ def mean_cos_align(state: torch.Tensor, goal_ids: torch.Tensor) -> torch.Tensor:
     a2 = angle_align(state[..., 4], angles[..., 1])
     a3 = angle_align(state[..., 6], angles[..., 2])
     return (a1 + a2 + a3) / 3.0
+
+
+def wrapped_angle_error(state: torch.Tensor, goal_ids: torch.Tensor) -> torch.Tensor:
+    """Wrapped θ − θ* for the three links, in (−π, π]. Shape [..., 3]."""
+    angles = goal_angles(goal_ids, device=state.device, dtype=state.dtype)
+    th = torch.stack((state[..., 2], state[..., 4], state[..., 6]), dim=-1)
+    delta = th - angles
+    return torch.atan2(torch.sin(delta), torch.cos(delta))
 
 
 def nearest_goal(state: torch.Tensor) -> torch.Tensor:
@@ -355,11 +383,61 @@ def goal_reward(
     return rew
 
 
+def m4_swing_reward(
+    state,
+    force,
+    goal_ids,
+    constants,
+    track_limit: float = 2.4,
+    w_up: float = 5.0,
+    w_down: float = 1.0,
+    cart_barrier_coef: float = 50.0,
+    vel_cost_coef: float = 0.02,
+    cart_cost_coef: float = 0.2,
+    progress_w: float = 1.0,
+    prev_state=None,
+    **_ignored,
+):
+    """fawraw M4 swing cost (probe_m4_ddd_udd.yaml), not the Lim product.
+
+    r = -(weighted angle error² + vel_cost + cart_cost + barrier + ctrl)
+        + progress_w * Δ(weighted error²).
+    The one-shot arrival bonus is applied by the env after this return.
+    Holds stay on product_reward.
+    """
+    err = wrapped_angle_error(state, goal_ids)
+    angles = goal_angles(goal_ids, device=state.device, dtype=state.dtype)
+    up = torch.isclose(angles, torch.zeros_like(angles), atol=1e-3)
+    weights = torch.where(
+        up,
+        torch.full_like(err, float(w_up)),
+        torch.full_like(err, float(w_down)),
+    )
+    ang_cost = (weights * err.square()).sum(dim=-1)
+    vel = state[..., 3].square() + state[..., 5].square() + state[..., 7].square()
+    vel_cost = float(vel_cost_coef) * vel
+    cart_cost = float(cart_cost_coef) * state[..., 0].square()
+    barrier = torch.zeros_like(ang_cost)
+    if cart_barrier_coef and cart_barrier_coef > 0 and track_limit > 0:
+        frac = (state[..., 0].abs() / float(track_limit)).clamp(max=1.0)
+        barrier = float(cart_barrier_coef) * frac.pow(8)
+    fl = float(constants["forceLimit"])
+    ctrl = 0.001 * (force / max(fl, 1e-6)).square()
+    rew = -(ang_cost + vel_cost + cart_cost + barrier + ctrl)
+    if progress_w and float(progress_w) > 0 and prev_state is not None:
+        prev_err = wrapped_angle_error(prev_state, goal_ids)
+        progress = (weights * (prev_err.square() - err.square())).sum(dim=-1)
+        rew = rew + float(progress_w) * progress
+    return rew
+
+
 def compute_reward(state, force, goal_ids, constants, reward_mode: str = "product", **kwargs):
-    """Dispatch product (Lim) or additive (legacy) reward."""
+    """Dispatch product (Lim hold), M4 swing cost, or additive (legacy) reward."""
     mode = (reward_mode or "product").lower()
     if mode == "product":
         return product_reward(state, force, goal_ids, constants, **kwargs)
+    if mode in ("m4", "m4_swing"):
+        return m4_swing_reward(state, force, goal_ids, constants, **kwargs)
     return goal_reward(state, force, goal_ids, constants, **kwargs)
 
 

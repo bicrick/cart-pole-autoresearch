@@ -3,6 +3,7 @@ import { createInput, createKeys } from "./input.js";
 import { createCamera, draw } from "./render.js";
 import { startLoop } from "./loop.js";
 import { PLANTS, plantFromHash, nextPlantId } from "./plants.js";
+import { equilibriumState } from "./goals-triple.js";
 import { bindTheme } from "./theme.js";
 
 const page = document.querySelector(".page");
@@ -24,6 +25,8 @@ let policyReady = false;
 let started = false;
 let loop = null;
 let constants = plant.constants;
+let activePolicy = null;
+const specialistCache = new Map();
 
 function setGoal(goal) {
   if (!plant.goalIds.includes(goal)) return;
@@ -33,6 +36,39 @@ function setGoal(goal) {
     btn.classList.toggle("is-active", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
+  if (plant.specialists) useSpecialist(goal);
+}
+
+async function useSpecialist(goal) {
+  const url = plant.specialists?.[goal];
+  if (!url) {
+    if (currentGoal !== goal) return;
+    activePolicy = null;
+    policyReady = false;
+    setPolicyOn(false);
+    setStatus("no hold yet");
+    if (loop) loop.setState(equilibriumState(goal));
+    return;
+  }
+  if (!specialistCache.has(url)) specialistCache.set(url, loadPolicy(url));
+  try {
+    const next = await specialistCache.get(url);
+    if (currentGoal !== goal) return;
+    const dim = next.spec.obs_dim ?? next.spec.physics?.obsDim;
+    activePolicy = dim === plant.obsDim ? next : null;
+    policyReady = Boolean(activePolicy);
+    setPolicyOn(started && policyReady);
+    if (loop && policyReady) loop.setState(equilibriumState(goal));
+    const hidden = next.spec.hidden ?? "";
+    setStatus(policyReady ? `${goal} hold · ${hidden}` : `policy obs_dim=${dim}`);
+  } catch (err) {
+    console.warn(err);
+    if (currentGoal !== goal) return;
+    activePolicy = null;
+    policyReady = false;
+    setPolicyOn(false);
+    setStatus("physics only");
+  }
 }
 
 function renderGoalButtons() {
@@ -141,16 +177,18 @@ async function loadPlantPolicy(next) {
 function startPlantLoop(nextPolicy, nextConstants) {
   if (loop) loop.stop();
   constants = nextConstants;
+  activePolicy = nextPolicy;
   loop = startLoop({
     plant,
     input,
     policy: nextPolicy,
+    getPolicy: () => activePolicy,
     constants,
     getGoal: () => currentGoal,
     getPolicyOn: () => policyOn,
     getStarted: () => started,
     getManualForce: () => (started ? keys.manualForce(constants.forceLimit ?? 20) : 0),
-    initialState: plant.hanging,
+    initialState: plant.initialState || plant.hanging,
     onFrame({ state, tips, pointer, force, goalId, policyOn: driving, visual }) {
       draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, driving, visual, plant.ghostTips);
       const now = performance.now();
@@ -170,6 +208,11 @@ async function switchPlant(id) {
   applyPlantChrome();
   renderGoalButtons();
   setStatus("loading");
+  if (plant.specialists) {
+    await useSpecialist(currentGoal);
+    startPlantLoop(activePolicy, { ...plant.constants });
+    return;
+  }
   const { nextPolicy, nextConstants, ready } = await loadPlantPolicy(plant);
   policyReady = ready;
   setPolicyOn(started && ready);
@@ -195,10 +238,16 @@ let hudAt = 0;
 async function boot() {
   applyPlantChrome();
   renderGoalButtons();
-  const { nextPolicy, nextConstants, ready } = await loadPlantPolicy(plant);
-  policyReady = ready;
-  setPolicyOn(false);
-  startPlantLoop(nextPolicy, nextConstants);
+  if (plant.specialists) {
+    await useSpecialist(currentGoal);
+    setPolicyOn(false);
+    startPlantLoop(activePolicy, { ...plant.constants });
+  } else {
+    const { nextPolicy, nextConstants, ready } = await loadPlantPolicy(plant);
+    policyReady = ready;
+    setPolicyOn(false);
+    startPlantLoop(nextPolicy, nextConstants);
+  }
 
   const themeBtn = document.getElementById("theme-toggle");
   if (themeBtn) bindTheme(page, themeBtn);

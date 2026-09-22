@@ -19,6 +19,15 @@ function tanhVec(x) {
   return out;
 }
 
+function reluVec(x) {
+  const out = new Array(x.length);
+  for (let i = 0; i < x.length; i += 1) {
+    const v = x[i];
+    out[i] = v > 0 ? v : 0;
+  }
+  return out;
+}
+
 export function createPolicy(spec) {
   const layers = spec.layers;
   const forceLimit = spec.force_limit ?? spec.physics?.forceLimit ?? 20;
@@ -32,6 +41,8 @@ export function createPolicy(spec) {
           h = matvec(layer.weight, layer.bias, h);
         } else if (layer.type === "tanh") {
           h = tanhVec(h);
+        } else if (layer.type === "relu") {
+          h = reluVec(h);
         }
       }
       return Math.tanh(h[0]) * forceLimit;

@@ -1,7 +1,7 @@
 # Working triple-pendulum implementations — reverse engineering
 
-Last updated: 2026-09-20 ~15:15 CT  
-Purpose: stop circling. Copy what already held UUU / hit 56.
+Last updated: 2026-09-21  
+Purpose: stop circling. Copy what already held UUU / hit 56. W2 grind is paused; findings in `docs/triple-uuu-hold-findings.md`.
 
 ## Who actually succeeded
 

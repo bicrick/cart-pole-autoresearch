@@ -52,7 +52,13 @@ def parse_args():
     p.add_argument("--demo-episodes", type=int, default=80, help="Trajectories to dump on PASS")
     p.add_argument("--demo-noise", type=float, default=0.02, help="IC noise for demo dump")
     p.add_argument("--no-dump", action="store_true")
+    p.add_argument(
+        "--dump-even-if-fail",
+        action="store_true",
+        help="Still write surviving demos when the oracle bar is missed (W2 widen).",
+    )
     p.add_argument("--track-walls", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--goal", "--target-ep", dest="goal", default="UUU")
     return p.parse_args()
 
 
@@ -113,6 +119,7 @@ def eval_noise(ctrl, noise: float, args) -> dict:
         angle_fall=True,
         fall_thresh_up=FALL_THRESH_UP,
         seed=args.seed,
+        goal=args.goal,
     )
     n_ok = 0
     n_goal = 0
@@ -149,6 +156,7 @@ def dump_demos(ctrl, args) -> Path:
         progress_w=0.0,
         angle_fall=True,
         seed=args.seed + 99,
+        goal=args.goal,
     )
     all_states = []
     all_actions = []
@@ -203,7 +211,7 @@ def dump_demos(ctrl, args) -> Path:
 def main() -> int:
     args = parse_args()
     noises = [float(x) for x in args.noises.split(",") if x.strip()]
-    print("=== LQR UUU oracle gate ===", flush=True)
+    print(f"=== LQR {args.goal} oracle gate ===", flush=True)
     print(
         f"env contract: quiet_rate=±{QUIET_RATE}, fall_thresh={FALL_THRESH_UP}, "
         f"survival_frac={SURVIVAL_FRAC}, walls={args.track_walls}, progress_w=0",
@@ -218,6 +226,7 @@ def main() -> int:
         q_theta=args.q_theta,
         r=args.r,
         constants=consts,
+        goal=args.goal,
     )
     print(
         f"LQR designed in {time.time()-t0:.1f}s  K={np.array2string(ctrl.K, precision=3)}",
@@ -253,7 +262,9 @@ def main() -> int:
         )
 
     demo_path = None
-    if all_pass and not args.no_dump:
+    if not args.no_dump and (all_pass or args.dump_even_if_fail):
+        if not all_pass:
+            print("oracle bar missed — dumping surviving rollouts only", flush=True)
         demo_path = str(dump_demos(ctrl, args))
     elif not all_pass:
         print("FAIL — no demo dump. Fix plant/LQR before BC.", flush=True)

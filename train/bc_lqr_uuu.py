@@ -59,6 +59,7 @@ def parse_args():
     p.add_argument("--max-steps", type=int, default=1000)
     p.add_argument("--pass-threshold", type=float, default=0.90)
     p.add_argument("--track-walls", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--goal", "--target-ep", dest="goal", default="UUU")
     p.add_argument("--skip-eval", action="store_true")
     p.add_argument("--skip-train", action="store_true", help="Load --out and eval only")
     return p.parse_args()
@@ -206,6 +207,7 @@ def train_bc(args) -> tuple[BCActor, dict]:
         "n_train": int(len(tr_idx)),
         "n_val": int(len(val_idx)),
         "force_limit": float(demo_meta.get("force_limit", args.force_limit)),
+        "goal": getattr(args, "goal", "UUU"),
         "env_contract": "fawraw M2 quiet basin + fall-kill + walls ON",
         "train_seconds": round(time.time() - t0, 2),
         "history_tail": history[-5:],
@@ -281,6 +283,7 @@ def eval_noise(model: BCActor, noise: float, args) -> dict:
         angle_fall=True,
         fall_thresh_up=FALL_THRESH_UP,
         seed=args.seed,
+        goal=getattr(args, "goal", "UUU"),
     )
     n_ok = 0
     n_goal = 0
@@ -308,7 +311,7 @@ def eval_noise(model: BCActor, noise: float, args) -> dict:
 
 def main() -> int:
     args = parse_args()
-    print("=== BC LQR UUU ===", flush=True)
+    print(f"=== BC LQR {args.goal} ===", flush=True)
     print(
         f"env contract: quiet_rate=±{QUIET_RATE}, fall_thresh={FALL_THRESH_UP}, "
         f"survival_frac={SURVIVAL_FRAC}, walls={args.track_walls}",
