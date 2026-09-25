@@ -1,6 +1,6 @@
 # cart-pole-autoresearch
 
-GitHub: [`bicrick/cart-pole-autoresearch`](https://github.com/bicrick/cart-pole-autoresearch)
+GitHub: [`bicrick/cart-pole-autoresearch`](https://github.com/bicrick/cart-pole-autoresearch) · Live: [cart-pole-autoresearch.vercel.app](https://cart-pole-autoresearch.vercel.app/#triple)
 
 Interactive cart–pendulum demos. Drag a link, shove the cart, and switch the target equilibrium while the controller recovers.
 
