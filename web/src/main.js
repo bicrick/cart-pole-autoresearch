@@ -3,7 +3,7 @@ import { createInput, createKeys } from "./input.js";
 import { createCamera, draw } from "./render.js";
 import { startLoop } from "./loop.js";
 import { PLANTS, plantFromHash, nextPlantId } from "./plants.js";
-import { bindTheme } from "./theme.js";
+import { applyEmbedTheme, bindTheme } from "./theme.js";
 import { startRemoteLoop } from "./remote-loop.js";
 import { loadMppiActor } from "./mppi/load.js";
 import { runBench } from "./mppi/bench.js";
@@ -37,10 +37,21 @@ const params = new URLSearchParams(window.location.search);
 const SIM_URL = params.has("sim") ? params.get("sim") || "ws://127.0.0.1:8765" : null;
 // ?debug shows the engine line (backend, samples, fps, state) and status text.
 const DEBUG = params.has("debug") || params.has("bench");
+// ?embed=1 is the chromeless cut used inside the personal-site iframe.
+// ?theme=light|dark selects the palette and does not touch localStorage.
+const EMBED = params.has("embed");
+const EMBED_HOLD_MS = 2800;
+const THEME_MSG = "cart-pole-theme";
 const TOUCH = window.matchMedia?.("(pointer: coarse)").matches ?? false;
 // Plants with `autostart` switch the policy on this long after the controller loads.
 const AUTOSTART_MS = 1200;
 if (DEBUG) page.classList.add("is-debug");
+if (EMBED) {
+  page.classList.add("is-embed");
+  camera.embed = true;
+  const theme = params.get("theme");
+  if (theme === "dark" || theme === "light") applyEmbedTheme(theme === "dark");
+}
 
 function isRemote(p) {
   return Boolean(p.serverCapable && SIM_URL);
@@ -237,7 +248,22 @@ async function loadPlantPolicy(next) {
   return { nextPolicy, nextConstants, ready };
 }
 
+let embedHeld = 0;
+let embedAt = performance.now();
+
 function onPlantFrame({ state, tips, pointer, force, goalId, policyOn: driving, visual }) {
+  if (EMBED && started && loop) {
+    const now = performance.now();
+    const dt = now - embedAt;
+    embedAt = now;
+    if (plant.atGoal(state, goalId)) embedHeld += dt;
+    else embedHeld = 0;
+    if (embedHeld > EMBED_HOLD_MS) {
+      embedHeld = 0;
+      loop.setState({ ...(plant.initialState || plant.hanging) });
+      activePolicy?.reset?.();
+    }
+  }
   draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, driving, visual, plant.ghostTips);
   const now = performance.now();
   if (now - hudAt > 80) {
@@ -327,11 +353,20 @@ async function boot() {
     policyReady = ready;
     setPolicyOn(false);
     startPlantLoop(nextPolicy, nextConstants);
-    if (ready && plant.autostart && !params.has("bench")) setTimeout(begin, AUTOSTART_MS);
+    if (ready && plant.autostart && !params.has("bench")) setTimeout(begin, EMBED ? 400 : AUTOSTART_MS);
+  }
+
+  if (EMBED) {
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data || data.type !== THEME_MSG) return;
+      if (data.theme !== "dark" && data.theme !== "light") return;
+      applyEmbedTheme(data.theme === "dark");
+    });
   }
 
   const themeBtn = document.getElementById("theme-toggle");
-  if (themeBtn) bindTheme(themeBtn);
+  if (themeBtn && !EMBED) bindTheme(themeBtn);
 
   if (policyBtn) {
     policyBtn.addEventListener("click", () => setPolicyOn(!policyOn));

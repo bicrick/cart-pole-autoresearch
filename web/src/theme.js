@@ -40,6 +40,13 @@ function apply(button, dark) {
   window.dispatchEvent(new Event("themechange"));
 }
 
+/** Embed frames take a theme from the query string and do not write localStorage. */
+export function applyEmbedTheme(dark) {
+  document.documentElement.classList.toggle("is-dark", Boolean(dark));
+  applyChromeColor();
+  window.dispatchEvent(new Event("themechange"));
+}
+
 export function bindTheme(button) {
   let dark = readDark();
   apply(button, dark);

@@ -7,7 +7,9 @@
     <meta name="theme-color" content="#fbfbfa" />
     <script>
       try {
-        if (localStorage.getItem("theme") === "dark") document.documentElement.classList.add("is-dark");
+        var q = new URLSearchParams(location.search).get("theme");
+        var dark = q === "dark" || (q !== "light" && localStorage.getItem("theme") === "dark");
+        document.documentElement.classList.toggle("is-dark", dark);
       } catch {}
     </script>
     <link rel="stylesheet" href="/src/style.css" />

@@ -128,8 +128,10 @@ export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalI
   // and follows the cart, never panning past the track ends.
   const full = track + reach * 0.45;
   const portrait = canvas.height > canvas.width * 1.1;
-  camera.railY = portrait ? 0.48 : 0.56;
-  const halfSpan = portrait ? Math.min(full, reach + 0.2) : full;
+  // Embeds drop the chrome and frame the pendulum, not the whole track.
+  const tight = camera.embed || portrait;
+  camera.railY = camera.embed ? 0.5 : portrait ? 0.48 : 0.56;
+  const halfSpan = tight ? Math.min(full, reach + (camera.embed ? 0.35 : 0.2)) : full;
   const room = Math.max(0, track + 0.3 - halfSpan);
   const target = Math.max(-room, Math.min(room, tips.cart.x));
   camera.x = room > 0 ? camera.x + (target - camera.x) * 0.15 : 0;

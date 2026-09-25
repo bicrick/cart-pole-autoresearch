@@ -154,6 +154,17 @@ body {
   visibility: visible;
 }
 
+/* ?embed=1 is the iframe cut: pendulum only, no controls. */
+.page.is-embed .nav,
+.page.is-embed .bar,
+.page.is-embed .start {
+  display: none;
+}
+
+.page.is-embed #stage {
+  cursor: default;
+}
+
 .nav .text-btn,
 #policy-toggle,
 #plant-toggle,
