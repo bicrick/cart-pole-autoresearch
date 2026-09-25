@@ -1,97 +1,102 @@
 # cart-pole-autoresearch
 
-GitHub: [`bicrick/cart-pole-autoresearch`](https://github.com/bicrick/cart-pole-autoresearch)  
-*(old name `double-cart-pole` redirects here.)*
+GitHub: [`bicrick/cart-pole-autoresearch`](https://github.com/bicrick/cart-pole-autoresearch)
 
-Autonomous research + training loop for **cart–multi-link inverted pendulums**: browser demos, shared physics, GPU PPO/TQC training on GCP, and a standing overnight bot that diagnoses failure modes and iterates without waiting for a human to poke the demo.
+Interactive cart–pendulum demos. Drag a link, shove the cart, and switch the target equilibrium while the controller recovers.
 
 <p align="center">
   <img src="docs/demo.gif" alt="Browser demo" width="800">
 </p>
 
-## What this is
-
-| Plant | Equilibria | Status |
+| Plant | Targets | What runs it |
 | --- | --- | --- |
-| **Double** (2 links) | 4: UU / UD / DU / DD | Strong no-walls keeper (`policies/checkpoint-nowalls-best.pt`, min_at_goal ~0.65). Transition-only (`xonly`) explored. |
-| **Triple** (3 links) | 8: DDD … UUU → **56** directed transitions | Active focus. Walls-first then void FT (same path that worked on double). Lim-style TQC specialists + swing→hold handoff in flight. |
+| **Triple** (3 links) | 8 equilibria, DDD through UUU | MPPI teacher in a local Python sim. The browser only draws. |
+| **Double** (2 links) | UU, UD, DU, DD | Small MLP in the browser. No server. |
 
-Goal: interactive demos where you drag the cart/links mid-episode, switch discrete goals on the fly, and the policy recovers — eventually all 56 triple transitions without precomputed trajectories.
+`θ = 0` is upright. The ship plant has no track walls: leaving `|x| > 2.4 m` falls off and respawns.
 
-## Autoresearch loop (the point)
+## Triple demo
 
-A Grok Bot agent (`cart-pole`) owns:
+The server steps the same plant the teacher was gated on, at 120 Hz, with the 4096-sample teacher in the loop. On an M2 Pro a replan takes about 12 ms, which is inside the 33 ms budget, so the sim holds real time.
 
-1. **Infra** — keep the L4 VM + public TensorBoard alive  
-2. **Measure** — near-target / hang hold meters, entropy, OOB, catch basins  
-3. **Self-debug** — catch reward hacks (center farming, reward↑/hold=0, dead basins, wrong plant phase) *before* a human notices in the demo  
-4. **Iterate** — paper-backed recipe changes, push `main`, sync VM, stage next stretch  
-
-Game plan lives in [`docs/triple-macro-loop.md`](docs/triple-macro-loop.md). Paper notes: [`docs/triple-pendulum-research.md`](docs/triple-pendulum-research.md), [`docs/paper-training-lessons.md`](docs/paper-training-lessons.md). PDFs: [`papers/`](papers/) + [`papers/CITATIONS.txt`](papers/CITATIONS.txt).
-
-**Curriculum lesson (both plants):** train **with inelastic sidewalls first**, get upright/hold good, **then** remove walls for a void / respawn fine-tune. Jumping straight to no-walls invites center + not-dying farming.
-
-## Layout
-
-```
-shared/constants.json          # double plant constants (shared train ↔ web)
-shared/constants-triple.json   # triple plant (+ trackWalls)
-train/physics.py               # double batched torch step
-train/physics_triple.py        # triple batched torch step
-train/goals.py / goals_triple.py
-train/train.py                 # double goal-conditioned PPO
-train/train_triple.py          # triple PPO (product reward, flip-augment, …)
-train/train_triple_tqc.py      # Lim-style TQC UUU specialist (sb3-contrib)
-train/handoff.py / lqr_uuu.py  # swing→hold handoff scaffolding
-web/                           # Vite + Canvas demos
-policies/                      # checkpoints + exported policy.json for the page
-scripts/next-train*.sh         # recipes + continue-* watchers
-docs/                          # macro loop, research, lessons
-papers/                        # PDFs the loop should cite
+```bash
+python3 -m pip install -r requirements.txt
+WARM=1 bash scripts/mppi-server.sh
 ```
 
-## Double demo (browser)
+In another shell:
 
 ```bash
 cd web && npm install && npm run dev
 ```
 
-Loads `web/public/policy.json` as a plain JS MLP (no TF.js / no server). Pick UU/UD/DU/DD, drag cart or links, `P` mutes policy. No episode reset — void off-track respawns when walls are off.
+Open [http://localhost:5173/#triple](http://localhost:5173/#triple). Click the canvas or press a key to start. Only the focused tab drives the sim.
 
-Pygame (same Python physics):
+- Grab the cart or a joint.
+- `1`–`8` pick a goal. `Tab` cycles. The pendulum goes there from wherever it is.
+- `A` / `D` shove. `P` turns the teacher off.
+- The footer shows speed and replan time.
+
+`SAMPLES=1024 bash scripts/mppi-server.sh` is the lighter server. `PORT` and `THREADS` override the defaults (`8765`, 8).
+
+## Double demo
 
 ```bash
-python3 -m pip install -r requirements.txt
-python3 train/play.py
+cd web && npm install && npm run dev
 ```
 
-## Train (local smoke)
+Open [http://localhost:5173/#double](http://localhost:5173/#double). The page loads `web/public/policy.json` and steps the physics itself.
+
+Same plant in pygame: `python3 train/play.py`.
+
+## Triple controller
+
+Sampling MPC with a gated LQR anchor. Each sample is
+
+```text
+u = clip(gate(s) * (-K e) + u_ff + noise, ±40 N)
+```
+
+`gate` is 1 inside the target's catch region and fades out by the time the angle distance `Σ(1 − cos eᵢ)` reaches 0.10. Swing-up plans are open-loop residuals, scored on whether the local LQR can catch the arrival. The plan is 45 knots of 4 steps (1.5 s) and is replanned at every knot. Config: `train/mppi/configs/uuu.json`. The same file covers every goal via `--goal`.
+
+Rollouts run in a fused multicore numba kernel (`train/mppi/fast_rollout.py`), checked against the torch path.
+
+| Target | Start | Episodes | Swing-up and hold | Median time to quiet |
+| --- | --- | --- | --- | --- |
+| UUU | hang | 50 | 49/50 | 5.5 s |
+| DDD | near UUU | 10 | 10/10 | 7.4 s |
+| DDU, DUD, DUU, UDD, UDU, UUD | hang | 10 each | 10/10 | 4.5–7.2 s |
+
+Quiet means all three angle errors under 0.03 rad and rates under 0.01 rad/s, then a hold inside the fall band. Reports: `policies/mppi/`.
 
 ```bash
-python3 -m pip install -r requirements.txt
-python3 train/train.py --smoke                 # double
-python3 train/train_triple.py --smoke          # triple PPO
-SMOKE=1 bash scripts/next-train-triple-tqc-uuu.sh   # triple TQC (needs sb3-contrib)
-SMOKE=1 bash scripts/next-train-triple-m2-hold.sh   # fawraw M2 UUU hold (quiet-basin)
+GOAL=UUU N=50 bash scripts/mppi-teacher-gates.sh
 ```
 
-**M2 UUU hold (copy-what-works):** see [`docs/working-impls-reverse-eng.md`](docs/working-impls-reverse-eng.md). Env contract = quiet rates ±0.01 + fall-kill 0.6 + `progress_w=0`. Gate: `bash scripts/lqr-oracle-uuu.sh` (PASS → demos for BC). TQC launch: `scripts/next-train-triple-m2-hold.sh` — do **not** start GCP / long TQC until oracle PASS + green-lit.
+A browser-native student is the next step. The first DAgger fits hold near the target and do not swing up; the live demo still uses the teacher.
 
-GPU recipes: `scripts/next-train.sh`, `next-train-transitions.sh`, `next-train-triple*.sh`. Watch: [TensorBoard](http://34.148.138.48:6006/) on the training VM (static IP) or `tensorboard --logdir runs`.
+## Layout
 
-## GCP
+```text
+train/mppi/                 teacher, costs, numba rollout, sim server
+train/mppi/configs/uuu.json 4096 samples, 1.5 s horizon
+train/physics_triple.py     reference triple step
+train/mppi/dynamics_fast.py batched step used by the teacher (matches the reference)
+web/src/remote-loop.js      triple: render + send keys and drags
+web/src/loop.js             double: physics and policy in the page
+web/public/policy.json      double MLP
+scripts/mppi-server.sh      start the triple sim
+scripts/mppi-teacher-gates.sh
+shared/constants-triple.json
+```
 
-Project `cartpole-demo`, bot SA `cartpole-bot@cartpole-demo.iam.gserviceaccount.com`, bucket `gs://cartpole-demo-413636930404`. Helpers under `train/gcp/`. Key path (local only): `~/.config/gcloud/cartpole-bot-cartpole-demo.json` — see `train/gcp/bot.env.example`.
+## Physics
 
-One on-demand L4 (`cartpole-train-od`, `us-east1-b`) is the usual trainer. Do not stack GPU VMs; do not train on unrelated projects.
+- State: `[x, ẋ, θ1, θ̇1, θ2, θ̇2]` and, for the triple, `θ3, θ̇3`.
+- Semi-implicit Euler at `dt = 1/120` s. Force limit ±40 N on the triple.
+- Rates clamp at ±30 m/s (cart) and ±50 rad/s (poles).
+- Walls, when on, stop the cart only. The triple demo and the teacher both run with walls off.
 
-## Physics notes
+## Earlier work
 
-- `θ = 0` is **upright** (Xin / IFAC convention).  
-- State double: `[x, ẋ, θ1, θ̇1, θ2, θ̇2]`. Triple adds link 3.  
-- **Walls:** when enabled, cart-only inelastic endstops (clamp `x`, `ẋ=0`) — poles are not propped by wall impulse.  
-- **No walls:** cart may leave `|x| > trackLimit` → episode end / demo void respawn; hard `oob_penalty` after reward clip.
-
-## License / papers
-
-Code for this project. PDFs in `papers/` remain under their publishers’ terms.
+PPO, TQC, behavior cloning, energy pumping, and open-loop trajectory tracking are in the repo and in [`docs/`](docs/). They hold near a target and do not deliver a swing-up the hold can catch. [`docs/triple-training-wheels.md`](docs/triple-training-wheels.md) is the record of that path and of the MPPI result that replaced it.
