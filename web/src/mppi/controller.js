@@ -3,10 +3,12 @@
  * (`MPPI.optimize` / `MPPI.act`) running its samples on an evaluator
  * (Web Worker pool, or in-thread).
  *
- * Every `knot` physics steps the controller replans from the exact current
- * state. The loop asks `prepare()` before each step; it returns false while a
- * replan is in flight, so physics waits for the plan exactly like the Python
- * sim server does, and nothing is ever applied late.
+ * Every `knot` physics steps the controller switches to a new plan. The loop
+ * asks `prepare()` before each step; it returns false while the plan for this
+ * step is still in flight, so nothing is ever applied late. Without `step`
+ * each plan is computed from the exact state at its boundary (like the Python
+ * sim server); with `step` it is computed one knot ahead from the predicted
+ * state, which is exact unless the user drags or shoves in between.
  *
  * `n` adapts so a replan fits `budgetMs` (default: one knot of wall time).
  */
@@ -37,6 +39,15 @@ export function anchorForce(params, s) {
   if (gate === 0) return 0;
   const fb = K[0] * s[0] + K[1] * s[1] + K[2] * e1 + K[3] * s[3] + K[4] * e2 + K[5] * s[5] + K[6] * e3 + K[7] * s[7];
   return -gate * fb;
+}
+
+/** Quiet at the target (mppi.py `MPPI.holding`): replans use hold_samples. */
+export function holding(params, cfg, s) {
+  if (!cfg.hold_samples) return false;
+  const { p } = params;
+  const d = (1 - Math.cos(s[2] - p[14])) + (1 - Math.cos(s[4] - p[15])) + (1 - Math.cos(s[6] - p[16]));
+  const spin = s[3] * s[3] + s[5] * s[5] + s[7] * s[7];
+  return d < cfg.hold_d && spin < cfg.hold_spin;
 }
 
 /** ESS-targeted softmax weights (mppi.py `_weights`). */
@@ -88,20 +99,26 @@ export function createMppiController(spec, evaluator, opts = {}) {
   let n = opts.samples ?? maxN;
   let uff = new Float64Array(T);
   let tick = 0;
+  // Plant step (physics-triple `step`) enables pipelined replanning.
+  const step = opts.step ?? null;
   let planned = false;
-  let pending = false;
+  let job = null;
   let gen = 0;
   let goal = null;
   let seed = opts.seed ?? 1;
   let ms = 0;
+  let lastN = n;
 
   async function optimize(g, s0, U) {
     const params = goals[g];
-    const { samples, costs } = await evaluator.evaluate(g, s0, U, n, (seed += 1));
+    const hold = holding(params, cfg, s0);
+    const k = hold ? cfg.hold_samples : n;
+    lastN = k;
+    const { samples, costs } = await evaluator.evaluate(g, s0, U, k, (seed += 1));
     const w = mppiWeights(costs, cfg.ess);
     const mean = new Float64Array(T);
     let bi = 0;
-    for (let i = 0; i < n; i += 1) {
+    for (let i = 0; i < k; i += 1) {
       if (costs[i] < costs[bi]) bi = i;
       const wi = w[i];
       if (wi < 1e-12) continue;
@@ -116,23 +133,39 @@ export function createMppiController(spec, evaluator, opts = {}) {
     return cm <= cb ? mean : best;
   }
 
-  function startReplan(s) {
+  function shifted(plan) {
+    const out = new Float64Array(T);
+    out.set(plan.subarray(1));
+    return out;
+  }
+
+  /** State one knot ahead under the current plan (no user input). */
+  function predict(state) {
+    let s = { ...state };
+    for (let i = 0; i < knot; i += 1) {
+      const u = Math.max(-fmax, Math.min(fmax, anchorForce(goals[goal], stateArray(s)) + uff[0]));
+      s = step(s, u, null);
+    }
+    return stateArray(s);
+  }
+
+  /** Start the replan that the knot boundary at `forTick` will use. */
+  function launch(forTick, s0, U) {
     const mine = gen;
-    const U = tick === 0 ? uff : Float64Array.from({ length: T }, (_, t) => (t + 1 < T ? uff[t + 1] : 0));
-    pending = true;
+    const job = { forTick, plan: null };
     const t0 = performance.now();
-    optimize(goal, s, U).then((next) => {
+    optimize(goal, s0, U).then((next) => {
       if (mine !== gen) return;
-      uff = next;
-      pending = false;
-      planned = true;
+      job.plan = next;
       const took = performance.now() - t0;
       ms = ms ? 0.8 * ms + 0.2 * took : took;
-      if (adapt) {
+      // Hold replans are cheap and say nothing about the swing-up budget.
+      if (adapt && lastN === n) {
         if (ms > budgetMs && n > minN) n = Math.max(minN, Math.floor((n * 0.85) / 64) * 64);
         else if (ms < 0.6 * budgetMs && n < maxN) n = Math.min(maxN, Math.ceil((n * 1.1) / 64) * 64);
       }
     });
+    return job;
   }
 
   return {
@@ -141,17 +174,26 @@ export function createMppiController(spec, evaluator, opts = {}) {
       uff = new Float64Array(T);
       tick = 0;
       planned = false;
-      pending = false;
+      job = null;
     },
-    /** True when this step can run; starts a replan at knot boundaries. */
+    /**
+     * True when this step can run. At a knot boundary it swaps in the plan
+     * computed for it; with `step` (pipelined) that plan was started one knot
+     * earlier from the predicted state, so the sim only waits if a replan
+     * takes longer than a knot.
+     */
     prepare(state, goalId) {
       if (goalId !== goal) {
         goal = goalId;
         this.reset();
       }
       if (tick % knot !== 0 || planned) return true;
-      if (!pending) startReplan(stateArray(state));
-      return false;
+      if (!job || job.forTick !== tick) job = launch(tick, stateArray(state), tick === 0 ? uff : shifted(uff));
+      if (!job.plan) return false;
+      uff = job.plan;
+      planned = true;
+      if (step) job = launch(tick + knot, predict(state), shifted(uff));
+      return true;
     },
     act(_obs, state) {
       const s = stateArray(state);
@@ -161,7 +203,16 @@ export function createMppiController(spec, evaluator, opts = {}) {
       return u;
     },
     stats() {
-      return { samples: n, ms, workers: evaluator.size };
+      return { samples: lastN, ms, workers: evaluator.size, backend: evaluator.backend ?? "workers" };
+    },
+    /** One replan from `state` with `samples` samples (bench); resolves to wall ms. */
+    async timeReplan(state, goalId, samples) {
+      const keep = n;
+      n = samples;
+      const t0 = performance.now();
+      await optimize(goalId, stateArray(state), new Float64Array(T));
+      n = keep;
+      return performance.now() - t0;
     },
     plan() {
       return uff;

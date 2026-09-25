@@ -17,7 +17,24 @@ Interactive cart–pendulum demos. Drag a link, shove the cart, and switch the t
 
 ## Triple demo
 
-The page runs the same 4096-sample MPPI teacher that was gated in Python. Samples are split across Web Workers (`hardwareConcurrency − 1`, up to 10). Every 4 physics steps the page replans from the exact current state and holds the sim until the plan is back, like the Python server. On an M2 Pro a replan takes 16–24 ms against a 33 ms budget, so the sim holds real time. On slower machines the sample count drops until replans fit, down to 256.
+The page runs the MPPI teacher that was gated in Python, with no server. Samples run on one of three backends:
+
+| Backend | When | 4096-sample replan (M2 Pro) |
+| --- | --- | --- |
+| WebGPU (`web/src/mppi/gpu.js`) | default where `navigator.gpu` exists | ~3 ms |
+| Web Workers (`pool.js`) | no WebGPU | ~15–23 ms on 10 workers |
+| In-thread (`?backend=local`) | no Worker support | too slow for real time |
+
+`?backend=workers` forces the CPU path.
+
+Two profiles, both gated in Python (`python -m mppi.speed_sweep`) and in node:
+
+- **full:** 4096 samples, replan every 4 steps. Used on WebGPU and on desktop workers.
+- **lite:** 2048 samples, replan every 8 steps, about 4x less compute. Used on phones without WebGPU. It reaches upright 95% of the time within 12.5 s, against 100% for full.
+- **Both:** while the pendulum is quiet at the target they drop to 128 samples, and they stop scoring a sample once it has left the track.
+- `?profile=full|lite` overrides the choice.
+
+**Smoothness.** Physics steps at 120 Hz and every display frame is drawn interpolated between the last two physics states, so motion is even at 60, 120 or 144 Hz. Each plan is computed one replan interval early, from the state predicted under the current plan. That prediction is exact unless you drag or shove in between, and physics only waits if a replan takes longer than a whole replan interval. `?pipeline=0` plans from the exact boundary state instead, as the Python server does; physics then waits on about 60% of frames with workers.
 
 ```bash
 cd web && npm install && npm run dev
@@ -28,9 +45,17 @@ Open [http://localhost:5173/#triple](http://localhost:5173/#triple). Click the c
 - Grab the cart or a joint.
 - `1`–`8` pick a goal. `Tab` cycles. The pendulum goes there from wherever it is.
 - `A` / `D` shove. `P` turns the teacher off.
-- The footer shows the sample count, speed and replan time. `?mppi=1024` caps the samples.
+- The footer shows the sample count, sim speed, replan time and fps, plus the share of frames that waited on a plan when it's above zero. `?mppi=1024` caps the samples.
 
-The JS rollout (`web/src/mppi/rollout.js`) matches the numba kernel to ~1e-16 on all 8 goals, and the JS controller in node swings up and holds 8/8 from a hang: `cd train && python -m mppi.test_web_mppi`. After changing the teacher config, re-export with `python -m mppi.export_mppi`.
+**Phones and benchmarks.**
+- `?bench` times real replans at 256 to 4096 samples on the current device and says how many fit in real time. On WebGPU it also checks the GPU costs against the JS kernel.
+- To try a phone on the same Wi-Fi: `cd web && npm run build && npm run preview -- --host`, then open `http://<your-mac-ip>:4173/?bench#triple`. Note that browsers only expose WebGPU on `localhost` or HTTPS, so over plain LAN HTTP the phone falls back to workers and the lite profile.
+
+**Checks.**
+- The JS rollout (`web/src/mppi/rollout.js`) matches the numba kernel to about 1e-16 on all 8 goals.
+- The WebGPU kernel matches in f32, with a median relative error of about 2e-7 and the same 32 cheapest samples.
+- The pipelined JS controller in node swings up and holds 8/8 from a hang: `cd train && python -m mppi.test_web_mppi`.
+- After changing the teacher config, re-export with `python -m mppi.export_mppi`.
 
 The Python sim server is still there: `WARM=1 bash scripts/mppi-server.sh`, then open `/?sim#triple`.
 
@@ -77,8 +102,8 @@ train/mppi/                 teacher, costs, numba rollout, sim server, web expor
 train/mppi/configs/uuu.json 4096 samples, 1.5 s horizon
 train/physics_triple.py     reference triple step
 train/mppi/dynamics_fast.py batched step used by the teacher (matches the reference)
-web/src/mppi/               in-browser teacher: rollout, sampler, workers, controller
-web/public/mppi/triple.json per-goal costs and LQR gains (export_mppi.py)
+web/src/mppi/               in-browser teacher: rollout, sampler, workers, WebGPU, controller, bench
+web/public/mppi/triple.json per-goal costs, LQR gains and full/lite profiles (export_mppi.py)
 web/src/loop.js             physics and controller in the page (both plants)
 web/src/remote-loop.js      ?sim: render the Python sim server
 web/public/policy.json      double MLP

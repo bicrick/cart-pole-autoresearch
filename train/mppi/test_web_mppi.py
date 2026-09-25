@@ -46,7 +46,9 @@ import { createLocalEvaluator } from "%(pool)s";
 import { step } from "%(physics)s";
 import fs from "fs";
 const job = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-const ctrl = createMppiController(job.spec, createLocalEvaluator(job.spec), { samples: job.samples, adapt: false, seed: job.seed });
+const ctrl = createMppiController(job.spec, createLocalEvaluator(job.spec), {
+  samples: job.samples, adapt: false, seed: job.seed, step: job.pipeline ? step : null,
+});
 const keys = ["x","xd","th1","th1d","th2","th2d","th3","th3d"];
 let s = Object.fromEntries(keys.map((k, i) => [k, job.start[i]]));
 const states = [keys.map((k) => s[k])];
@@ -100,13 +102,14 @@ def rollout_parity(spec: dict, tmp: Path) -> bool:
     return ok
 
 
-def closed_loop(spec: dict, goal: str, episodes: int, samples: int, steps: int, hold: int, tmp: Path) -> dict:
+def closed_loop(spec: dict, goal: str, episodes: int, samples: int, steps: int, hold: int, tmp: Path,
+                pipeline: bool = True, seed: int = 1) -> dict:
     gen = torch.Generator().manual_seed(7)
     starts = near_states("UUU", episodes, 0.05, 0.01, gen) if goal == "DDD" else hang_states(episodes, 0.05, gen)
 
     def one(i: int):
-        job = {"spec": spec, "goal": goal, "samples": samples, "steps": steps, "seed": 1000 + i,
-               "start": starts[i].double().tolist()}
+        job = {"spec": spec, "goal": goal, "samples": samples, "steps": steps, "seed": seed * 1000 + i,
+               "start": starts[i].double().tolist(), "pipeline": pipeline}
         return run_node(LOOP_JS % uris(), job, tmp, f"loop-{i}")["states"]
 
     with ThreadPoolExecutor(max_workers=episodes) as ex:
@@ -123,16 +126,24 @@ def main() -> int:
     ap.add_argument("--swing-steps", type=int, default=1500)
     ap.add_argument("--hold-steps", type=int, default=1000)
     ap.add_argument("--skip-loop", action="store_true")
+    ap.add_argument("--no-pipeline", action="store_true", help="plan from the exact boundary state")
+    ap.add_argument("--seed", type=int, default=1, help="controller noise seed base")
+    ap.add_argument("--mppi", default="", help="JSON mppi overrides for the closed loop (e.g. the web profile)")
     args = ap.parse_args()
-    spec = export("mppi/configs/uuu.json")
+    over = json.loads(args.mppi) if args.mppi else {}
+    spec = export("mppi/configs/uuu.json", over)
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
         ok = rollout_parity(spec, tmp)
+        coarse = export("mppi/configs/uuu.json", {"rollout_sub": 2, "early_exit": True})
+        print("rollout_sub=2 + early_exit:")
+        ok = rollout_parity(coarse, tmp) and ok
         print("ROLLOUT PARITY OK" if ok else "ROLLOUT PARITY FAIL", flush=True)
         if not args.skip_loop:
             m = closed_loop(spec, args.goal, args.episodes, args.samples, args.swing_steps + args.hold_steps,
-                            args.hold_steps, tmp)
-            print(json.dumps({"goal": args.goal, "samples": args.samples, **m}, indent=1))
+                            args.hold_steps, tmp, not args.no_pipeline, args.seed)
+            print(json.dumps({"goal": args.goal, "samples": args.samples, "pipeline": not args.no_pipeline,
+                              "mppi": over, **m}, indent=1))
     return 0 if ok else 1
 
 

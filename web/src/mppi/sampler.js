@@ -52,13 +52,13 @@ function rotl(x, k) {
 
 /**
  * Samples [i0, i1) of an n-sample replan. Returns { samples, costs } with
- * samples row-major [i1 - i0, nKnots].
+ * samples row-major [i1 - i0, nKnots]; `out` buffers are reused when big enough.
  */
-export function sampleChunk(params, cfg, s0, U, n, i0, i1, seed) {
+export function sampleChunk(params, cfg, s0, U, n, i0, i1, seed, out = null) {
   const T = U.length;
   const m = i1 - i0;
-  const samples = new Float64Array(m * T);
-  const costs = new Float64Array(m);
+  const samples = out?.samples?.length >= m * T ? out.samples.subarray(0, m * T) : new Float64Array(m * T);
+  const costs = out?.costs?.length >= m ? out.costs.subarray(0, m) : new Float64Array(m);
   const rng = makeRng(seed);
   const beta = cfg.noise_beta;
   const scale = Math.sqrt(1 - beta * beta);

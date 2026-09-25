@@ -6,6 +6,7 @@ import { PLANTS, plantFromHash, nextPlantId } from "./plants.js";
 import { bindTheme } from "./theme.js";
 import { startRemoteLoop } from "./remote-loop.js";
 import { loadMppiActor } from "./mppi/load.js";
+import { runBench } from "./mppi/bench.js";
 
 const page = document.querySelector(".page");
 const canvas = document.getElementById("stage");
@@ -36,6 +37,17 @@ const SIM_URL = params.has("sim") ? params.get("sim") || "ws://127.0.0.1:8765" :
 
 function isRemote(p) {
   return Boolean(p.serverCapable && SIM_URL);
+}
+
+function showBench(actor) {
+  const pre = document.createElement("pre");
+  pre.className = "bench";
+  page.append(pre);
+  runBench(actor, actor.spec, (text) => {
+    pre.textContent = text;
+  }).then((text) => {
+    window.__benchResult = text;
+  });
 }
 
 function currentActor() {
@@ -122,9 +134,10 @@ function updateReadout(state, force, goalId) {
   if (state.th3 != null) parts.push(`θ3 ${fmt(state.th3)}`);
   parts.push(`u ${fmt(force, 1)} N`);
   if (loop?.stats && (isRemote(plant) || plant.mppiUrl)) {
-    const { rt, ms, samples } = loop.stats();
+    const { rt, ms, samples, fps, stall } = loop.stats();
     if (samples) parts.push(`mppi ${samples}`);
     parts.push(`${Math.round((rt ?? 0) * 100)}% speed · ${(ms ?? 0).toFixed(0)} ms/plan`);
+    if (fps) parts.push(`${Math.round(fps)} fps${stall > 0.005 ? ` · ${Math.round(stall * 100)}% waits` : ""}`);
   }
   readoutEl.textContent = parts.join("  ·  ");
 }
@@ -143,7 +156,9 @@ async function loadPlantPolicy(next) {
   if (next.mppiUrl) {
     try {
       const actor = await loadMppiActor(next.mppiUrl);
-      setStatus(`mppi · ${actor.stats().workers} workers`);
+      const { backend, workers } = actor.stats();
+      setStatus(backend === "workers" ? `mppi · ${workers} workers` : `mppi · ${backend}`);
+      if (params.has("bench")) showBench(actor);
       return { nextPolicy: actor, nextConstants: { ...next.constants }, ready: true };
     } catch (err) {
       console.warn(err);

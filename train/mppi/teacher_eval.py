@@ -25,12 +25,14 @@ from pathlib import Path
 
 import torch
 
-from mppi.config import load_teacher
+from mppi.config import build_teacher, read_config
 from mppi.costs import wrap
 from mppi.episodes import EpisodeSpec, Shove, hang_states, hold_metrics, near_states, run, swing_metrics
 
 QUIET_BAR = 0.95
 G2_BAR = 0.90
+# Rates are float32 means (19/20 -> 0.94999999); compare with slack.
+BAR_EPS = 1e-6
 SHOVE_STEPS = (6, 12, 30)
 
 
@@ -75,10 +77,10 @@ def gate_g1(plant, ctrl, goal: str, n: int, steps: int, seed: int, ref=None) -> 
 
 
 def g1_pass(out: dict) -> bool:
-    ok = out["quiet_0.03"]["survival"] >= QUIET_BAR
+    ok = out["quiet_0.03"]["survival"] >= QUIET_BAR - BAR_EPS
     for name, m in out.items():
         if isinstance(m, dict) and "lqr_survival" in m and name != "quiet_0.03":
-            ok = ok and m["survival"] >= m["lqr_survival"]
+            ok = ok and m["survival"] >= m["lqr_survival"] - BAR_EPS
     return bool(ok)
 
 
@@ -95,7 +97,7 @@ def gate_g2(plant, ctrl, goal: str, n: int, swing_steps: int, hold_steps: int, s
     states, forces = run(plant, ctrl, s0, EpisodeSpec(goal=goal, steps=swing_steps + hold_steps))
     m = swing_metrics(goal, states, plant.track_limit, hold_steps, plant.dt)
     m["force_saturated_frac"] = float((forces.abs() >= plant.force_limit - 1e-3).float().mean())
-    m["pass"] = m["success"] >= G2_BAR
+    m["pass"] = m["success"] >= G2_BAR - BAR_EPS
     return {"swing": m, "pass": m["pass"]}
 
 
@@ -122,11 +124,30 @@ def _merge(parts: list[dict]) -> dict:
                 m[f] = sum(v * s["n"] for v, s in zip(vals, subs)) / n
         out[key] = m
     if "swing" in out:
-        out["swing"]["pass"] = out["swing"]["success"] >= G2_BAR
+        out["swing"]["pass"] = out["swing"]["success"] >= G2_BAR - BAR_EPS
         out["pass"] = out["swing"]["pass"]
     else:
         out["pass"] = g1_pass(out)
     return out
+
+
+def apply_overrides(m: dict, args) -> dict:
+    """Speed knobs from the CLI onto a raw mppi config dict (in place)."""
+    if args.mppi:
+        m.update(json.loads(args.mppi))
+    if args.samples:
+        m["n_samples"] = args.samples
+    if args.rollout_sub:
+        m["rollout_sub"] = args.rollout_sub
+    if args.replan_every:
+        horizon = m.get("n_knots", 45) * m.get("knot", 4)
+        m["knot"] = args.replan_every
+        m["n_knots"] = max(2, round(horizon / args.replan_every))
+    if args.hold_samples >= 0:
+        m["hold_samples"] = args.hold_samples
+    if args.early_exit:
+        m["early_exit"] = True
+    return m
 
 
 def main() -> int:
@@ -142,11 +163,19 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--out", default="")
+    ap.add_argument("--mppi", default="", help='JSON overrides for the mppi config, e.g. \'{"n_samples": 1024}\'')
+    ap.add_argument("--samples", type=int, default=0)
+    ap.add_argument("--rollout-sub", type=int, default=0)
+    ap.add_argument("--replan-every", type=int, default=0, help="knot length in steps; keeps the horizon")
+    ap.add_argument("--hold-samples", type=int, default=-1)
+    ap.add_argument("--early-exit", action="store_true")
     args = ap.parse_args()
     if args.threads:
         torch.set_num_threads(args.threads)
 
-    plant, ctrl, meta = load_teacher(args.config, args.goal or None)
+    raw = read_config(args.config, args.goal or None)
+    apply_overrides(raw["mppi"], args)
+    plant, ctrl, meta = build_teacher(raw)
     goal = meta["goal"]
     ref = LQRController(ctrl.cost, plant.force_limit)
     report = {"config": args.config, "goal": goal, "teacher": meta}

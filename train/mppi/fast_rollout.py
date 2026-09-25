@@ -22,7 +22,7 @@ _P_FIELDS = (
     "t1", "t2", "t3", "e_target",
     "w_angle", "w_vel", "w_vel_near", "near_scale", "w_x", "w_xd", "x_soft", "w_barrier",
     "x_dead", "w_dead", "w_energy", "w_u", "w_du", "w_terminal_lqr", "w_terminal_energy",
-    "gate_in", "gate_out", "anchor_on", "knot",
+    "gate_in", "gate_out", "anchor_on", "knot", "sub", "early_exit",
 )
 IDX = {k: i for i, k in enumerate(_P_FIELDS)}
 
@@ -42,7 +42,11 @@ def pack_params(plant, cost, cfg) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         "w_terminal_lqr": c.w_terminal_lqr, "w_terminal_energy": c.w_terminal_energy,
         "gate_in": cfg.gate_in, "gate_out": cfg.gate_out, "anchor_on": 1.0 if cfg.anchor else 0.0,
         "knot": float(cfg.knot),
+        "sub": float(cfg.rollout_sub),
+        "early_exit": 1.0 if cfg.early_exit else 0.0,
     }
+    if cfg.knot % cfg.rollout_sub:
+        raise ValueError("knot must be a multiple of rollout_sub")
     if plant.walls:
         raise ValueError("fast rollout models the wall-free plant only")
     scal = np.array([float(vals[k]) for k in _P_FIELDS], dtype=np.float64)
@@ -84,10 +88,11 @@ def _pole_energy(p, s1, c1, w1, s2, c2, w2, s3, c3, w3):
 
 
 @njit(fastmath=False)
-def _rollout_one(p, K, P, s0, U, n_knots):
+def _rollout_one(p, K, P, s0, U, n_knots, fin, terminal):
     """One sample's horizon. sin/cos of each angle are computed once per step and
     shared by the anchor, dynamics (difference angles via addition identities),
-    running cost, and energy."""
+    running cost, and energy. Writes the final state into ``fin``; the terminal
+    cost is added only if ``terminal``."""
     M, m1, m2, m3 = p[0], p[1], p[2], p[3]
     l1, l2, l3, g = p[4], p[5], p[6], p[7]
     b, cd1, cd2, cd3 = p[8], p[9], p[10], p[11]
@@ -99,6 +104,14 @@ def _rollout_one(p, K, P, s0, U, n_knots):
     w_tl, w_te = p[31], p[32]
     g_in, g_out, anchor_on = p[33], p[34], p[35]
     knot = int(p[36])
+    sub = int(p[37])
+    early = p[38] > 0.0
+    kdt = knot * dt
+    # Rollouts may integrate at sub * dt (fewer, coarser steps per knot).
+    dt = dt * sub
+    steps_per_knot = knot // sub
+    total = n_knots * steps_per_knot
+    done = 0
     ct1, st1 = math.cos(t1), math.sin(t1)
     ct2, st2 = math.cos(t2), math.sin(t2)
     ct3, st3 = math.cos(t3), math.sin(t3)
@@ -115,9 +128,12 @@ def _rollout_one(p, K, P, s0, U, n_knots):
     s2, c2 = math.sin(th2), math.cos(th2)
     s3, c3 = math.sin(th3), math.cos(th3)
     acc = 0.0
+    dead_exit = False
     for j in range(n_knots):
         r = U[j]
-        for _ in range(knot):
+        if dead_exit:
+            break
+        for _ in range(steps_per_knot):
             # --- gated target-LQR anchor + residual
             fb_u = 0.0
             if anchor_on > 0.0:
@@ -206,6 +222,16 @@ def _rollout_one(p, K, P, s0, U, n_knots):
                 + w_u * u * u
             )
             acc += step_cost * dt
+            done += 1
+            if early and dead > 0.0:
+                # Off the track for good: charge the dead penalty for the rest.
+                acc += w_dead * dt * (total - done)
+                dead_exit = True
+                break
+    fin[0], fin[1], fin[2], fin[3] = x, xd, th1, w1
+    fin[4], fin[5], fin[6], fin[7] = th2, w2, th3, w3
+    if dead_exit or not terminal:
+        return acc + _du_cost(U, n_knots, w_du, kdt)
     # --- terminal cost
     e = np.empty(8)
     e[0], e[1], e[2], e[3] = x, xd, _wrap(th1 - t1), w1
@@ -220,8 +246,13 @@ def _rollout_one(p, K, P, s0, U, n_knots):
     near = math.exp(-ang / near_scale)
     en = _pole_energy(p, s1, c1, w1, s2, c2, w2, s3, c3, w3) - e_t
     acc += near * w_tl * quad + (1.0 - near) * w_te * en * en
-    # --- residual smoothness
-    kdt = knot * dt
+    return acc + _du_cost(U, n_knots, w_du, kdt)
+
+
+@njit(inline="always", fastmath=False)
+def _du_cost(U, n_knots, w_du, kdt):
+    """Residual smoothness between knots."""
+    acc = 0.0
     for j in range(n_knots - 1):
         du = (U[j + 1] - U[j]) / kdt
         acc += w_du * du * du * kdt
@@ -233,6 +264,18 @@ def rollout_costs(p, K, P, starts, plans):
     """starts [N,8], plans [N,T] residual knots -> cost [N]."""
     n, t = plans.shape
     out = np.empty(n)
+    fins = np.empty((n, 8))
     for i in prange(n):
-        out[i] = _rollout_one(p, K, P, starts[i], plans[i], t)
+        out[i] = _rollout_one(p, K, P, starts[i], plans[i], t, fins[i], True)
     return out
+
+
+@njit(parallel=True, fastmath=False, cache=True, nogil=True)
+def rollout_costs_final(p, K, P, starts, plans):
+    """Like ``rollout_costs`` without the terminal cost -> (cost [N], final state [N,8])."""
+    n, t = plans.shape
+    out = np.empty(n)
+    fins = np.empty((n, 8))
+    for i in prange(n):
+        out[i] = _rollout_one(p, K, P, starts[i], plans[i], t, fins[i], False)
+    return out, fins

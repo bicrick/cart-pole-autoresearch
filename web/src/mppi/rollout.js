@@ -16,8 +16,16 @@ export const FIELDS = [
   "t1", "t2", "t3", "e_target",
   "w_angle", "w_vel", "w_vel_near", "near_scale", "w_x", "w_xd", "x_soft", "w_barrier",
   "x_dead", "w_dead", "w_energy", "w_u", "w_du", "w_terminal_lqr", "w_terminal_energy",
-  "gate_in", "gate_out", "anchor_on", "knot",
+  "gate_in", "gate_out", "anchor_on", "knot", "sub", "early_exit",
 ];
+
+// Rotation-updated sin/cos (see rolloutCost). The exact libm path is kept for
+// bit-level parity tests against the numba kernel.
+let fastTrig = true;
+
+export function setFastTrig(on) {
+  fastTrig = Boolean(on);
+}
 
 function wrap(a) {
   // Python's (a + pi) % 2pi - pi (floored modulo).
@@ -38,7 +46,7 @@ export function rolloutCost(p, K, P, s0, so, U, uo, nKnots) {
   const M = p[0], m1 = p[1], m2 = p[2], m3 = p[3];
   const l1 = p[4], l2 = p[5], l3 = p[6], g = p[7];
   const b = p[8], cd1 = p[9], cd2 = p[10], cd3 = p[11];
-  const dt = p[12], fmax = p[13];
+  const fmax = p[13];
   const t1 = p[14], t2 = p[15], t3 = p[16], eT = p[17];
   const wAngle = p[18], wVel = p[19], wVelNear = p[20], nearScale = p[21];
   const wX = p[22], wXd = p[23], xSoft = p[24], wBarrier = p[25];
@@ -46,6 +54,14 @@ export function rolloutCost(p, K, P, s0, so, U, uo, nKnots) {
   const wTl = p[31], wTe = p[32];
   const gIn = p[33], gOut = p[34], anchorOn = p[35];
   const knot = p[36] | 0;
+  const sub = p[37] | 0 || 1;
+  const early = p[38] > 0;
+  const kdt = knot * p[12];
+  // Rollouts may integrate at sub * dt (fewer, coarser steps per knot).
+  const dt = p[12] * sub;
+  const stepsPerKnot = (knot / sub) | 0;
+  const total = nKnots * stepsPerKnot;
+  let done = 0;
   const ct1 = Math.cos(t1), st1 = Math.sin(t1);
   const ct2 = Math.cos(t2), st2 = Math.sin(t2);
   const ct3 = Math.cos(t3), st3 = Math.sin(t3);
@@ -70,7 +86,7 @@ export function rolloutCost(p, K, P, s0, so, U, uo, nKnots) {
 
   for (let j = 0; j < nKnots; j += 1) {
     const r = U[uo + j];
-    for (let q = 0; q < knot; q += 1) {
+    for (let q = 0; q < stepsPerKnot; q += 1) {
       let fbU = 0;
       if (anchorOn > 0) {
         const d = (1 - (c1 * ct1 + s1 * st1)) + (1 - (c2 * ct2 + s2 * st2)) + (1 - (c3 * ct3 + s3 * st3));
@@ -124,12 +140,36 @@ export function rolloutCost(p, K, P, s0, so, U, uo, nKnots) {
       w2 = clip(w2 + clip(fin(x2), -MAX_ACC, MAX_ACC) * dt, -MAX_ANG_VEL, MAX_ANG_VEL);
       w3 = clip(w3 + clip(fin(x3), -MAX_ACC, MAX_ACC) * dt, -MAX_ANG_VEL, MAX_ANG_VEL);
       x += xd * dt;
-      th1 += w1 * dt;
-      th2 += w2 * dt;
-      th3 += w3 * dt;
-      s1 = Math.sin(th1); c1 = Math.cos(th1);
-      s2 = Math.sin(th2); c2 = Math.cos(th2);
-      s3 = Math.sin(th3); c3 = Math.cos(th3);
+      const a1 = w1 * dt, a2 = w2 * dt, a3 = w3 * dt;
+      th1 += a1;
+      th2 += a2;
+      th3 += a3;
+      if (fastTrig) {
+        // Rotate (sin, cos) by the step angle (|a| <= 50 rad/s * dt): Taylor
+        // sin to a^7 and cos to a^8, error < 1e-6 at sub = 2.
+        let q = a1 * a1;
+        let sa = a1 * (1 - q * (1 / 6 - q * (1 / 120 - q / 5040)));
+        let ca = 1 - q * (0.5 - q * (1 / 24 - q * (1 / 720 - q / 40320)));
+        let t = s1 * ca + c1 * sa;
+        c1 = c1 * ca - s1 * sa;
+        s1 = t;
+        q = a2 * a2;
+        sa = a2 * (1 - q * (1 / 6 - q * (1 / 120 - q / 5040)));
+        ca = 1 - q * (0.5 - q * (1 / 24 - q * (1 / 720 - q / 40320)));
+        t = s2 * ca + c2 * sa;
+        c2 = c2 * ca - s2 * sa;
+        s2 = t;
+        q = a3 * a3;
+        sa = a3 * (1 - q * (1 / 6 - q * (1 / 120 - q / 5040)));
+        ca = 1 - q * (0.5 - q * (1 / 24 - q * (1 / 720 - q / 40320)));
+        t = s3 * ca + c3 * sa;
+        c3 = c3 * ca - s3 * sa;
+        s3 = t;
+      } else {
+        s1 = Math.sin(th1); c1 = Math.cos(th1);
+        s2 = Math.sin(th2); c2 = Math.cos(th2);
+        s3 = Math.sin(th3); c3 = Math.cos(th3);
+      }
 
       const ang = (1 - (c1 * ct1 + s1 * st1)) + (1 - (c2 * ct2 + s2 * st2)) + (1 - (c3 * ct3 + s3 * st3));
       const near = Math.exp(-ang / nearScale);
@@ -148,28 +188,43 @@ export function rolloutCost(p, K, P, s0, so, U, uo, nKnots) {
         + wEnergy * (1 - near) * en * en
         + wU * u * u
       ) * dt;
+      done += 1;
+      if (early && dead) {
+        // Off the track for good: charge the dead penalty for the rest.
+        return acc + wDead * dt * (total - done) + duCost(U, uo, nKnots, wDu, kdt);
+      }
     }
   }
 
   const e0 = x, e1 = xd, e2 = wrap(th1 - t1), e3 = w1, e4 = wrap(th2 - t2), e5 = w2, e6 = wrap(th3 - t3), e7 = w3;
-  const e = [e0, e1, e2, e3, e4, e5, e6, e7];
-  let quad = 0;
-  for (let i = 0; i < 8; i += 1) {
-    let row = 0;
-    for (let k = 0; k < 8; k += 1) row += P[i * 8 + k] * e[k];
-    quad += e[i] * row;
-  }
+  const quad = quadForm(P, e0, e1, e2, e3, e4, e5, e6, e7);
   const ang = (1 - (c1 * ct1 + s1 * st1)) + (1 - (c2 * ct2 + s2 * st2)) + (1 - (c3 * ct3 + s3 * st3));
   const near = Math.exp(-ang / nearScale);
   const en = poleEnergy(l1, l2, l3, m1, m2, m3, g, s1, c1, w1, s2, c2, w2, s3, c3, w3) - eT;
   acc += near * wTl * quad + (1 - near) * wTe * en * en;
+  return acc + duCost(U, uo, nKnots, wDu, kdt);
+}
 
-  const kdt = knot * dt;
+function duCost(U, uo, nKnots, wDu, kdt) {
+  let acc = 0;
   for (let j = 0; j < nKnots - 1; j += 1) {
     const du = (U[uo + j + 1] - U[uo + j]) / kdt;
     acc += wDu * du * du * kdt;
   }
   return acc;
+}
+
+/** e^T P e for row-major P[64], without allocating e. */
+function quadForm(P, e0, e1, e2, e3, e4, e5, e6, e7) {
+  let quad = 0;
+  for (let i = 0; i < 8; i += 1) {
+    const o = i * 8;
+    const row = P[o] * e0 + P[o + 1] * e1 + P[o + 2] * e2 + P[o + 3] * e3
+      + P[o + 4] * e4 + P[o + 5] * e5 + P[o + 6] * e6 + P[o + 7] * e7;
+    const ei = i === 0 ? e0 : i === 1 ? e1 : i === 2 ? e2 : i === 3 ? e3 : i === 4 ? e4 : i === 5 ? e5 : i === 6 ? e6 : e7;
+    quad += ei * row;
+  }
+  return quad;
 }
 
 function poleEnergy(l1, l2, l3, m1, m2, m3, g, s1, c1, w1, s2, c2, w2, s3, c3, w3) {

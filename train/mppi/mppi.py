@@ -44,6 +44,18 @@ class MPPIConfig:
     gate_in: float = 0.02
     gate_out: float = 0.10
     anchor: bool = True
+    # Rollouts integrate at rollout_sub * dt (numba backend; knot % rollout_sub == 0).
+    rollout_sub: int = 1
+    # Stop a rollout once the cart is past x_dead and charge the rest as dead.
+    early_exit: bool = False
+    # Hold mode: plants inside d < hold_d with sum(omega^2) < hold_spin replan
+    # with hold_samples samples (0 = off).
+    hold_samples: int = 0
+    hold_d: float = 0.01
+    hold_spin: float = 0.5
+    # Path to a ``mppi.value`` net used as the terminal cost instead of the
+    # analytic one (numba backend; pair with a shorter n_knots).
+    terminal_value: str = ""
     backend: str = "numba"
     compile: bool = True
     device: str = "cpu"
@@ -97,7 +109,14 @@ class MPPI:
 
             self._fast = pack_params(plant, cost, cfg)
         else:
+            if cfg.rollout_sub != 1 or cfg.early_exit or cfg.terminal_value:
+                raise ValueError("rollout_sub / early_exit / terminal_value need the numba backend")
             self._chunk = self._make_chunk()
+        self._value = None
+        if cfg.terminal_value:
+            from mppi.value import load as load_value
+
+            self._value = load_value(cfg.terminal_value)
         self.uff: torch.Tensor | None = None
         self._tick = 0
 
@@ -124,11 +143,15 @@ class MPPI:
         b, k, t = U.shape
         c = self.cfg
         if self._fast is not None:
-            from mppi.fast_rollout import rollout_costs
+            from mppi.fast_rollout import rollout_costs, rollout_costs_final
 
-            starts = states.double().unsqueeze(1).expand(b, k, 8).reshape(b * k, 8).numpy()
-            plans = U.double().reshape(b * k, t).numpy()
-            costs = rollout_costs(*self._fast, np.ascontiguousarray(starts), np.ascontiguousarray(plans))
+            starts = np.ascontiguousarray(states.double().unsqueeze(1).expand(b, k, 8).reshape(b * k, 8).numpy())
+            plans = np.ascontiguousarray(U.double().reshape(b * k, t).numpy())
+            if self._value is not None:
+                costs, fins = rollout_costs_final(*self._fast, starts, plans)
+                v = self._value(torch.from_numpy(fins)).double().numpy()
+                return torch.from_numpy(costs + v).float().view(b, k)
+            costs = rollout_costs(*self._fast, starts, plans)
             return torch.from_numpy(costs).float().view(b, k)
         s = states.unsqueeze(1).expand(b, k, 8).reshape(b * k, 8).contiguous()
         u = U.reshape(b * k, t)
@@ -140,9 +163,10 @@ class MPPI:
         acc = acc + self.cost.cost_du(du) * c.knot * self.plant.dt
         return acc.view(b, k)
 
-    def _noise(self, b: int) -> torch.Tensor:
+    def _noise(self, b: int, k: int | None = None) -> torch.Tensor:
         c = self.cfg
-        n = torch.randn(b, c.n_samples, c.n_knots, device=self.device, generator=self.gen)
+        k = k or c.n_samples
+        n = torch.randn(b, k, c.n_knots, device=self.device, generator=self.gen)
         beta = c.noise_beta
         if beta > 0:
             scale = (1.0 - beta * beta) ** 0.5
@@ -151,8 +175,8 @@ class MPPI:
             for t in range(1, c.n_knots):
                 out[..., t] = beta * out[..., t - 1] + scale * n[..., t]
             n = out
-        sig = torch.full((c.n_samples,), c.sigma, device=self.device)
-        n_wide = int(round(c.wide_frac * c.n_samples))
+        sig = torch.full((k,), c.sigma, device=self.device)
+        n_wide = int(round(c.wide_frac * k))
         if n_wide:
             sig[-n_wide:] = c.sigma_wide
         n = n * sig.view(1, -1, 1)
@@ -170,12 +194,32 @@ class MPPI:
         pick = (ess - self.cfg.ess).abs().argmin(dim=1)
         return w[torch.arange(S.shape[0], device=S.device), pick]
 
+    def holding(self, s: torch.Tensor) -> torch.Tensor:
+        """[B] bool: quiet at the target, where hold_samples suffice."""
+        c = self.cfg
+        if not c.hold_samples:
+            return torch.zeros(s.shape[0], dtype=torch.bool, device=s.device)
+        t = self.cost.target_angles
+        d = (1 - torch.cos(s[:, 2] - t[0])) + (1 - torch.cos(s[:, 4] - t[1])) + (1 - torch.cos(s[:, 6] - t[2]))
+        spin = s[:, 3] ** 2 + s[:, 5] ** 2 + s[:, 7] ** 2
+        return (d < c.hold_d) & (spin < c.hold_spin)
+
     def optimize(self, s0: torch.Tensor, U: torch.Tensor, n_iters: int | None = None) -> torch.Tensor:
         """MPPI update of residual plan U [B,T] from states s0 [B,8]."""
+        hold = self.holding(s0)
+        if hold.any():
+            out = U.clone()
+            out[hold] = self._optimize(s0[hold], U[hold], n_iters, self.cfg.hold_samples)
+            if (~hold).any():
+                out[~hold] = self._optimize(s0[~hold], U[~hold], n_iters, self.cfg.n_samples)
+            return out
+        return self._optimize(s0, U, n_iters, self.cfg.n_samples)
+
+    def _optimize(self, s0: torch.Tensor, U: torch.Tensor, n_iters: int | None, k: int) -> torch.Tensor:
         lim = 2.0 * self.fmax
         b = s0.shape[0]
         for _ in range(n_iters or self.cfg.n_iters):
-            samples = (U.unsqueeze(1) + self._noise(b)).clamp(-lim, lim)
+            samples = (U.unsqueeze(1) + self._noise(b, k)).clamp(-lim, lim)
             S = self.rollout_costs(s0, samples)
             w = self._weights(S)
             mean = (w.unsqueeze(-1) * samples).sum(1)
