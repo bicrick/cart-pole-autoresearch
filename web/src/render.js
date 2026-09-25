@@ -128,17 +128,29 @@ export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalI
   // and follows the cart, never panning past the track ends.
   const full = track + reach * 0.45;
   const portrait = canvas.height > canvas.width * 1.1;
-  // Embeds drop the chrome and frame the pendulum, not the whole track.
-  const tight = camera.embed || portrait;
-  camera.railY = camera.embed ? 0.5 : portrait ? 0.48 : 0.56;
-  const halfSpan = tight ? Math.min(full, reach + (camera.embed ? 0.35 : 0.2)) : full;
-  const room = Math.max(0, track + 0.3 - halfSpan);
-  const target = Math.max(-room, Math.min(room, tips.cart.x));
-  camera.x = room > 0 ? camera.x + (target - camera.x) * 0.15 : 0;
-  const scaleX = canvas.width / (2 * halfSpan);
-  const up = (camera.railY * canvas.height) / (reach + tip + pad);
-  const down = ((1 - camera.railY) * canvas.height) / (reach + tip + pad);
-  camera.scale = Math.min(scaleX, up, down);
+  const tight = portrait;
+  camera.railY = portrait ? 0.48 : 0.56;
+  let halfSpan = tight ? Math.min(full, reach + 0.2) : full;
+  if (camera.embed) {
+    // Frame the pendulum, not the track, so a 16:9 iframe is mostly the swing.
+    camera.railY = 0.58;
+    const margin = 0.06;
+    const scaleX = canvas.width / (2 * (reach * 0.7));
+    const up = (camera.railY * canvas.height) / (reach + margin);
+    const down = ((1 - camera.railY) * canvas.height) / (reach * 0.9 + margin);
+    camera.scale = Math.min(scaleX, up, down);
+    const room = Math.max(0, (constants.trackLimit ?? 2.4) + 0.3 - reach * 0.7);
+    const target = Math.max(-room, Math.min(room, tips.cart.x));
+    camera.x = room > 0 ? camera.x + (target - camera.x) * 0.15 : 0;
+  } else {
+    const room = Math.max(0, track + 0.3 - halfSpan);
+    const target = Math.max(-room, Math.min(room, tips.cart.x));
+    camera.x = room > 0 ? camera.x + (target - camera.x) * 0.15 : 0;
+    const scaleX = canvas.width / (2 * halfSpan);
+    const up = (camera.railY * canvas.height) / (reach + tip + pad);
+    const down = ((1 - camera.railY) * canvas.height) / (reach + tip + pad);
+    camera.scale = Math.min(scaleX, up, down);
+  }
   camera.tips = tips;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
