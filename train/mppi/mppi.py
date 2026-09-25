@@ -21,6 +21,7 @@ from __future__ import annotations
 import math
 from dataclasses import asdict, dataclass
 
+import numpy as np
 import torch
 
 from mppi.costs import TargetCost
@@ -43,6 +44,7 @@ class MPPIConfig:
     gate_in: float = 0.02
     gate_out: float = 0.10
     anchor: bool = True
+    backend: str = "numba"
     compile: bool = True
     device: str = "cpu"
     seed: int = 0
@@ -88,7 +90,14 @@ class MPPI:
         self.gen = torch.Generator(device=self.device).manual_seed(cfg.seed)
         self.fmax = plant.force_limit
         self.anchor = make_anchor(cost, cfg)
-        self._chunk = self._make_chunk()
+        self._fast = None
+        self._chunk = None
+        if cfg.backend == "numba":
+            from mppi.fast_rollout import pack_params
+
+            self._fast = pack_params(plant, cost, cfg)
+        else:
+            self._chunk = self._make_chunk()
         self.uff: torch.Tensor | None = None
         self._tick = 0
 
@@ -114,6 +123,13 @@ class MPPI:
         """states [B,8], residual plans U [B,K,T] -> total cost [B,K]."""
         b, k, t = U.shape
         c = self.cfg
+        if self._fast is not None:
+            from mppi.fast_rollout import rollout_costs
+
+            starts = states.double().unsqueeze(1).expand(b, k, 8).reshape(b * k, 8).numpy()
+            plans = U.double().reshape(b * k, t).numpy()
+            costs = rollout_costs(*self._fast, np.ascontiguousarray(starts), np.ascontiguousarray(plans))
+            return torch.from_numpy(costs).float().view(b, k)
         s = states.unsqueeze(1).expand(b, k, 8).reshape(b * k, 8).contiguous()
         u = U.reshape(b * k, t)
         acc = torch.zeros(b * k, device=self.device)

@@ -26,6 +26,7 @@ import argparse
 import asyncio
 import json
 import math
+import sys
 import threading
 import time
 
@@ -120,8 +121,8 @@ class Sim(threading.Thread):
         dt = p.dt
         goal, driving, ctrl = None, False, None
         wall0, sim_t = time.perf_counter(), 0.0
+        deadline = time.perf_counter()
         while True:
-            t_step = time.perf_counter()
             with self.lock:
                 inp = dict(self.inputs)
                 self.inputs["reset"] = None
@@ -168,9 +169,13 @@ class Sim(threading.Thread):
                 "ms": round(self.ms, 1),
                 "status": self.status,
             }
-            spare = dt - (time.perf_counter() - t_step)
-            if spare > 0:
-                time.sleep(spare)
+            # Pace against an absolute clock so cheap steps repay the replan step.
+            deadline += dt
+            now = time.perf_counter()
+            if deadline > now:
+                time.sleep(deadline - now)
+            elif now - deadline > 0.25:
+                deadline = now
 
 
 async def serve(args) -> None:
@@ -222,6 +227,9 @@ def main() -> None:
     ap.add_argument("--warm", action="store_true", help="compile all 8 teachers before serving")
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
+    # The sim thread and the websocket loop share the GIL; the default 5 ms
+    # switch interval stalls the 8.3 ms sim step behind network I/O.
+    sys.setswitchinterval(5e-4)
     asyncio.run(serve(args))
 
 

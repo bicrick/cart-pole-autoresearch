@@ -6,3 +6,7 @@ pygame>=2.6
 gymnasium>=0.29
 stable-baselines3>=2.3
 sb3-contrib>=2.3
+
+# MPPI teacher + Python-backed web sim (train/mppi)
+numba>=0.60
+websockets>=12
