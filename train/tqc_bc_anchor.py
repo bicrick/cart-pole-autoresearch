@@ -25,6 +25,10 @@ class TQCWithBCAnchor(TQC):
         self.bc_reg_coef = float(bc_reg_coef)
         self._bc_anchor = None
         self._last_bc_loss = 0.0
+        self.lqr_bc_coef = 0.0
+        self._lqr = None
+        self._lqr_ang = 0.35
+        self._lqr_om = 0.40
 
     def snapshot_actor_anchor(self) -> None:
         self._bc_anchor = copy.deepcopy(self.actor)
@@ -35,6 +39,40 @@ class TQCWithBCAnchor(TQC):
             f"[hold] BC actor anchor snapped (bc_reg_coef={self.bc_reg_coef:g})",
             flush=True,
         )
+
+    def set_lqr_brake(self, lqr, coef: float, ang_max: float, om_max: float) -> None:
+        """Pull the actor toward LQR only while near upright and slow.
+
+        LQR from a hang is not a swing. The gate is the region where this
+        plant's LQR actually settles (about 0.3 rad/s at 0.05 rad).
+        """
+        self._lqr = lqr
+        self.lqr_bc_coef = float(coef)
+        self._lqr_ang = float(ang_max)
+        self._lqr_om = float(om_max)
+        print(
+            f"[swing] LQR brake anchor coef={self.lqr_bc_coef:g} "
+            f"|θ|<{self._lqr_ang:g} |ω|<{self._lqr_om:g}",
+            flush=True,
+        )
+
+    def _lqr_bc_mse(self, obs: th.Tensor) -> tuple[th.Tensor, int]:
+        if self._lqr is None or self.lqr_bc_coef <= 0:
+            return obs.new_zeros(()), 0
+        th1 = th.atan2(obs[:, 2], obs[:, 3])
+        th2 = th.atan2(obs[:, 4], obs[:, 5])
+        th3 = th.atan2(obs[:, 6], obs[:, 7])
+        ang = th.stack((th1.abs(), th2.abs(), th3.abs())).amax(dim=0)
+        om = obs[:, 8:11].abs().amax(dim=-1)
+        gate = (ang < self._lqr_ang) & (om < self._lqr_om)
+        n = int(gate.sum().item())
+        if n == 0:
+            return obs.new_zeros(()), 0
+        with th.no_grad():
+            target = self._lqr.action_from_obs(obs)
+        mean_pi, _, _ = self.actor.get_action_dist_params(obs)
+        pred = th.tanh(mean_pi).reshape(-1)
+        return F.mse_loss(pred[gate], target.reshape(-1)[gate]), n
 
     def _bc_mse(self, obs: th.Tensor) -> th.Tensor:
         if self._bc_anchor is None or self.bc_reg_coef <= 0:
@@ -103,6 +141,11 @@ class TQCWithBCAnchor(TQC):
                 scale = qf_pi.detach().abs().mean().clamp(min=1.0)
                 actor_loss = actor_loss + (self.bc_reg_coef * scale) * bc_loss
                 bc_losses.append(float(bc_loss.detach()))
+            lqr_loss, n_lqr = self._lqr_bc_mse(replay_data.observations)
+            if self.lqr_bc_coef > 0 and n_lqr > 0:
+                scale = qf_pi.detach().abs().mean().clamp(min=1.0)
+                actor_loss = actor_loss + (self.lqr_bc_coef * scale) * lqr_loss
+                bc_losses.append(float(lqr_loss.detach()))
             actor_losses.append(actor_loss.item())
 
             self.actor.optimizer.zero_grad()
@@ -124,4 +167,4 @@ class TQCWithBCAnchor(TQC):
             self.logger.record("train/ent_coef_loss", np.mean(ent_coef_losses))
 
     def _excluded_save_params(self) -> list:
-        return super()._excluded_save_params() + ["_bc_anchor"]
+        return super()._excluded_save_params() + ["_bc_anchor", "_lqr"]

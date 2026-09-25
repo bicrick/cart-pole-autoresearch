@@ -33,8 +33,10 @@ def omega_abs_max(state: np.ndarray) -> float:
 def in_enter_basin(
     state: np.ndarray,
     *,
-    capture_tol_rad: float = 0.1,
-    capture_vel_rad_s: float = 1.0,
+    # UUU keeper zip, 2026-09-21: θ=0.03 and ω≤0.10 stays; ω=0.5 falls.
+    # fawraw's 0.1 rad / 1 rad/s is their plant.
+    capture_tol_rad: float = 0.03,
+    capture_vel_rad_s: float = 0.10,
 ) -> bool:
     err = angle_err(state)
     return bool(np.max(np.abs(err)) < capture_tol_rad and omega_abs_max(state) < capture_vel_rad_s)
@@ -72,8 +74,8 @@ class ForceLPF:
 class TwoPolicyHandoff:
     swing: ActionFn
     catcher: ActionFn
-    capture_tol_rad: float = 0.1
-    capture_vel_rad_s: float = 1.0
+    capture_tol_rad: float = 0.03
+    capture_vel_rad_s: float = 0.10
     exit_tol_rad: float = 0.25
     enter_dwell: int = 5
     exit_dwell: int = 5

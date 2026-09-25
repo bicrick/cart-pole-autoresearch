@@ -259,15 +259,18 @@ def product_reward(
     w1 = torch.where(up1, torch.full_like(r_th1, float(w_up)), torch.full_like(r_th1, float(w_down)))
     w2 = torch.where(up2, torch.full_like(r_th2, float(w_up)), torch.full_like(r_th2, float(w_down)))
     w3 = torch.where(up3, torch.full_like(r_th3, float(w_up)), torch.full_like(r_th3, float(w_down)))
-    wsum = (w1 + w2 + w3).clamp_min(1e-6)
-    # Weighted geometric mean of angle terms, then multiply other factors
-    # prod(r_i^{w_i})^{1/W} keeps scale in [0,1]
-    log_th = (
-        w1 * torch.log(r_th1.clamp_min(1e-8))
-        + w2 * torch.log(r_th2.clamp_min(1e-8))
-        + w3 * torch.log(r_th3.clamp_min(1e-8))
-    ) / wsum
-    r_th = torch.exp(log_th)
+    # Equal weights are Lim eq (9): the three angle terms multiply.
+    # Unequal UP/DOWN weights keep the geometric mean the hold recipe uses.
+    if float(w_up) == float(w_down):
+        r_th = r_th1 * r_th2 * r_th3
+    else:
+        wsum = (w1 + w2 + w3).clamp_min(1e-6)
+        log_th = (
+            w1 * torch.log(r_th1.clamp_min(1e-8))
+            + w2 * torch.log(r_th2.clamp_min(1e-8))
+            + w3 * torch.log(r_th3.clamp_min(1e-8))
+        ) / wsum
+        r_th = torch.exp(log_th)
 
     rew = r_u * r_y * r_th * r_w1 * r_w2 * r_w3
 
@@ -395,6 +398,10 @@ def m4_swing_reward(
     vel_cost_coef: float = 0.02,
     cart_cost_coef: float = 0.2,
     progress_w: float = 1.0,
+    soft_landing_rad: float = 0.0,
+    vel_near_gain: float = 1.0,
+    vel_near_rad: float = 0.3,
+    excess_energy_coef: float = 0.0,
     prev_state=None,
     **_ignored,
 ):
@@ -402,6 +409,13 @@ def m4_swing_reward(
 
     r = -(weighted angle error² + vel_cost + cart_cost + barrier + ctrl)
         + progress_w * Δ(weighted error²).
+    soft_landing_rad > 0 discounts ω² far from the target (pump gets cheaper).
+    vel_near_gain > 1 leaves that published ω² cost and multiplies it by
+    1+(gain-1)*exp(-|θ_err|/vel_near_rad), so a fast pass through the top
+    costs more and a slow pass does not. Gain 1 is the published cost.
+    excess_energy_coef > 0 subtracts that times pole energy above the
+    upright energy, so a whip that is already spinning on the way up pays
+    for the extra joules. Zero leaves the published cost.
     The one-shot arrival bonus is applied by the env after this return.
     Holds stay on product_reward.
     """
@@ -416,6 +430,12 @@ def m4_swing_reward(
     ang_cost = (weights * err.square()).sum(dim=-1)
     vel = state[..., 3].square() + state[..., 5].square() + state[..., 7].square()
     vel_cost = float(vel_cost_coef) * vel
+    if soft_landing_rad and float(soft_landing_rad) > 0:
+        prox = torch.exp(-err.abs().amax(dim=-1) / float(soft_landing_rad))
+        vel_cost = vel_cost * prox
+    if vel_near_gain and float(vel_near_gain) > 1.0:
+        prox = torch.exp(-err.abs().amax(dim=-1) / max(float(vel_near_rad), 1e-6))
+        vel_cost = vel_cost * (1.0 + (float(vel_near_gain) - 1.0) * prox)
     cart_cost = float(cart_cost_coef) * state[..., 0].square()
     barrier = torch.zeros_like(ang_cost)
     if cart_barrier_coef and cart_barrier_coef > 0 and track_limit > 0:
@@ -424,6 +444,12 @@ def m4_swing_reward(
     fl = float(constants["forceLimit"])
     ctrl = 0.001 * (force / max(fl, 1e-6)).square()
     rew = -(ang_cost + vel_cost + cart_cost + barrier + ctrl)
+    if excess_energy_coef and float(excess_energy_coef) > 0.0:
+        from energy_pump import pole_energy_torch, upright_energy
+
+        e_star = float(upright_energy(constants))
+        excess = (pole_energy_torch(state, constants) - e_star).clamp(min=0.0)
+        rew = rew - float(excess_energy_coef) * excess
     if progress_w and float(progress_w) > 0 and prev_state is not None:
         prev_err = wrapped_angle_error(prev_state, goal_ids)
         progress = (weights * (prev_err.square() - err.square())).sum(dim=-1)

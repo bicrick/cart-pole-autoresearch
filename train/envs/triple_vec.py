@@ -65,6 +65,7 @@ class TripleUUUVecEnv(VecEnv):
         hang_frac: float = 0.0,
         wide_frac: float = 0.0,
         progress_w: float = 0.0,
+        ry_scale: float | None = None,
         cart_barrier_coef: float = 10.0,
         alpha_th: float = 0.5,
         w_up: float = 5.0,
@@ -78,6 +79,12 @@ class TripleUUUVecEnv(VecEnv):
         transition_bonus: float = 0.0,
         transition_tol: float = 0.3,
         transition_steps: int = 100,
+        soft_landing_rad: float = 0.0,
+        vel_near_gain: float = 1.0,
+        vel_near_rad: float = 0.3,
+        excess_energy_coef: float = 0.0,
+        arrival_frac: float = 0.0,
+        arrival_omega: float = 0.0,
         fall_thresh_up: float = FALL_THRESH_UP,
         fall_thresh_down: float = FALL_THRESH_DOWN,
         survival_frac: float = SURVIVAL_FRAC,
@@ -114,6 +121,7 @@ class TripleUUUVecEnv(VecEnv):
             track_limit=self.track_limit,
             oob_penalty=float(oob_penalty),
             progress_w=float(progress_w),
+            ry_scale=None if ry_scale is None else float(ry_scale),
             cart_barrier_coef=float(cart_barrier_coef),
             alpha_th=float(alpha_th),
             w_up=float(w_up),
@@ -122,11 +130,17 @@ class TripleUUUVecEnv(VecEnv):
             sparse_bonus=float(sparse_bonus),
             vel_cost_coef=float(vel_cost_coef),
             cart_cost_coef=float(cart_cost_coef),
+            soft_landing_rad=float(soft_landing_rad),
+            vel_near_gain=float(vel_near_gain),
+            vel_near_rad=float(vel_near_rad),
+            excess_energy_coef=float(excess_energy_coef),
         )
         self.reward_mode = (reward_mode or "product").lower()
         self.transition_bonus = float(transition_bonus)
         self.transition_tol = float(transition_tol)
         self.transition_steps = int(transition_steps)
+        self.arrival_frac = float(arrival_frac)
+        self.arrival_omega = float(arrival_omega)
         self._in_tol = torch.zeros(n_envs, dtype=torch.int32, device=self.device)
         self._bonus_paid = torch.zeros(n_envs, dtype=torch.bool, device=self.device)
         self._goal = torch.full(
@@ -161,6 +175,8 @@ class TripleUUUVecEnv(VecEnv):
             self.device,
             noise_min=self.init_noise_min,
             goal_id=self.goal_id,
+            arrival_frac=self.arrival_frac,
+            arrival_omega=self.arrival_omega,
         )
         if self._hard_bank is not None:
             fresh = mix_hard_ics(fresh, self._hard_bank, self.hard_ic_frac)

@@ -33,6 +33,16 @@ CART_COST_COEF="${CART_COST_COEF:-0.2}"
 TRANSITION_BONUS="${TRANSITION_BONUS:-0}"
 TRANSITION_TOL="${TRANSITION_TOL:-0.3}"
 TRANSITION_STEPS="${TRANSITION_STEPS:-100}"
+SOFT_LANDING_RAD="${SOFT_LANDING_RAD:-0}"
+VEL_NEAR_GAIN="${VEL_NEAR_GAIN:-1}"
+VEL_NEAR_RAD="${VEL_NEAR_RAD:-0.3}"
+EXCESS_ENERGY_COEF="${EXCESS_ENERGY_COEF:-0}"
+ARRIVAL_FRAC="${ARRIVAL_FRAC:-0}"
+ARRIVAL_OMEGA="${ARRIVAL_OMEGA:-0}"
+LQR_BC_COEF="${LQR_BC_COEF:-0}"
+LQR_BC_ANG="${LQR_BC_ANG:-0.35}"
+LQR_BC_OMEGA="${LQR_BC_OMEGA:-0.40}"
+LQR_SEED_EPISODES="${LQR_SEED_EPISODES:-0}"
 ALPHA_TH="${ALPHA_TH:-0.5}"
 W_UP="${W_UP:-5.0}"
 W_DOWN="${W_DOWN:-1.0}"
@@ -62,6 +72,7 @@ RUN_NAME="${RUN_NAME:-m2-hold-uuu-f${FORCE_LIMIT}-nt${INIT_NOISE}-tqc}"
 CHECKPOINT="${CHECKPOINT:-policies/tqc-m2-uuu-hold.zip}"
 # Walls ON by default for our plant
 TRACK_WALLS="${TRACK_WALLS:-1}"
+TRACK_LIMIT="${TRACK_LIMIT:-2.4}"
 
 BC_CHECKPOINT="${BC_CHECKPOINT:-}"
 RESUME_FROM="${RESUME_FROM:-}"
@@ -100,6 +111,9 @@ RESUME_ARGS=()
 if [[ -n "${RESUME_FROM}" ]]; then
   RESUME_ARGS+=(--resume-from "$RESUME_FROM")
 fi
+if [[ "${RESET_REPLAY:-0}" == "1" ]]; then
+  RESUME_ARGS+=(--reset-replay-buffer)
+fi
 
 VER_ARGS=()
 if [[ "${VER}" == "1" || "${VER}" == "true" || "${VER}" == "on" ]]; then
@@ -112,7 +126,7 @@ if [[ -n "${HARD_IC_PATH}" ]]; then
 fi
 
 echo "=== launch M2 ${GOAL} hold ===" >&2
-echo "  GOAL=$GOAL TOTAL_STEPS=$TOTAL_STEPS INIT_NOISE=$INIT_NOISE walls=$TRACK_WALLS" >&2
+echo "  GOAL=$GOAL TOTAL_STEPS=$TOTAL_STEPS INIT_NOISE=$INIT_NOISE walls=$TRACK_WALLS track=$TRACK_LIMIT" >&2
 echo "  net=[$POLICY_ARCH] buffer=$BUFFER_SIZE n_quantiles=$N_QUANTILES" >&2
 echo "  PRIMARY: survival_success (ep_len>=0.8*max); also at_goal; progress_w=$PROGRESS_W reward=$REWARD_MODE" >&2
 echo "  n_envs=$N_ENVS gradient_steps=$GRADIENT_STEPS ckpt=$CHECKPOINT run=$RUN_NAME device=$DEVICE env_device=${ENV_DEVICE:-$DEVICE}" >&2
@@ -138,6 +152,16 @@ exec "$PYTHON" train/train_triple_tqc.py \
   --transition-bonus "$TRANSITION_BONUS" \
   --transition-tol "$TRANSITION_TOL" \
   --transition-steps "$TRANSITION_STEPS" \
+  --soft-landing-rad "$SOFT_LANDING_RAD" \
+  --vel-near-gain "$VEL_NEAR_GAIN" \
+  --vel-near-rad "$VEL_NEAR_RAD" \
+  --excess-energy-coef "$EXCESS_ENERGY_COEF" \
+  --arrival-frac "$ARRIVAL_FRAC" \
+  --arrival-omega "$ARRIVAL_OMEGA" \
+  --lqr-bc-coef "$LQR_BC_COEF" \
+  --lqr-bc-ang "$LQR_BC_ANG" \
+  --lqr-bc-omega "$LQR_BC_OMEGA" \
+  --lqr-seed-episodes "$LQR_SEED_EPISODES" \
   --alpha-th "$ALPHA_TH" \
   --w-up "$W_UP" \
   --w-down "$W_DOWN" \
@@ -165,6 +189,7 @@ exec "$PYTHON" train/train_triple_tqc.py \
   --logdir "$LOGDIR" \
   --run-name "$RUN_NAME" \
   --checkpoint "$CHECKPOINT" \
+  --track-limit "$TRACK_LIMIT" \
   ${SMOKE_FLAG[@]+"${SMOKE_FLAG[@]}"} \
   ${WALLS_ARGS[@]+"${WALLS_ARGS[@]}"} \
   ${BC_ARGS[@]+"${BC_ARGS[@]}"} \

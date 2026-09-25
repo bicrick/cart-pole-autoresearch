@@ -110,6 +110,13 @@ def parse_args():
     p.add_argument("--wide-frac", type=float, default=0.0, help="M2 hold: 0 (no wide mix)")
     p.add_argument("--progress-w", type=float, default=0.0,
                     help="M2 hold: 0. M4 swing: 1, on weighted error² (not cos-align).")
+    p.add_argument(
+        "--ry-scale",
+        type=float,
+        default=None,
+        help="Lim cart term is exp(-0.3|y|) in meters (scale 1). "
+        "Default None divides |x| by the track length.",
+    )
     p.add_argument("--cart-barrier-coef", type=float, default=10.0)
     p.add_argument(
         "--reward-mode",
@@ -127,6 +134,47 @@ def parse_args():
                     help="M4 arrival tolerance (rad). Probe yaml 0.3. Enter-gate stays 0.03.")
     p.add_argument("--transition-steps", type=int, default=100,
                     help="Consecutive in-tol steps before the M4 bonus. Probe yaml 100.")
+    p.add_argument(
+        "--soft-landing-rad",
+        type=float,
+        default=0.0,
+        help="M4 only. If >0, scale ω² cost by exp(-|θ_err|/this). 0 keeps full vel cost.",
+    )
+    p.add_argument(
+        "--vel-near-gain",
+        type=float,
+        default=1.0,
+        help="M4 only. Multiply ω² cost by 1+(gain-1)*exp(-|θ_err|/vel-near-rad). 1 is the published cost.",
+    )
+    p.add_argument(
+        "--vel-near-rad",
+        type=float,
+        default=0.3,
+        help="M4 only. Angle scale for --vel-near-gain. 0.3 matches the probe arrival tolerance.",
+    )
+    p.add_argument(
+        "--excess-energy-coef",
+        type=float,
+        default=0.0,
+        help="M4 only. Subtract this times pole energy above the upright energy. 0 is the published cost.",
+    )
+    p.add_argument(
+        "--reset-replay-buffer",
+        action="store_true",
+        help="After resume, drop the old replay buffer and count steps from zero.",
+    )
+    p.add_argument(
+        "--arrival-frac",
+        type=float,
+        default=0.0,
+        help="M4 swing only. Fraction of episodes that start near the target with a shared link rate.",
+    )
+    p.add_argument(
+        "--arrival-omega",
+        type=float,
+        default=0.0,
+        help="Max |ω| on those arrival episodes. Hold catch basin is about 0.1 rad/s.",
+    )
     p.add_argument("--alpha-th", type=float, default=0.5)
     p.add_argument("--w-up", type=float, default=5.0)
     p.add_argument("--w-down", type=float, default=1.0)
@@ -160,6 +208,13 @@ def parse_args():
         default=20_000,
         help="Keep BC actor frozen while critics learn. 0 = never freeze.",
     )
+    p.add_argument(
+        "--pin-log-std",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Pin actor log_std to --log-std-init. Hold/BC uses this. "
+        "Wide Lim starts leave it off so the std can explore.",
+    )
     p.add_argument("--n-envs", type=int, default=1)
     p.add_argument(
         "--gradient-steps",
@@ -190,6 +245,21 @@ def parse_args():
         default=0.0,
         help="TD3+BC-style MSE to the snapped BC actor, scaled by |Q|. "
         "0 disables. Hold stay after unfreeze: 2.5.",
+    )
+    p.add_argument(
+        "--lqr-bc-coef",
+        type=float,
+        default=0.0,
+        help="MSE to live UUU LQR, scaled by |Q|, only while max|θ| and max|ω| "
+        "are inside the gate. 0 disables. Swing brake: 2.5.",
+    )
+    p.add_argument("--lqr-bc-ang", type=float, default=0.35)
+    p.add_argument("--lqr-bc-omega", type=float, default=0.40)
+    p.add_argument(
+        "--lqr-seed-episodes",
+        type=int,
+        default=0,
+        help="LQR arrival episodes written into the replay buffer before learn. 0 disables.",
     )
     p.add_argument(
         "--resume-from",
@@ -458,6 +528,7 @@ def main() -> None:
             hang_frac=args.hang_frac,
             wide_frac=args.wide_frac,
             progress_w=args.progress_w,
+            ry_scale=args.ry_scale,
             cart_barrier_coef=args.cart_barrier_coef,
             alpha_th=args.alpha_th,
             w_up=args.w_up,
@@ -469,13 +540,19 @@ def main() -> None:
             transition_bonus=args.transition_bonus,
             transition_tol=args.transition_tol,
             transition_steps=args.transition_steps,
+            soft_landing_rad=args.soft_landing_rad,
+            vel_near_gain=args.vel_near_gain,
+            vel_near_rad=args.vel_near_rad,
+            excess_energy_coef=args.excess_energy_coef,
+            arrival_frac=args.arrival_frac,
+            arrival_omega=args.arrival_omega,
             device=args.env_device,
             seed=seed,
             hard_ic_path=hard_ic_path,
             hard_ic_frac=hard_ic_frac,
-            # fawraw M4: bottom swing-up must not angle-fall at step 0.
-            # Near-target hold keeps the fall kill.
-            angle_fall=(args.init_mode or "near_target").lower() != "bottom",
+            # Wide Lim starts and bottom swing-up are far from the target.
+            # Angle-fall at step 0 would end every episode. Near-target hold keeps it.
+            angle_fall=(args.init_mode or "near_target").lower() not in ("bottom", "wide"),
         )
 
     env = _make_vec(
@@ -541,6 +618,16 @@ def main() -> None:
             "transition_bonus": args.transition_bonus,
             "transition_tol": args.transition_tol,
             "transition_steps": args.transition_steps,
+            "soft_landing_rad": args.soft_landing_rad,
+            "vel_near_gain": args.vel_near_gain,
+            "vel_near_rad": args.vel_near_rad,
+            "excess_energy_coef": args.excess_energy_coef,
+            "arrival_frac": args.arrival_frac,
+            "arrival_omega": args.arrival_omega,
+            "lqr_bc_coef": args.lqr_bc_coef,
+            "lqr_bc_ang": args.lqr_bc_ang,
+            "lqr_bc_omega": args.lqr_bc_omega,
+            "lqr_seed_episodes": args.lqr_seed_episodes,
             "sparse_bonus": args.sparse_bonus,
             "log_std_init": args.log_std_init,
             "ent_coef": args.ent_coef,
@@ -556,7 +643,11 @@ def main() -> None:
             "noise_min": args.init_noise_min,
             "hang_frac": args.hang_frac,
             "wide_frac": args.wide_frac,
-            "quiet_basin": "θ ~ target ±init_noise; x ±init_noise; xd,ω FIXED ±0.01; fall UP 0.6 / DOWN 1.5",
+            "quiet_basin": (
+                "Lim eq (10): x±0.3 xd±1.2 θ~U(-π,π) ω±10/20/30; no angle-fall"
+                if (args.init_mode or "").lower() == "wide"
+                else "θ ~ target ±init_noise; x ±init_noise; xd,ω FIXED ±0.01; fall UP 0.6 / DOWN 1.5"
+            ),
             "progress_w": args.progress_w,
         },
         "eval_primary": {
@@ -585,7 +676,12 @@ def main() -> None:
         model.batch_size = int(args.batch_size)
         model.tensorboard_log = str(Path(args.logdir))
         print(f"[hold] resumed TQC from {resume}", flush=True)
-        pin_actor_log_std(model, args.log_std_init)
+        if args.reset_replay_buffer:
+            model.replay_buffer.reset()
+            model.num_timesteps = 0
+            print("[hold] replay buffer reset; step count starts at 0", flush=True)
+        if args.pin_log_std:
+            pin_actor_log_std(model, args.log_std_init)
         if args.ver:
             model.replay_buffer = VERReplayBuffer(
                 model.buffer_size,
@@ -620,7 +716,8 @@ def main() -> None:
             bc_reg_coef=float(args.bc_reg_coef),
             **rb_kwargs,
         )
-        pin_actor_log_std(model, args.log_std_init)
+        if args.pin_log_std:
+            pin_actor_log_std(model, args.log_std_init)
         if args.ver:
             print("[hold] VER replay flip ON (each transition stored + mirrored)", flush=True)
         if args.bc_checkpoint:
@@ -629,6 +726,20 @@ def main() -> None:
             (log_path / "run_meta.json").write_text(json.dumps(meta, indent=2))
     if float(args.bc_reg_coef) > 0:
         model.snapshot_actor_anchor()
+    if float(args.lqr_bc_coef) > 0:
+        from lqr_uuu import design_lqr_uuu
+
+        model.set_lqr_brake(
+            design_lqr_uuu(force_limit=args.force_limit),
+            coef=float(args.lqr_bc_coef),
+            ang_max=float(args.lqr_bc_ang),
+            om_max=float(args.lqr_bc_omega),
+        )
+    if int(args.lqr_seed_episodes) > 0:
+        from lqr_brake_seed import seed_lqr_arrival
+
+        meta["lqr_seed"] = seed_lqr_arrival(model, args)
+        (log_path / "run_meta.json").write_text(json.dumps(meta, indent=2))
 
     save_every = max(args.save_freq // max(args.n_envs, 1), 1)
     eval_every = max(args.eval_freq // max(args.n_envs, 1), 1)

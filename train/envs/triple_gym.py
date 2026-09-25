@@ -171,6 +171,8 @@ def sample_states(
     device: torch.device,
     noise_min: float = 0.0,
     goal_id: int = UUU_ID,
+    arrival_frac: float = 0.0,
+    arrival_omega: float = 0.0,
 ) -> torch.Tensor:
     """Batched ICs. Default mass is fawraw M2 quiet basin (rates fixed ±0.01)."""
     n = int(n)
@@ -189,6 +191,32 @@ def sample_states(
         state[:, 5] = torch.empty(n, device=device).uniform_(-n_rate, n_rate)
         state[:, 6] = math.pi + torch.empty(n, device=device).uniform_(-n_ang, n_ang)
         state[:, 7] = torch.empty(n, device=device).uniform_(-n_rate, n_rate)
+        # Half the swing episodes (when set) start near the target with a
+        # shared link rate, so the net practices bleeding the flyby. Bottom
+        # rows stay fawraw M4. Holds leave arrival_frac at 0.
+        frac = float(arrival_frac)
+        w_max = float(arrival_omega)
+        if frac > 0.0 and w_max > 0.0:
+            take = torch.rand(n, device=device) < frac
+            k = int(take.sum().item())
+            if k:
+                tgt = GOAL_ANGLES[int(goal_id)].to(device=device)
+                n_pos = 0.05
+                mag = torch.empty(k, device=device).uniform_(0.05, w_max)
+                sign = torch.where(
+                    torch.rand(k, device=device) < 0.5,
+                    torch.ones(k, device=device),
+                    -torch.ones(k, device=device),
+                )
+                om = mag * sign
+                state[take, 0] = torch.empty(k, device=device).uniform_(-n_pos, n_pos)
+                state[take, 1] = torch.empty(k, device=device).uniform_(-0.05, 0.05)
+                state[take, 2] = tgt[0] + torch.empty(k, device=device).uniform_(-n_pos, n_pos)
+                state[take, 4] = tgt[1] + torch.empty(k, device=device).uniform_(-n_pos, n_pos)
+                state[take, 6] = tgt[2] + torch.empty(k, device=device).uniform_(-n_pos, n_pos)
+                state[take, 3] = om
+                state[take, 5] = om
+                state[take, 7] = om
         return state
     hang = (u < hang_frac) | (mode == "hang")
     wide = (~hang) & ((u < hang_frac + wide_frac) | (mode == "wide"))
@@ -254,6 +282,7 @@ class TriplePendulumUUUEnv(gym.Env):
         hang_frac: float = 0.0,
         wide_frac: float = 0.0,
         progress_w: float = 0.0,
+        ry_scale: float | None = None,
         cart_barrier_coef: float = 10.0,
         alpha_th: float = 0.5,
         w_up: float = 5.0,
@@ -267,6 +296,12 @@ class TriplePendulumUUUEnv(gym.Env):
         transition_bonus: float = 0.0,
         transition_tol: float = 0.3,
         transition_steps: int = 100,
+        soft_landing_rad: float = 0.0,
+        vel_near_gain: float = 1.0,
+        vel_near_rad: float = 0.3,
+        excess_energy_coef: float = 0.0,
+        arrival_frac: float = 0.0,
+        arrival_omega: float = 0.0,
         fall_thresh_up: float = FALL_THRESH_UP,
         fall_thresh_down: float = FALL_THRESH_DOWN,
         survival_frac: float = SURVIVAL_FRAC,
@@ -306,6 +341,7 @@ class TriplePendulumUUUEnv(gym.Env):
             track_limit=self.track_limit,
             oob_penalty=float(oob_penalty),
             progress_w=float(progress_w),
+            ry_scale=None if ry_scale is None else float(ry_scale),
             cart_barrier_coef=float(cart_barrier_coef),
             alpha_th=float(alpha_th),
             w_up=float(w_up),
@@ -314,11 +350,17 @@ class TriplePendulumUUUEnv(gym.Env):
             sparse_bonus=float(sparse_bonus),
             vel_cost_coef=float(vel_cost_coef),
             cart_cost_coef=float(cart_cost_coef),
+            soft_landing_rad=float(soft_landing_rad),
+            vel_near_gain=float(vel_near_gain),
+            vel_near_rad=float(vel_near_rad),
+            excess_energy_coef=float(excess_energy_coef),
         )
         self.reward_mode = (reward_mode or "product").lower()
         self.transition_bonus = float(transition_bonus)
         self.transition_tol = float(transition_tol)
         self.transition_steps = int(transition_steps)
+        self.arrival_frac = float(arrival_frac)
+        self.arrival_omega = float(arrival_omega)
         self._in_tol = 0
         self._bonus_paid = False
 
@@ -361,6 +403,8 @@ class TriplePendulumUUUEnv(gym.Env):
             device=self.device,
             noise_min=float(opts.get("init_noise_min", self.init_noise_min)),
             goal_id=self.goal_id,
+            arrival_frac=self.arrival_frac,
+            arrival_omega=self.arrival_omega,
         )
         if self._hard_bank is not None:
             self._state = mix_hard_ics(self._state, self._hard_bank, self.hard_ic_frac)

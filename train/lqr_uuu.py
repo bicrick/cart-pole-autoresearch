@@ -148,6 +148,22 @@ class LQRUUU:
         """Gym action in [-1, 1] for TriplePendulumUUUEnv."""
         return np.array([self.force(state) / self.force_limit], dtype=np.float32)
 
+    def action_from_obs(self, obs: torch.Tensor) -> torch.Tensor:
+        """Batched gym action in [-1, 1] from the 11-D observation.
+
+        obs is [x, xd, sin/cos ×3, ω ×3]. atan2 recovers the wrapped UUU error.
+        """
+        th1 = torch.atan2(obs[..., 2], obs[..., 3])
+        th2 = torch.atan2(obs[..., 4], obs[..., 5])
+        th3 = torch.atan2(obs[..., 6], obs[..., 7])
+        z = torch.stack(
+            (obs[..., 0], obs[..., 1], th1, obs[..., 8], th2, obs[..., 9], th3, obs[..., 10]),
+            dim=-1,
+        )
+        k = torch.as_tensor(self.K, device=obs.device, dtype=obs.dtype).reshape(-1)
+        u = -(z * k).sum(dim=-1) / float(self.force_limit)
+        return u.clamp(-1.0, 1.0)
+
     def predict(self, obs_or_state: np.ndarray, *, from_obs: bool = False) -> np.ndarray:
         """SB3-like predict. Prefer raw state; obs→state is lossy so discouraged."""
         if from_obs:

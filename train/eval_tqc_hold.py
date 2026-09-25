@@ -29,6 +29,7 @@ def parse_args():
     p.add_argument("--device", default="cpu")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--goal", "--target-ep", dest="goal", default="UUU")
+    p.add_argument("--track-walls", action=argparse.BooleanOptionalAction, default=True)
     return p.parse_args()
 
 
@@ -45,7 +46,7 @@ def main() -> int:
     env = TriplePendulumUUUEnv(
         force_limit=args.force_limit,
         max_steps=args.max_steps,
-        track_walls=True,
+        track_walls=args.track_walls,
         init_mode="near_target",
         init_noise=args.init_noise,
         hang_frac=0.0,
@@ -80,7 +81,7 @@ def main() -> int:
     grate = float(np.mean(goal))
     arate = float(np.nanmean(align))
     print(
-        f"W1 eval n={args.n_episodes} noise={args.init_noise} "
+        f"W1 eval n={args.n_episodes} noise={args.init_noise} walls={int(args.track_walls)} "
         f"survival={srate:.3f} at_goal={grate:.3f} align={arate:.3f} "
         f"mean_len={float(np.mean(lens)):.1f}",
         flush=True,
