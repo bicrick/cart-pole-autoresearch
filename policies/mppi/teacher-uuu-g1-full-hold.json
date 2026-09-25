@@ -1,0 +1,103 @@
+{
+ "config": "mppi/configs/uuu.json",
+ "goal": "UUU",
+ "teacher": {
+  "goal": "UUU",
+  "cost": {
+   "goal": "UUU",
+   "w_angle": 20.0,
+   "w_vel": 0.05,
+   "w_vel_near": 2.0,
+   "near_scale": 0.15,
+   "w_x": 1.0,
+   "w_xd": 0.1,
+   "x_soft": 1.6,
+   "w_barrier": 2000.0,
+   "x_dead": 2.35,
+   "w_dead": 100000.0,
+   "w_energy": 20.0,
+   "w_u": 0.0001,
+   "w_du": 1e-06,
+   "w_terminal_lqr": 0.1,
+   "w_terminal_energy": 50.0,
+   "lqr_q_theta": 100.0,
+   "lqr_r": 0.01
+  },
+  "mppi": {
+   "n_samples": 4096,
+   "n_knots": 45,
+   "knot": 4,
+   "sigma": 8.0,
+   "sigma_wide": 25.0,
+   "wide_frac": 0.25,
+   "noise_beta": 0.7,
+   "ess": 32.0,
+   "n_iters": 1,
+   "gate_in": 0.02,
+   "gate_out": 0.1,
+   "anchor": true,
+   "rollout_sub": 1,
+   "early_exit": true,
+   "hold_samples": 128,
+   "hold_d": 0.01,
+   "hold_spin": 0.5,
+   "backend": "numba",
+   "compile": true,
+   "device": "cpu",
+   "seed": 0
+  },
+  "walls": false
+ },
+ "g1": {
+  "quiet_0.03": {
+   "n": 20,
+   "survival": 1.0,
+   "at_goal": 1.0,
+   "align": 0.9999908208847046,
+   "oob": 0.0,
+   "lqr_survival": 0.949999988079071
+  },
+  "near_0.05": {
+   "n": 20,
+   "survival": 0.75,
+   "at_goal": 0.75,
+   "align": 0.9989751577377319,
+   "oob": 0.0,
+   "lqr_survival": 0.550000011920929
+  },
+  "near_0.10": {
+   "n": 20,
+   "survival": 0.3499999940395355,
+   "at_goal": 0.3499999940395355,
+   "align": 0.999156653881073,
+   "oob": 0.0,
+   "lqr_survival": 0.30000001192092896
+  },
+  "shove_40N_0.05s": {
+   "n": 20,
+   "survival": 1.0,
+   "at_goal": 1.0,
+   "align": 0.9999969601631165,
+   "oob": 0.0,
+   "lqr_survival": 1.0
+  },
+  "shove_40N_0.10s": {
+   "n": 20,
+   "survival": 0.0,
+   "at_goal": 0.0,
+   "align": 0.8394944071769714,
+   "oob": 0.0,
+   "lqr_survival": 0.0
+  },
+  "shove_40N_0.25s": {
+   "n": 20,
+   "survival": 0.0,
+   "at_goal": 0.0,
+   "align": 0.9214364886283875,
+   "oob": 0.0,
+   "lqr_survival": 0.0
+  },
+  "pass": true
+ },
+ "wall_s": 89.8323929309845
+}
