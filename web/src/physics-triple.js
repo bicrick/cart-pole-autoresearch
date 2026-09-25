@@ -147,12 +147,20 @@ export function step(state, force, extraQ, constants = TRIPLE_CONSTANTS) {
     constants,
   );
   const dt = constants.dt;
-  const xd = clamp(state.xd + clamp(finite(acc.xdd), -MAX_ACC, MAX_ACC) * dt, -MAX_CART_VEL, MAX_CART_VEL);
+  let xd = clamp(state.xd + clamp(finite(acc.xdd), -MAX_ACC, MAX_ACC) * dt, -MAX_CART_VEL, MAX_CART_VEL);
   const th1d = clamp(state.th1d + clamp(finite(acc.t1dd), -MAX_ACC, MAX_ACC) * dt, -MAX_ANG_VEL, MAX_ANG_VEL);
   const th2d = clamp(state.th2d + clamp(finite(acc.t2dd), -MAX_ACC, MAX_ACC) * dt, -MAX_ANG_VEL, MAX_ANG_VEL);
   const th3d = clamp(state.th3d + clamp(finite(acc.t3dd), -MAX_ACC, MAX_ACC) * dt, -MAX_ANG_VEL, MAX_ANG_VEL);
+  let x = state.x + xd * dt;
+  if (constants.trackWalls) {
+    const track = constants.trackLimit ?? 2.4;
+    if (x > track || x < -track) {
+      x = clamp(x, -track, track);
+      xd = 0;
+    }
+  }
   return {
-    x: state.x + xd * dt,
+    x,
     xd,
     th1: state.th1 + th1d * dt,
     th1d,

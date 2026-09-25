@@ -49,7 +49,7 @@ export function startLoop({
         const obs = plant.normalizeObs(plant.conditionedObs(plant.observe(state), goalId), constants);
         const actor = typeof getPolicy === "function" ? getPolicy() : policy;
         let force = 0;
-        if (control && actor && driving) force = actor.act(obs);
+        if (control && actor && driving) force = actor.act(obs, state, goalId);
         const manual = control && typeof getManualForce === "function" ? getManualForce() : 0;
         force = Math.max(-fmax, Math.min(fmax, force + manual));
         lastForce = control ? force : 0;

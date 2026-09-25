@@ -60,3 +60,6 @@ vendor/
 
 # Keep BC warm-start checkpoint (small)
 !policies/bc-lqr-uuu.pt
+
+# MPPI distillation datasets (regenerable)
+policies/mppi/*-data.npz

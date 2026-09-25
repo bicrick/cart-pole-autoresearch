@@ -31,17 +31,7 @@ export const PLANTS = {
   triple: {
     id: "triple",
     label: "triple pendulum",
-    policyUrl: "/policy-triple.json",
-    specialists: {
-      DDD: "/policy-triple.json",
-      DDU: "/policy-triple-ddu.json",
-      DUD: "/policy-triple-dud.json",
-      DUU: "/policy-triple-duu.json",
-      UDD: "/policy-triple-udd.json",
-      UDU: "/policy-triple-udu.json",
-      UUD: "/policy-triple-uud.json",
-      UUU: "/policy-triple-uuu.json",
-    },
+    remote: true,
     obsDim: 11,
     defaultGoal: "DDD",
     goalIds: TRIPLE_GOALS,

@@ -3,8 +3,8 @@ import { createInput, createKeys } from "./input.js";
 import { createCamera, draw } from "./render.js";
 import { startLoop } from "./loop.js";
 import { PLANTS, plantFromHash, nextPlantId } from "./plants.js";
-import { equilibriumState } from "./goals-triple.js";
 import { bindTheme } from "./theme.js";
+import { startRemoteLoop } from "./remote-loop.js";
 
 const page = document.querySelector(".page");
 const canvas = document.getElementById("stage");
@@ -26,7 +26,14 @@ let started = false;
 let loop = null;
 let constants = plant.constants;
 let activePolicy = null;
-const specialistCache = new Map();
+
+// The triple runs in the Python sim server (scripts/mppi-server.sh): same plant
+// the MPPI teacher was trained on, teacher in the loop. ?sim=ws://host:port overrides.
+const SIM_URL = new URLSearchParams(window.location.search).get("sim") || "ws://127.0.0.1:8765";
+
+function currentActor() {
+  return activePolicy;
+}
 
 function setGoal(goal) {
   if (!plant.goalIds.includes(goal)) return;
@@ -36,38 +43,9 @@ function setGoal(goal) {
     btn.classList.toggle("is-active", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
-  if (plant.specialists) useSpecialist(goal);
-}
-
-async function useSpecialist(goal) {
-  const url = plant.specialists?.[goal];
-  if (!url) {
-    if (currentGoal !== goal) return;
-    activePolicy = null;
-    policyReady = false;
-    setPolicyOn(false);
-    setStatus("no hold yet");
-    if (loop) loop.setState(equilibriumState(goal));
-    return;
-  }
-  if (!specialistCache.has(url)) specialistCache.set(url, loadPolicy(url));
-  try {
-    const next = await specialistCache.get(url);
-    if (currentGoal !== goal) return;
-    const dim = next.spec.obs_dim ?? next.spec.physics?.obsDim;
-    activePolicy = dim === plant.obsDim ? next : null;
-    policyReady = Boolean(activePolicy);
-    setPolicyOn(started && policyReady);
-    if (loop && policyReady) loop.setState(equilibriumState(goal));
-    const hidden = next.spec.hidden ?? "";
-    setStatus(policyReady ? `${goal} hold · ${hidden}` : `policy obs_dim=${dim}`);
-  } catch (err) {
-    console.warn(err);
-    if (currentGoal !== goal) return;
-    activePolicy = null;
-    policyReady = false;
-    setPolicyOn(false);
-    setStatus("physics only");
+  if (plant.remote) {
+    policyReady = true;
+    setPolicyOn(started);
   }
 }
 
@@ -136,6 +114,10 @@ function updateReadout(state, force, goalId) {
   ];
   if (state.th3 != null) parts.push(`θ3 ${fmt(state.th3)}`);
   parts.push(`u ${fmt(force, 1)} N`);
+  if (plant.remote && loop?.stats) {
+    const { rt, ms } = loop.stats();
+    parts.push(`${Math.round((rt ?? 0) * 100)}% speed · ${(ms ?? 0).toFixed(0)} ms/plan`);
+  }
   readoutEl.textContent = parts.join("  ·  ");
 }
 
@@ -174,29 +156,46 @@ async function loadPlantPolicy(next) {
   return { nextPolicy, nextConstants, ready };
 }
 
+function onPlantFrame({ state, tips, pointer, force, goalId, policyOn: driving, visual }) {
+  draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, driving, visual, plant.ghostTips);
+  const now = performance.now();
+  if (now - hudAt > 80) {
+    hudAt = now;
+    updateReadout(state, force, goalId);
+  }
+}
+
 function startPlantLoop(nextPolicy, nextConstants) {
   if (loop) loop.stop();
   constants = nextConstants;
   activePolicy = nextPolicy;
+  if (plant.remote) {
+    loop = startRemoteLoop({
+      url: SIM_URL,
+      plant,
+      input,
+      constants,
+      getGoal: () => currentGoal,
+      getPolicyOn: () => policyOn,
+      getStarted: () => started,
+      getManualForce: () => keys.manualForce(constants.forceLimit ?? 40),
+      onFrame: onPlantFrame,
+      onStatus: setStatus,
+    });
+    return;
+  }
   loop = startLoop({
     plant,
     input,
     policy: nextPolicy,
-    getPolicy: () => activePolicy,
+    getPolicy: currentActor,
     constants,
     getGoal: () => currentGoal,
     getPolicyOn: () => policyOn,
     getStarted: () => started,
     getManualForce: () => (started ? keys.manualForce(constants.forceLimit ?? 20) : 0),
     initialState: plant.initialState || plant.hanging,
-    onFrame({ state, tips, pointer, force, goalId, policyOn: driving, visual }) {
-      draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, driving, visual, plant.ghostTips);
-      const now = performance.now();
-      if (now - hudAt > 80) {
-        hudAt = now;
-        updateReadout(state, force, goalId);
-      }
-    },
+    onFrame: onPlantFrame,
   });
 }
 
@@ -208,9 +207,8 @@ async function switchPlant(id) {
   applyPlantChrome();
   renderGoalButtons();
   setStatus("loading");
-  if (plant.specialists) {
-    await useSpecialist(currentGoal);
-    startPlantLoop(activePolicy, { ...plant.constants });
+  if (plant.remote) {
+    startPlantLoop(null, { ...plant.constants });
     return;
   }
   const { nextPolicy, nextConstants, ready } = await loadPlantPolicy(plant);
@@ -238,10 +236,9 @@ let hudAt = 0;
 async function boot() {
   applyPlantChrome();
   renderGoalButtons();
-  if (plant.specialists) {
-    await useSpecialist(currentGoal);
+  if (plant.remote) {
     setPolicyOn(false);
-    startPlantLoop(activePolicy, { ...plant.constants });
+    startPlantLoop(null, { ...plant.constants });
   } else {
     const { nextPolicy, nextConstants, ready } = await loadPlantPolicy(plant);
     policyReady = ready;

@@ -61,6 +61,16 @@ function drawTrack(ctx, camera, canvas, constants, dpr) {
   ctx.moveTo(left.x, left.y);
   ctx.lineTo(right.x, right.y);
   ctx.stroke();
+  if (!constants.trackWalls) return;
+  const post = 18 * dpr;
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 3 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(left.x, left.y - post);
+  ctx.lineTo(left.x, left.y + post);
+  ctx.moveTo(right.x, right.y - post);
+  ctx.lineTo(right.x, right.y + post);
+  ctx.stroke();
 }
 
 function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr, ghostTips) {

@@ -1,0 +1,18 @@
+{
+  "walls": false,
+  "cost": {
+    "goal": "UUU"
+  },
+  "mppi": {
+    "n_samples": 4096,
+    "n_knots": 45,
+    "knot": 4,
+    "sigma": 8.0,
+    "sigma_wide": 25.0,
+    "wide_frac": 0.25,
+    "noise_beta": 0.7,
+    "ess": 32.0,
+    "gate_in": 0.02,
+    "gate_out": 0.10
+  }
+}
