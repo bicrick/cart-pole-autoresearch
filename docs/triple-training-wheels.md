@@ -25,6 +25,15 @@ As of 2026-09-24 the working controller is a sampling MPC teacher, not RL. Code:
 - **Distillation (negative).** A state-only MLP student reached 0% swing-ups. The teacher's force depends on its current 45-knot plan: the same state gives labels ~15 N apart under different plans, against ~2 N seed noise from a fixed plan. A plan-conditioned net (`mppi/plannet.py`, `mppi/dagger_plan.py`) fits teacher-driven data to noise level. Once the net drives, one MPPI pass from its plans gives ~22 N seed-to-seed labels. Labeling from the teacher's own shadow plan makes the label depend on a plan the net never sees (fit error rose to ~27 N RMS). 0% swing-ups after 3 DAgger iterations.
 - **Distillation** (`scripts/mppi-dagger.sh`, anchored student). Parked: the student holds like LQR but has 0 swing-ups. Larger nets fit the labels better without swinging, which points to noisy MPPI labels.
 
+## Quad pendulum (n-link MPPI, 2026-09-25)
+
+The same recipe on a general n-link plant (`train/mppi/nlink/`), swept on a GCP L4 with a numba.cuda f32 kernel (about 1.7 billion plant steps/s at 131k samples). Results: `policies/mppi/quad/`.
+
+- **All 16 goals** (32k samples, 1.5 s horizon, 40 N, 10 episodes each, from a hang): 148/160. Twelve goals at 10/10. UUUD 9/10, DUUU and UDUU 8/10, UUUU 3/10. No episode that reached its goal fell out of it: every failure is a timeout. How hard a goal is tracks its fastest open-loop divergence rate (UUUU and UUUD at about 13.5/s).
+- **UUUU** (20 episodes): a 1.25 s horizon beats 1.0 s and 1.5 s (40% vs 20% and 25% at 32k). Two MPPI passes per replan barely help (45%), and neither does more force (60 N 15%, 80 N 30%). More samples do: 65% at 131k with a 40 s window, median 12 s.
+- **Fewer samples** (1.25 s horizon): 9 of 16 goals at 10/10 at 4k, 10 at 8k, 11 at 16k. The goals with three or four links up are the ones that need 32k.
+- **Browser.** `web/src/mppi/rollout-nlink.js` and the generated WGSL (`gpu-kernel-nlink.js`) run it with no server. On an M2 Pro, WebGPU replans 32k samples in about 13 ms, inside the 33 ms knot budget. Live on the page, UUUU swung up from a hang in 42 s and held, at full sample count and 120 fps. The single pendulum is the same code with n = 1.
+
 ## Locked method (superseded, kept for history)
 
 Research (Glück 2013, Baek 2024, Lim 2025, fawraw) picked the stack. We copy it. We do not invent another PPO zoo.

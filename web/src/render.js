@@ -64,9 +64,9 @@ function polesOf(tips) {
 }
 
 function poleReach(constants) {
-  let reach = (constants.poleLength1 ?? 0.5) + (constants.poleLength2 ?? 0.5);
-  for (let i = 3; constants[`poleLength${i}`] != null; i += 1) reach += constants[`poleLength${i}`];
-  return reach;
+  let reach = 0;
+  for (let i = 1; constants[`poleLength${i}`] != null; i += 1) reach += constants[`poleLength${i}`];
+  return reach || 1;
 }
 
 function drawTrack(ctx, camera, canvas, constants, dpr) {
@@ -130,7 +130,9 @@ export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalI
   // and follows the cart, never panning past the track ends.
   const full = track + reach * 0.45;
   const portrait = canvas.height > canvas.width * 1.1;
-  const tight = portrait;
+  // A single link is short enough that zooming to it hides the cart's swing-up
+  // strategy; keep the whole track in frame instead of following the cart.
+  const tight = portrait && reach >= 1;
   camera.railY = portrait ? 0.48 : 0.56;
   let halfSpan = tight ? Math.min(full, reach + 0.2) : full;
   if (camera.embed) {

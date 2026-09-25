@@ -19,7 +19,14 @@
       <div class="start" id="start">click to start</div>
       <header class="nav">
         <div class="nav-inner">
-          <button type="button" class="text-btn brand" id="plant-toggle">triple pendulum</button>
+          <div class="plant-switch" id="plant-switch" role="group" aria-label="Pendulum">
+            <button type="button" class="text-btn plant-step" data-dir="-1" aria-label="previous pendulum">‹</button>
+            <span class="plant-window">
+              <button type="button" class="text-btn brand" id="plant-toggle" data-plant-label>triple pendulum</button>
+            </span>
+            <button type="button" class="text-btn plant-step" data-dir="1" aria-label="next pendulum">›</button>
+            <span class="plant-pips" data-plant-pips></span>
+          </div>
           <nav class="goals" id="goals" role="group" aria-label="Desired equilibrium"></nav>
           <div class="meta">
             <button type="button" id="policy-toggle" class="text-btn">controller off</button>

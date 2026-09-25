@@ -29,6 +29,20 @@ export const QUAD_CONSTANTS = {
   trackWalls: false,
 };
 
+export const SINGLE_CONSTANTS = {
+  cartMass: 1.0,
+  poleMass1: 0.1,
+  poleLength1: 0.5,
+  gravity: 9.81,
+  cartFriction: 0.08,
+  jointDamping1: 0.002,
+  forceLimit: 20.0,
+  dt: 0.008333333333333333,
+  nLinks: 1,
+  trackLimit: 2.4,
+  trackWalls: false,
+};
+
 const MAX_CART_VEL = 30;
 const MAX_ANG_VEL = 50;
 const MAX_ACC = 1e4;

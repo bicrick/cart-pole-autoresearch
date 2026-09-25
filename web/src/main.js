@@ -2,7 +2,8 @@ import { loadPolicy } from "./policy.js";
 import { createInput, createKeys } from "./input.js";
 import { createCamera, draw } from "./render.js";
 import { startLoop } from "./loop.js";
-import { PLANTS, plantFromHash, nextPlantId } from "./plants.js";
+import { PLANTS, PLANT_ORDER, plantFromHash } from "./plants.js";
+import { createPlantSwitch } from "./plant-switch.js";
 import { applyEmbedTheme, bindTheme } from "./theme.js";
 import { startRemoteLoop } from "./remote-loop.js";
 import { loadMppiActor } from "./mppi/load.js";
@@ -13,7 +14,7 @@ const canvas = document.getElementById("stage");
 const statusEl = document.getElementById("status");
 const readoutEl = document.getElementById("readout");
 const policyBtn = document.getElementById("policy-toggle");
-const plantBtn = document.getElementById("plant-toggle");
+const plantSwitchEl = document.getElementById("plant-switch");
 const goalsNav = document.getElementById("goals");
 const hintEl = document.querySelector(".hint");
 const startEl = document.getElementById("start");
@@ -190,11 +191,8 @@ function updateReadout(state, force, goalId) {
     goalId,
     hit ? "at goal" : "seeking",
     `x ${fmt(state.x)}`,
-    `θ1 ${fmt(state.th1)}`,
-    `θ2 ${fmt(state.th2)}`,
   ];
-  if (state.th3 != null) parts.push(`θ3 ${fmt(state.th3)}`);
-  if (state.th4 != null) parts.push(`θ4 ${fmt(state.th4)}`);
+  for (let i = 1; state[`th${i}`] != null; i += 1) parts.push(`θ${i} ${fmt(state[`th${i}`])}`);
   parts.push(`u ${fmt(force, 1)} N`);
   if (loop?.stats && (isRemote(plant) || plant.mppiUrl)) {
     const { rt, ms, samples, fps, stall } = loop.stats();
@@ -205,9 +203,17 @@ function updateReadout(state, force, goalId) {
   readoutEl.textContent = parts.join("  ·  ");
 }
 
-function applyPlantChrome() {
+const plantSwitch = plantSwitchEl
+  ? createPlantSwitch(plantSwitchEl, {
+      ids: PLANT_ORDER,
+      labelOf: (id) => PLANTS[id].label,
+      onSelect: (id, dir) => switchPlant(id, dir),
+    })
+  : null;
+
+function applyPlantChrome(dir = 1) {
   document.title = plant.label;
-  if (plantBtn) plantBtn.textContent = plant.label;
+  plantSwitch?.set(plant.id, dir);
   page.dataset.plant = plant.id;
   if (hintEl) hintEl.textContent = TOUCH ? plant.touchHint ?? plant.hint : plant.hint;
   if (startEl) startEl.textContent = TOUCH ? "tap to start" : "click to start";
@@ -313,12 +319,12 @@ function startPlantLoop(nextPolicy, nextConstants) {
   });
 }
 
-async function switchPlant(id) {
+async function switchPlant(id, dir = 1) {
   const next = PLANTS[id];
   if (!next || next.id === plant.id) return;
   plant = next;
   currentGoal = plant.defaultGoal;
-  applyPlantChrome();
+  applyPlantChrome(dir);
   renderGoalButtons();
   setStatus("loading", true);
   if (isRemote(plant)) {
@@ -378,12 +384,10 @@ async function boot() {
   if (policyBtn) {
     policyBtn.addEventListener("click", () => setPolicyOn(!policyOn));
   }
-  if (plantBtn) {
-    plantBtn.addEventListener("click", () => switchPlant(nextPlantId(plant.id)));
-  }
   window.addEventListener("hashchange", () => {
     const id = plantFromHash();
-    if (id !== plant.id) switchPlant(id);
+    const dir = Math.sign(PLANT_ORDER.indexOf(id) - PLANT_ORDER.indexOf(plant.id)) || 1;
+    if (id !== plant.id) switchPlant(id, dir);
   });
 
   canvas.addEventListener("pointerdown", begin);

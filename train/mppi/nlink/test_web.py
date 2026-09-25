@@ -24,7 +24,7 @@ import torch
 from mppi.export_mppi_nlink import export
 from mppi.nlink.costs import IDX
 from mppi.nlink.kernel_cpu import rollout_costs
-from mppi.nlink.plant import NLinkPlant, step
+from mppi.nlink.plant import CONSTANTS, NLinkPlant, step
 
 ROOT = Path(__file__).resolve().parents[3]
 WEB = ROOT / "web" / "src"
@@ -73,7 +73,7 @@ def main() -> int:
     n = args.n
     spec = export(n)
     plant = NLinkPlant.load(n)
-    constants = json.loads((ROOT / "shared" / f"constants-{spec['plant']}.json").read_text()) if n == 4 else None
+    constants = {**json.loads((ROOT / "shared" / CONSTANTS[n]).read_text()), "nLinks": n}
     knot, T = spec["mppi"]["knot"], spec["mppi"]["n_knots"]
     ns = len(IDX)
     rng = np.random.default_rng(0)

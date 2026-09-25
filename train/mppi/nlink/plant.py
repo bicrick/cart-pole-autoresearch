@@ -22,7 +22,7 @@ from pathlib import Path
 import torch
 
 ROOT = Path(__file__).resolve().parents[3]
-CONSTANTS = {2: "constants.json", 3: "constants-triple.json", 4: "constants-quad.json"}
+CONSTANTS = {1: "constants-single.json", 2: "constants.json", 3: "constants-triple.json", 4: "constants-quad.json"}
 
 MAX_CART_VEL = 30.0
 MAX_ANG_VEL = 50.0

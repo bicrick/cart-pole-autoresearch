@@ -2,17 +2,54 @@ import { DEFAULT_CONSTANTS, step as stepDouble, observe as observeDouble, normal
 import { GOAL_IDS as DOUBLE_GOALS, conditionedObs as condDouble, atGoal as atDouble, ghostTips as ghostDouble } from "./goals.js";
 import { TRIPLE_CONSTANTS, step as stepTriple, observe as observeTriple, tipPositions as tipsTriple, grabForces as grabTriple } from "./physics-triple.js";
 import { GOAL_IDS as TRIPLE_GOALS, atGoal as atTriple, ghostTips as ghostTriple } from "./goals-triple.js";
-import { QUAD_CONSTANTS, step as stepQuad, observe as observeQuad, tipPositions as tipsQuad, grabForces as grabQuad } from "./physics-nlink.js";
+import {
+  QUAD_CONSTANTS,
+  SINGLE_CONSTANTS,
+  step as stepNlink,
+  observe as observeNlink,
+  tipPositions as tipsNlink,
+  grabForces as grabNlink,
+} from "./physics-nlink.js";
 import { goalIds as nlinkGoals, atGoal as atNlink, ghostTips as ghostNlink, equilibriumState } from "./goals-nlink.js";
 import { HANGING, HANGING_TRIPLE, DOWN_DOUBLE, DOWN_TRIPLE } from "./falloff.js";
 
 const HANGING_QUAD = { ...HANGING_TRIPLE, th4: Math.PI - 0.06, th4d: -0.1 };
+const HANGING_SINGLE = { x: 0, xd: 0, th1: HANGING.th1, th1d: HANGING.th1d };
 
 function passObs(obs) {
   return obs;
 }
 
+/** n-link plant functions bound to `defaults` (the controller calls `step` without constants). */
+function nlinkPlant(defaults) {
+  return {
+    constants: defaults,
+    step: (s, u, q, c = defaults) => stepNlink(s, u, q, c),
+    observe: (s, c = defaults) => observeNlink(s, c),
+    tipPositions: (s, c = defaults) => tipsNlink(s, c),
+    grabForces: (s, t, body, k, d, c = defaults) => grabNlink(s, t, body, k, d, c),
+  };
+}
+
 export const PLANTS = {
+  single: {
+    id: "single",
+    label: "single pendulum",
+    mppiUrl: "/mppi/single.json",
+    obsDim: 4,
+    defaultGoal: "U",
+    goalIds: ["U", "D"],
+    hanging: HANGING_SINGLE,
+    initialState: equilibriumState("D"),
+    autostart: true,
+    hint: "grab the cart or the pole · 1–2 goal · tab cycle · p controller · a/d shove",
+    touchHint: "drag the cart or the pole · tap a goal",
+    ...nlinkPlant(SINGLE_CONSTANTS),
+    normalizeObs: passObs,
+    conditionedObs: passObs,
+    atGoal: atNlink,
+    ghostTips: ghostNlink,
+  },
   double: {
     id: "double",
     label: "double pendulum",
@@ -76,25 +113,23 @@ export const PLANTS = {
     autostart: true,
     hint: "grab the cart or a joint · tab cycle goals · p controller · a/d shove",
     touchHint: "drag the cart or a joint · tap a goal",
-    constants: QUAD_CONSTANTS,
-    step: stepQuad,
-    observe: observeQuad,
+    ...nlinkPlant(QUAD_CONSTANTS),
     normalizeObs: passObs,
-    tipPositions: tipsQuad,
-    grabForces: grabQuad,
     conditionedObs: passObs,
     atGoal: atNlink,
     ghostTips: ghostNlink,
   },
 };
 
-const ORDER = ["triple", "double", "quad"];
+/** Carousel order: by link count. The page opens on the triple. */
+export const PLANT_ORDER = ["single", "double", "triple", "quad"];
 
 export function plantFromHash() {
   const raw = (window.location.hash || "").replace("#", "").toLowerCase();
   return PLANTS[raw] ? raw : "triple";
 }
 
-export function nextPlantId(id) {
-  return ORDER[(ORDER.indexOf(id) + 1) % ORDER.length];
+export function stepPlantId(id, dir = 1) {
+  const n = PLANT_ORDER.length;
+  return PLANT_ORDER[(PLANT_ORDER.indexOf(id) + dir + n) % n];
 }

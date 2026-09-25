@@ -10,11 +10,14 @@ Interactive cart–pendulum demos. Drag a link, shove the cart, and switch the t
 
 | Plant | Targets | What runs it |
 | --- | --- | --- |
+| **Single** (1 link) | U, D | The n-link controller with one link. 1,024 samples. |
 | **Triple** (3 links, the default) | 8 equilibria, DDD through UUU | MPPI in the browser. WebGPU where available, else Web Workers. No server. |
 | **Double** (2 links) | UU, UD, DU, DD | The same controller, on Web Workers. No server. |
 | **Quad** (4 links) | 16 equilibria, DDDD through UUUU | The same controller on a general n-link plant. WebGPU (32,768 samples) or workers. |
 
 `θ = 0` is upright. The ship plant has no track walls: leaving `|x| > 2.4 m` falls off and respawns.
+
+The top-left switcher cycles the plants in link order (single, double, triple, quad). The chevrons step, the squares jump straight to a plant, and `#single`, `#double`, `#triple`, `#quad` in the URL open one directly.
 
 ## Triple demo
 
@@ -78,14 +81,27 @@ Same plant in pygame: `python3 train/play.py`.
 
 ## Quad demo
 
-Open [http://localhost:5173/#quad](http://localhost:5173/#quad). The plant button cycles triple, double, quad. The page opens on DDUU: UUUU is the one equilibrium this controller does not reach reliably.
+Open [http://localhost:5173/#quad](http://localhost:5173/#quad). The page opens on DDUU: UUUU is the one equilibrium this controller does not reach reliably.
 
 The quad uses one n-link plant and one n-link rollout, not a hand-written 5×5 solve. `train/mppi/nlink/` is the Python reference (dynamics, per-goal LQR, costs, a numba CPU kernel and a numba.cuda kernel). The browser ports are `web/src/physics-nlink.js` (the page) and `web/src/mppi/rollout-nlink.js` (CPU workers). The WebGPU shader is generated per link count by `web/src/mppi/gpu-kernel-nlink.js`.
 
 - **Config:** `python -m mppi.export_mppi_nlink` writes `web/public/mppi/quad.json`. Horizon 1.25 s (38 knots of 4 steps), force limit ±40 N. The full profile is 32,768 samples; lite is 4,096.
 - **Speed:** on an M2 Pro, WebGPU replans 32,768 samples in about 13 ms, inside the 33 ms budget, so the page holds 120 fps at the full sample count. Without WebGPU, workers adapt to roughly 2,300 samples and still swing up to DDUU.
 - **Parity:** `cd train && python -m mppi.nlink.test_web`. The JS kernel matches the Python f64 kernel to about 1e-15, and the page physics matches `nlink.plant.step` to about 1e-13. `?bench#quad` checks the GPU shader against the JS kernel (median relative error about 2e-7, same 32 cheapest samples).
-- **What it can do.** On an L4, 32,768 samples and a 1.5 s horizon swing up and hold 12 of the 16 goals on 10/10 episodes from a hang, and 150 of 160 episodes overall. UUUU is the hard case: about 40% at 32,768 samples, 65% at 131,072, median about 12 s when it gets there. Nothing that reaches a goal falls out of it. Reports: `policies/mppi/quad/`.
+- **What it can do.** On an L4, 32,768 samples and a 1.5 s horizon swing up and hold 12 of the 16 goals on 10/10 episodes from a hang, and 148 of 160 episodes overall. UUUU is the hard case: about 40% at 32,768 samples, 65% at 131,072, median about 12 s when it gets there. Nothing that reaches a goal falls out of it. Reports: `policies/mppi/quad/`.
+- **Fewer samples** (1.25 s horizon, 10 episodes per goal, 25 s to swing up):
+
+| Samples | Goals at 10/10 | Hardest |
+| --- | --- | --- |
+| 4,096 (lite) | 9 of 16 | UUUU 1/10, DUUU 2/10, UUUD 5/10 |
+| 8,192 | 10 of 16 | UUUU 0/10, DUUU 4/10, UDUU 5/10 |
+| 16,384 | 11 of 16 | UUUU 0/10, DUUU 2/10, UDUU and UUUD 7/10 |
+
+At 4,096 samples, 9 of the 11 goals with at most two links up hold 10/10, and the other two hold 8/10 (DUDU) and 9/10 (DUUD). So the lite profile covers most of the quad, and the goals with three or four links up need the full 32k on WebGPU.
+
+## Single demo
+
+Open [http://localhost:5173/#single](http://localhost:5173/#single). It is the quad's n-link controller with one link (`web/public/mppi/single.json`, from `python -m mppi.export_mppi_nlink --n 1`): 20 N like the double, 1,024 samples, and it swings up from a hang in under 2 s. The camera keeps the whole track in frame for the single, so the cart's pumping stays visible on phones too. `python -m mppi.nlink.test_web --n 1` checks it against the Python kernel (about 1e-15).
 
 ## Triple controller
 
@@ -124,7 +140,9 @@ web/src/mppi/               in-browser controller: rollouts, sampler, workers, W
 web/public/mppi/triple.json per-goal costs, LQR gains and full/lite profiles (export_mppi.py)
 web/public/mppi/double.json double: per-goal costs and LQR gains (export_mppi_double.py)
 web/public/mppi/quad.json   quad: 16 goals, from export_mppi_nlink.py
-web/src/physics-nlink.js    page plant for any link count (the quad)
+web/public/mppi/single.json single: U and D, from export_mppi_nlink.py --n 1
+web/src/physics-nlink.js    page plant for any link count (single and quad)
+web/src/plant-switch.js     top-left plant carousel
 web/src/loop.js             physics and controller in the page
 web/src/remote-loop.js      ?sim: render the Python sim server
 web/public/policy.json      old double MLP (unused)
@@ -137,8 +155,8 @@ shared/constants-quad.json
 
 ## Physics
 
-- State: `[x, ẋ, θ1, θ̇1, …, θn, θ̇n]`. The double stops at θ2, the triple at θ3, the quad at θ4.
-- Semi-implicit Euler at `dt = 1/120` s. Force limit ±40 N on the triple and the quad, ±20 N on the double.
+- State: `[x, ẋ, θ1, θ̇1, …, θn, θ̇n]`, from θ1 on the single to θ4 on the quad.
+- Semi-implicit Euler at `dt = 1/120` s. Force limit ±40 N on the triple and the quad, ±20 N on the single and the double.
 - Rates clamp at ±30 m/s (cart) and ±50 rad/s (poles).
 - Walls, when on, stop the cart only. The triple demo and the teacher both run with walls off.
 
