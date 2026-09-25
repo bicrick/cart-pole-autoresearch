@@ -165,14 +165,71 @@ body {
   cursor: default;
 }
 
-/* Narrow iframes still use the wide bar: one row, slightly smaller type. */
+/* ?layout=desktop is the personal-site article iframe (~728px). Chrome sits in its
+   own rows so the pendulum is not drawn underneath the controls. */
+.page.is-desktop {
+  display: flex;
+  flex-direction: column;
+}
+
+.page.is-desktop .nav,
+.page.is-desktop .bar {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.page.is-desktop .stage-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  inset: auto;
+}
+
+.page.is-desktop .nav {
+  padding-bottom: 0.45rem;
+}
+
 .page.is-desktop .nav-inner {
-  flex-wrap: nowrap;
+  align-items: center;
+  row-gap: 0.55rem;
+}
+
+.page.is-desktop .plant-switch {
+  order: 1;
+  flex: 0 0 auto;
+}
+
+.page.is-desktop .meta {
+  order: 2;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .page.is-desktop .goals {
-  flex-wrap: nowrap;
-  gap: 0.35rem;
+  order: 3;
+  flex: 1 0 100%;
+  justify-content: center;
+  gap: 0.4rem 0.55rem;
+}
+
+.page.is-desktop .goals .text-btn,
+.page.is-desktop #policy-toggle {
+  white-space: nowrap;
+}
+
+.page.is-desktop .bar {
+  padding-top: 0.15rem;
+}
+
+.page.is-desktop .bar-inner {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+}
+
+.page.is-desktop .hint {
+  text-align: left;
+  line-height: 1.35;
 }
 
 .nav .text-btn,
@@ -390,6 +447,11 @@ body {
 /* Goal, dot, goal ... : drop the dot that would start the second row. */
 .page[data-plant="quad"] .goals .dot:nth-child(16) {
   display: none;
+}
+
+/* In the article iframe the second goal row keeps its own height. */
+.page.is-desktop[data-plant="quad"] .goals {
+  margin-bottom: 0;
 }
 
 .stage-wrap {
