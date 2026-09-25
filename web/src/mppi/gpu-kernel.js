@@ -11,7 +11,8 @@ export const PRM_P = 47;
 export const PRM_S0 = 111;
 export const PRM_LEN = 119;
 
-export const WGSL = /* wgsl */ `
+/** Bindings, noise and helpers shared with the n-link kernel (gpu-kernel-nlink.js). */
+export const WGSL_COMMON = /* wgsl */ `
 struct Cfg {
   n: u32, T: u32, mode: u32, seed: u32,
   sigma: f32, sigmaWide: f32, wideFrom: u32, beta: f32,
@@ -57,6 +58,17 @@ fn fin(v: f32) -> f32 {
   return 0.0;
 }
 
+fn duCost(off: u32, T: u32, wDu: f32, kdt: f32) -> f32 {
+  var acc: f32 = 0.0;
+  for (var j: u32 = 0u; j + 1u < T; j = j + 1u) {
+    let du = (samples[off + j + 1u] - samples[off + j]) / kdt;
+    acc = acc + wDu * du * du * kdt;
+  }
+  return acc;
+}
+`;
+
+const TRIPLE = /* wgsl */ `
 fn poleEnergy(s1: f32, c1: f32, w1: f32, s2: f32, c2: f32, w2: f32, s3: f32, c3: f32, w3: f32) -> f32 {
   let m1 = prm[1]; let m2 = prm[2]; let m3 = prm[3];
   let l1 = prm[4]; let l2 = prm[5]; let l3 = prm[6]; let g = prm[7];
@@ -71,15 +83,6 @@ fn poleEnergy(s1: f32, c1: f32, w1: f32, s2: f32, c2: f32, w2: f32, s3: f32, c3:
   let y2 = y1 + l2 * c2;
   let y3 = y2 + l3 * c3;
   return ke + g * (m1 * y1 + m2 * y2 + m3 * y3);
-}
-
-fn duCost(off: u32, T: u32, wDu: f32, kdt: f32) -> f32 {
-  var acc: f32 = 0.0;
-  for (var j: u32 = 0u; j + 1u < T; j = j + 1u) {
-    let du = (samples[off + j + 1u] - samples[off + j]) / kdt;
-    acc = acc + wDu * du * du * kdt;
-  }
-  return acc;
 }
 
 fn rollout(off: u32, T: u32) -> f32 {
@@ -214,7 +217,10 @@ fn rollout(off: u32, T: u32) -> f32 {
   acc = acc + nearT * wTl * quad + (1.0 - nearT) * wTe * enT * enT;
   return acc + duCost(off, T, wDu, kdt);
 }
+`;
 
+/** Entry point: generate (mode 0) or read (mode 1) sample `i`, then score it with `rollout`. */
+export const WGSL_MAIN = /* wgsl */ `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.x;
@@ -237,3 +243,5 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   costs[i] = rollout(off, T);
 }
 `;
+
+export const WGSL = WGSL_COMMON + TRIPLE + WGSL_MAIN;

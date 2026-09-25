@@ -64,7 +64,9 @@ function polesOf(tips) {
 }
 
 function poleReach(constants) {
-  return (constants.poleLength1 ?? 0.5) + (constants.poleLength2 ?? 0.5) + (constants.poleLength3 ?? 0);
+  let reach = (constants.poleLength1 ?? 0.5) + (constants.poleLength2 ?? 0.5);
+  for (let i = 3; constants[`poleLength${i}`] != null; i += 1) reach += constants[`poleLength${i}`];
+  return reach;
 }
 
 function drawTrack(ctx, camera, canvas, constants, dpr) {
@@ -97,7 +99,7 @@ function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr, ghostTips
   ctx.strokeStyle = palette().ghost;
   ctx.lineWidth = 3 * dpr;
   ctx.lineCap = "butt";
-  ctx.lineJoin = "miter";
+  ctx.lineJoin = "bevel";
   ctx.beginPath();
   ctx.moveTo(g0.x, g0.y);
   for (const joint of joints) {
@@ -132,16 +134,13 @@ export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalI
   camera.railY = portrait ? 0.48 : 0.56;
   let halfSpan = tight ? Math.min(full, reach + 0.2) : full;
   if (camera.embed) {
-    // Frame the pendulum, not the track, so a 16:9 iframe is mostly the swing.
-    camera.railY = 0.58;
-    const margin = 0.06;
-    const scaleX = canvas.width / (2 * (reach * 0.7));
-    const up = (camera.railY * canvas.height) / (reach + margin);
-    const down = ((1 - camera.railY) * canvas.height) / (reach * 0.9 + margin);
-    camera.scale = Math.min(scaleX, up, down);
-    const room = Math.max(0, (constants.trackLimit ?? 2.4) + 0.3 - reach * 0.7);
-    const target = Math.max(-room, Math.min(room, tips.cart.x));
-    camera.x = room > 0 ? camera.x + (target - camera.x) * 0.15 : 0;
+    // Fixed wide shot: the whole track stays in frame and the cart moves through it.
+    camera.railY = 0.5;
+    camera.x = 0;
+    const margin = 0.38;
+    const scaleX = canvas.width / (2 * (track + 0.55));
+    const scaleY = (canvas.height * 0.5) / (reach + margin);
+    camera.scale = Math.min(scaleX, scaleY);
   } else {
     const room = Math.max(0, track + 0.3 - halfSpan);
     const target = Math.max(-room, Math.min(room, tips.cart.x));
@@ -173,7 +172,7 @@ export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalI
   ctx.strokeStyle = ink;
   ctx.lineWidth = 5 * dpr;
   ctx.lineCap = "butt";
-  ctx.lineJoin = "miter";
+  ctx.lineJoin = "bevel";
   ctx.beginPath();
   ctx.moveTo(cart.x, cart.y);
   for (const joint of joints) ctx.lineTo(joint.screen.x, joint.screen.y);

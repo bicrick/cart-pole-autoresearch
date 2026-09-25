@@ -6,8 +6,9 @@
 import { toParams } from "./params.js";
 import { stateArray } from "./controller.js";
 
-const SWING = { x: 0.3, xd: 1.2, th1: 2.1, th1d: 4.0, th2: 2.8, th2d: -3.0, th3: 3.6, th3d: 2.5 };
+const SWING = { x: 0.3, xd: 1.2, th1: 2.1, th1d: 4.0, th2: 2.8, th2d: -3.0, th3: 3.6, th3d: 2.5, th4: 2.4, th4d: -1.5 };
 const COUNTS = [4096, 2048, 1024, 512, 256];
+const COUNTS_NLINK = [32768, 16384, 8192, 4096, 2048, 1024];
 const REPS = 15;
 
 /** The all-upright goal (UUU or UU): the hardest swing-up to plan for. */
@@ -63,7 +64,7 @@ export async function runBench(actor, spec, print) {
   print(lines.join("\n") + "\n(running)");
   for (let w = 0; w < 3; w += 1) await actor.timeReplan(SWING, goal, 1024);
   let best = 0;
-  for (const n of COUNTS) {
+  for (const n of spec.n_links ? COUNTS_NLINK : COUNTS) {
     const t = [];
     for (let r = 0; r < REPS; r += 1) t.push(await actor.timeReplan(SWING, goal, n));
     t.sort((a, b) => a - b);

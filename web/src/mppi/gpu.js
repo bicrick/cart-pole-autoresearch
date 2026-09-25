@@ -6,16 +6,24 @@
  * returned arrays are valid until the next call.
  */
 import { WGSL, PRM_K, PRM_P, PRM_S0, PRM_LEN } from "./gpu-kernel.js";
+import { nlinkKernel } from "./gpu-kernel-nlink.js";
 import { toParams } from "./params.js";
 
 const WG = 64;
+
+/** The hand-written triple kernel, or the generated one for n-link specs. */
+function kernelFor(spec) {
+  if (spec.n_links) return nlinkKernel(spec.n_links);
+  return { code: WGSL, K: PRM_K, P: PRM_P, S0: PRM_S0, LEN: PRM_LEN };
+}
 
 export async function createGpuEvaluator(spec) {
   if (!navigator.gpu) throw new Error("WebGPU unavailable");
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
   if (!adapter) throw new Error("no WebGPU adapter");
   const device = await adapter.requestDevice();
-  const module = device.createShaderModule({ code: WGSL });
+  const kernel = kernelFor(spec);
+  const module = device.createShaderModule({ code: kernel.code });
   const info = await module.getCompilationInfo?.();
   const errors = info?.messages?.filter((m) => m.type === "error") ?? [];
   if (errors.length) throw new Error(`WGSL: ${errors.map((m) => `${m.lineNum}: ${m.message}`).join("; ")}`);
@@ -26,9 +34,9 @@ export async function createGpuEvaluator(spec) {
   const T = cfg.n_knots;
   const lim = 2 * spec.force_limit;
   const uniform = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-  const prmBuf = device.createBuffer({ size: PRM_LEN * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const prmBuf = device.createBuffer({ size: kernel.LEN * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const uBuf = device.createBuffer({ size: T * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-  const prm = new Float32Array(PRM_LEN);
+  const prm = new Float32Array(kernel.LEN);
   const cfgBytes = new ArrayBuffer(48);
   const cfgU32 = new Uint32Array(cfgBytes);
   const cfgF32 = new Float32Array(cfgBytes);
@@ -65,9 +73,9 @@ export async function createGpuEvaluator(spec) {
     ensure(n);
     const g = goals[goal];
     prm.set(g.p, 0);
-    prm.set(g.K, PRM_K);
-    prm.set(g.P, PRM_P);
-    prm.set(s0, PRM_S0);
+    prm.set(g.K, kernel.K);
+    prm.set(g.P, kernel.P);
+    prm.set(s0, kernel.S0);
     device.queue.writeBuffer(prmBuf, 0, prm);
     device.queue.writeBuffer(uBuf, 0, Float32Array.from(U));
     cfgU32[0] = n;

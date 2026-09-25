@@ -1,0 +1,22 @@
+{
+  "cartMass": 1.0,
+  "poleMass1": 0.1,
+  "poleMass2": 0.1,
+  "poleMass3": 0.1,
+  "poleMass4": 0.1,
+  "poleLength1": 0.5,
+  "poleLength2": 0.5,
+  "poleLength3": 0.5,
+  "poleLength4": 0.5,
+  "gravity": 9.81,
+  "cartFriction": 0.08,
+  "jointDamping1": 0.002,
+  "jointDamping2": 0.002,
+  "jointDamping3": 0.002,
+  "jointDamping4": 0.002,
+  "forceLimit": 40.0,
+  "dt": 0.008333333333333333,
+  "nLinks": 4,
+  "trackLimit": 2.4,
+  "trackWalls": false
+}

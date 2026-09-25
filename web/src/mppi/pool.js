@@ -9,7 +9,7 @@ import { toParams } from "./params.js";
 
 /** What a worker needs to build its goal tables (params.js toParams). */
 function plantSpec(spec) {
-  return { plant: spec.plant, fields: spec.fields, goals: spec.goals, force_limit: spec.force_limit, mppi: spec.mppi };
+  return { plant: spec.plant, n_links: spec.n_links, fields: spec.fields, goals: spec.goals, force_limit: spec.force_limit, mppi: spec.mppi };
 }
 
 function growable() {

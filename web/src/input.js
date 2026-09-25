@@ -94,7 +94,7 @@ export function createKeys({ onGoal, onTogglePolicy, onCycleGoal, getGoals } = {
       onCycleGoal?.(event.shiftKey);
       return;
     }
-    if (key >= "1" && key <= "8") {
+    if (key >= "1" && key <= "9") {
       const goals = typeof getGoals === "function" ? getGoals() : ["UU", "UD", "DU", "DD"];
       const goal = goals[Number(key) - 1];
       if (goal) onGoal?.(goal);

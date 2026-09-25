@@ -40,15 +40,20 @@ const DEBUG = params.has("debug") || params.has("bench");
 // ?embed=1 is the chromeless cut used inside the personal-site iframe.
 // ?theme=light|dark selects the palette and does not touch localStorage.
 const EMBED = params.has("embed");
+// ?layout=desktop keeps the wide controls inside a narrow iframe.
+const DESKTOP = params.get("layout") === "desktop";
 const EMBED_HOLD_MS = 2800;
 const THEME_MSG = "cart-pole-theme";
 const TOUCH = window.matchMedia?.("(pointer: coarse)").matches ?? false;
 // Plants with `autostart` switch the policy on this long after the controller loads.
 const AUTOSTART_MS = 1200;
 if (DEBUG) page.classList.add("is-debug");
+if (DESKTOP) page.classList.add("is-desktop");
 if (EMBED) {
   page.classList.add("is-embed");
   camera.embed = true;
+}
+{
   const theme = params.get("theme");
   if (theme === "dark" || theme === "light") applyEmbedTheme(theme === "dark");
 }
@@ -92,7 +97,7 @@ const navInner = document.querySelector(".nav-inner");
 const barInner = document.querySelector(".bar-inner");
 
 function placeGoals() {
-  if (PHONE.matches) {
+  if (!DESKTOP && PHONE.matches) {
     if (goalsNav.parentElement !== barInner) barInner.prepend(goalsNav);
   } else if (goalsNav.parentElement !== navInner) {
     navInner.insertBefore(goalsNav, navInner.querySelector(".meta"));
@@ -127,7 +132,7 @@ function renderGoalButtons() {
 function setPolicyOn(on) {
   policyOn = Boolean(on) && policyReady;
   if (!policyBtn) return;
-  policyBtn.textContent = policyOn ? "policy on" : policyReady ? "policy off" : "no policy";
+  policyBtn.textContent = policyOn ? "controller on" : policyReady ? "controller off" : "no controller";
   policyBtn.classList.toggle("is-active", policyOn);
   policyBtn.disabled = !policyReady;
 }
@@ -172,7 +177,7 @@ function updateReadout(state, force, goalId) {
   if (!readoutEl) return;
   const hit = plant.atGoal(state, goalId);
   if (!DEBUG) {
-    const state = !policyOn ? "policy off" : hit ? "at goal" : "seeking";
+    const state = !policyOn ? "controller off" : hit ? "at goal" : "seeking";
     const key = `${goalId}|${state}`;
     if (readoutEl.dataset.key !== key) {
       readoutEl.dataset.key = key;
@@ -189,6 +194,7 @@ function updateReadout(state, force, goalId) {
     `θ2 ${fmt(state.th2)}`,
   ];
   if (state.th3 != null) parts.push(`θ3 ${fmt(state.th3)}`);
+  if (state.th4 != null) parts.push(`θ4 ${fmt(state.th4)}`);
   parts.push(`u ${fmt(force, 1)} N`);
   if (loop?.stats && (isRemote(plant) || plant.mppiUrl)) {
     const { rt, ms, samples, fps, stall } = loop.stats();
@@ -217,6 +223,7 @@ async function loadPlantPolicy(next) {
       const { backend, workers } = actor.stats();
       setStatus(backend === "workers" ? `mppi · ${workers} workers` : `mppi · ${backend}`);
       if (params.has("bench")) showBench(actor);
+      if (DEBUG) window.__mppi = actor;
       return { nextPolicy: actor, nextConstants: { ...next.constants }, ready: true };
     } catch (err) {
       console.warn(err);

@@ -10,3 +10,6 @@ sb3-contrib>=2.3
 # MPPI teacher + Python-backed web sim (train/mppi)
 numba>=0.60
 websockets>=12
+# n-link MPPI GPU kernel (train/mppi/nlink/kernel_cuda.py), GPU VMs only
+numba-cuda[cu12]>=0.20; sys_platform == "linux"
+tqdm>=4.60

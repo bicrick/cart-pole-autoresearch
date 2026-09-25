@@ -48,12 +48,20 @@ export function applyEmbedTheme(dark) {
 }
 
 export function bindTheme(button) {
-  let dark = readDark();
+  const forced = new URLSearchParams(window.location.search).get("theme");
+  let dark = forced === "dark" ? true : forced === "light" ? false : readDark();
   apply(button, dark);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     dark = !dark;
     apply(button, dark);
     persist(dark);
+  });
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (!data || data.type !== "cart-pole-theme") return;
+    if (data.theme !== "dark" && data.theme !== "light") return;
+    dark = data.theme === "dark";
+    apply(button, dark);
   });
 }

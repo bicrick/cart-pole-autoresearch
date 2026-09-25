@@ -2,7 +2,11 @@ import { DEFAULT_CONSTANTS, step as stepDouble, observe as observeDouble, normal
 import { GOAL_IDS as DOUBLE_GOALS, conditionedObs as condDouble, atGoal as atDouble, ghostTips as ghostDouble } from "./goals.js";
 import { TRIPLE_CONSTANTS, step as stepTriple, observe as observeTriple, tipPositions as tipsTriple, grabForces as grabTriple } from "./physics-triple.js";
 import { GOAL_IDS as TRIPLE_GOALS, atGoal as atTriple, ghostTips as ghostTriple } from "./goals-triple.js";
+import { QUAD_CONSTANTS, step as stepQuad, observe as observeQuad, tipPositions as tipsQuad, grabForces as grabQuad } from "./physics-nlink.js";
+import { goalIds as nlinkGoals, atGoal as atNlink, ghostTips as ghostNlink, equilibriumState } from "./goals-nlink.js";
 import { HANGING, HANGING_TRIPLE, DOWN_DOUBLE, DOWN_TRIPLE } from "./falloff.js";
+
+const HANGING_QUAD = { ...HANGING_TRIPLE, th4: Math.PI - 0.06, th4d: -0.1 };
 
 function passObs(obs) {
   return obs;
@@ -21,7 +25,7 @@ export const PLANTS = {
     hanging: HANGING,
     initialState: DOWN_DOUBLE,
     autostart: true,
-    hint: "grab the cart or either pole · 1–4 goal · tab cycle · p policy · a/d shove",
+    hint: "grab the cart or either pole · 1–4 goal · tab cycle · p controller · a/d shove",
     touchHint: "drag the cart or a joint · tap a goal",
     constants: DEFAULT_CONSTANTS,
     step: stepDouble,
@@ -47,7 +51,7 @@ export const PLANTS = {
     // after load (main.js AUTOSTART_MS) and swings it up.
     initialState: DOWN_TRIPLE,
     autostart: true,
-    hint: "grab the cart or a joint · 1–8 goal · tab cycle · p policy · a/d shove",
+    hint: "grab the cart or a joint · 1–8 goal · tab cycle · p controller · a/d shove",
     touchHint: "drag the cart or a joint · tap a goal",
     constants: TRIPLE_CONSTANTS,
     step: stepTriple,
@@ -59,7 +63,32 @@ export const PLANTS = {
     atGoal: atTriple,
     ghostTips: ghostTriple,
   },
+  quad: {
+    id: "quad",
+    label: "quad pendulum",
+    mppiUrl: "/mppi/quad.json",
+    obsDim: 14,
+    // UUUU swings up only ~40% of the time within 25 s; DDUU is reliable.
+    defaultGoal: "DDUU",
+    goalIds: [...nlinkGoals(4)].reverse(),
+    hanging: HANGING_QUAD,
+    initialState: equilibriumState("DDDD"),
+    autostart: true,
+    hint: "grab the cart or a joint · tab cycle goals · p controller · a/d shove",
+    touchHint: "drag the cart or a joint · tap a goal",
+    constants: QUAD_CONSTANTS,
+    step: stepQuad,
+    observe: observeQuad,
+    normalizeObs: passObs,
+    tipPositions: tipsQuad,
+    grabForces: grabQuad,
+    conditionedObs: passObs,
+    atGoal: atNlink,
+    ghostTips: ghostNlink,
+  },
 };
+
+const ORDER = ["triple", "double", "quad"];
 
 export function plantFromHash() {
   const raw = (window.location.hash || "").replace("#", "").toLowerCase();
@@ -67,5 +96,5 @@ export function plantFromHash() {
 }
 
 export function nextPlantId(id) {
-  return id === "triple" ? "double" : "triple";
+  return ORDER[(ORDER.indexOf(id) + 1) % ORDER.length];
 }

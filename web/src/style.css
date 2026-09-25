@@ -165,6 +165,16 @@ body {
   cursor: default;
 }
 
+/* Narrow iframes still use the wide bar: one row, slightly smaller type. */
+.page.is-desktop .nav-inner {
+  flex-wrap: nowrap;
+}
+
+.page.is-desktop .goals {
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
 .nav .text-btn,
 #policy-toggle,
 #plant-toggle,
@@ -295,6 +305,24 @@ body {
   transform: scaleX(1);
 }
 
+/* Quad: the 16 goals sit in the top row like the other plants, as two rows of
+   eight (first link up, then first link down). */
+.page[data-plant="quad"] .goals {
+  display: grid;
+  grid-template-columns: repeat(15, auto);
+  grid-auto-rows: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem 0.45rem;
+  /* Lay out as one row so the header matches the other plants; the second row hangs below. */
+  margin-bottom: calc(-1.25rem - 0.35rem);
+}
+
+/* Goal, dot, goal ... : drop the dot that would start the second row. */
+.page[data-plant="quad"] .goals .dot:nth-child(16) {
+  display: none;
+}
+
 .stage-wrap {
   position: absolute;
   inset: 0;
@@ -348,23 +376,24 @@ body {
   color: var(--ink);
 }
 
-/* Phones: title and policy on top, a hard-edged goal grid at thumb height. */
+/* Phones: title and policy on top, a hard-edged goal grid at thumb height.
+   ?layout=desktop keeps the wide bar even when the iframe is narrow. */
 @media (max-width: 760px) {
-  .nav {
+  .page:not(.is-desktop) .nav {
     padding: max(0.9rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0.9rem
       max(1rem, env(safe-area-inset-left));
   }
 
-  .nav-inner {
+  .page:not(.is-desktop) .nav-inner {
     flex-wrap: nowrap;
   }
 
-  .meta {
+  .page:not(.is-desktop) .meta {
     margin-left: auto;
     white-space: nowrap;
   }
 
-  .goals {
+  .page:not(.is-desktop) .goals {
     width: 100%;
     margin-bottom: 0.55rem;
     pointer-events: none;
@@ -375,19 +404,31 @@ body {
     border: 1px solid var(--rule);
   }
 
-  .goals .dot {
+  .page:not(.is-desktop) .goals .dot {
     display: none;
   }
 
-  .goals .text-btn {
+  .page:not(.is-desktop) .goals .text-btn {
     padding: 0.85rem 0;
     background: var(--paper);
     text-align: center;
     font-size: 0.92rem;
   }
 
+  /* Quad: the same grid, 4 x 4 with shorter cells. */
+  .page:not(.is-desktop)[data-plant="quad"] .goals {
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: auto;
+    gap: 1px;
+  }
+
+  .page:not(.is-desktop)[data-plant="quad"] .goals .text-btn {
+    padding: 0.6rem 0;
+    font-size: 0.85rem;
+  }
+
   /* The bar sits on the cell's bottom edge; no hover underline on touch. */
-  .goals .text-btn::after {
+  .page:not(.is-desktop) .goals .text-btn::after {
     left: 0;
     right: 0;
     bottom: 0;
@@ -395,30 +436,30 @@ body {
     transition: none;
   }
 
-  .goals .text-btn.is-active::after {
+  .page:not(.is-desktop) .goals .text-btn.is-active::after {
     transform: scaleX(1);
   }
 
-  .bar {
+  .page:not(.is-desktop) .bar {
     padding: 0 max(1rem, env(safe-area-inset-left)) calc(env(safe-area-inset-bottom) + 0.9rem);
   }
 
-  .bar .text-btn {
+  .page:not(.is-desktop) .bar .text-btn {
     pointer-events: auto;
   }
 
-  .bar-inner {
+  .page:not(.is-desktop) .bar-inner {
     flex-direction: column;
     align-items: center;
     gap: 0.4rem;
   }
 
-  #readout,
-  .hint {
+  .page:not(.is-desktop) #readout,
+  .page:not(.is-desktop) .hint {
     text-align: center;
   }
 
-  .hint {
+  .page:not(.is-desktop) .hint {
     font-size: 0.74rem;
   }
 }

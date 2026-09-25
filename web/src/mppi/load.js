@@ -36,17 +36,20 @@ export function withProfile(spec, name) {
   const goals = {};
   for (const [goal, g] of Object.entries(spec.goals)) {
     const p = g.p.slice();
-    p[idx("knot")] = cfg.knot;
-    p[idx("sub")] = cfg.rollout_sub;
-    p[idx("early_exit")] = cfg.early_exit ? 1 : 0;
+    const set = (f, v) => {
+      if (idx(f) >= 0) p[idx(f)] = v;
+    };
+    set("knot", cfg.knot);
+    set("sub", cfg.rollout_sub);
+    set("early_exit", cfg.early_exit ? 1 : 0);
     goals[goal] = { ...g, p };
   }
   return { ...spec, mppi: cfg, goals, profile: name };
 }
 
 /**
- * WebGPU when available (full profile; triple only, the double is light
- * enough for workers), else Web Workers (full on desktop, lite on phones),
+ * WebGPU when available (full profile; triple and n-link specs, the double is
+ * light enough for workers), else Web Workers (full on desktop, lite on phones),
  * else in-thread. ?profile=full|lite overrides the choice.
  */
 async function createEvaluator(raw) {
@@ -57,7 +60,7 @@ async function createEvaluator(raw) {
     const spec = pick("lite");
     return { spec, evaluator: createLocalEvaluator(spec) };
   }
-  const gpuKernel = !raw.plant || raw.plant === "triple";
+  const gpuKernel = !raw.plant || raw.plant === "triple" || Boolean(raw.n_links);
   if (backend !== "workers" && gpuKernel && navigator.gpu) {
     const spec = pick("full");
     try {

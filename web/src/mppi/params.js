@@ -5,8 +5,23 @@
  */
 import { rolloutCost } from "./rollout.js";
 import { rolloutCostDouble } from "./rollout-double.js";
+import { makeRolloutNlink } from "./rollout-nlink.js";
+
+/** Layout for the general n-link kernel (export_mppi_nlink.py specs). */
+export function nlinkLayout(n) {
+  const keys = ["x", "xd"];
+  for (let i = 1; i <= n; i += 1) keys.push(`th${i}`, `th${i}d`);
+  return {
+    n,
+    keys,
+    angles: Array.from({ length: n }, (_, i) => 2 + 2 * i),
+    targets: Array.from({ length: n }, (_, i) => `t${i + 1}`),
+    rollout: makeRolloutNlink(n),
+  };
+}
 
 export const LAYOUTS = {
+  quad: nlinkLayout(4),
   triple: {
     keys: ["x", "xd", "th1", "th1d", "th2", "th2d", "th3", "th3d"],
     angles: [2, 4, 6],
@@ -22,7 +37,9 @@ export const LAYOUTS = {
 };
 
 export function layoutOf(spec) {
-  return LAYOUTS[spec.plant ?? "triple"];
+  const id = spec.plant ?? "triple";
+  if (!LAYOUTS[id] && spec.n_links) LAYOUTS[id] = nlinkLayout(spec.n_links);
+  return LAYOUTS[id];
 }
 
 export function toParams(spec) {
