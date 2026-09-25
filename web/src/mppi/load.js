@@ -1,6 +1,6 @@
 /**
- * Build the triple's in-browser MPPI actor: one sample evaluator for the page
- * (reused across plant switches).
+ * Build a plant's in-browser MPPI actor from /mppi/<plant>.json. One sample
+ * evaluator per plant for the page, reused across plant switches.
  *   ?mppi=N      cap the sample count (default: the spec's n_samples)
  *   ?workers=N   worker count (default: see workerCount)
  *   ?backend=    webgpu (default when available) | workers | local
@@ -8,9 +8,8 @@
 import { createMppiController } from "./controller.js";
 import { createLocalEvaluator, createWorkerPool } from "./pool.js";
 import { createGpuEvaluator } from "./gpu.js";
-import { step } from "../physics-triple.js";
 
-let shared = null;
+const shared = new Map();
 
 function query() {
   return new URLSearchParams(window.location.search);
@@ -46,8 +45,9 @@ export function withProfile(spec, name) {
 }
 
 /**
- * WebGPU when available (full profile), else Web Workers (full on desktop,
- * lite on phones), else in-thread. ?profile=full|lite overrides the choice.
+ * WebGPU when available (full profile; triple only, the double is light
+ * enough for workers), else Web Workers (full on desktop, lite on phones),
+ * else in-thread. ?profile=full|lite overrides the choice.
  */
 async function createEvaluator(raw) {
   const q = query();
@@ -57,7 +57,8 @@ async function createEvaluator(raw) {
     const spec = pick("lite");
     return { spec, evaluator: createLocalEvaluator(spec) };
   }
-  if (backend !== "workers" && navigator.gpu) {
+  const gpuKernel = !raw.plant || raw.plant === "triple";
+  if (backend !== "workers" && gpuKernel && navigator.gpu) {
     const spec = pick("full");
     try {
       return { spec, evaluator: await createGpuEvaluator(spec) };
@@ -69,20 +70,24 @@ async function createEvaluator(raw) {
   return { spec, evaluator: createWorkerPool(spec, Number(q.get("workers")) || workerCount()) };
 }
 
-export async function loadMppiActor(url) {
-  if (!shared) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`mppi spec ${url}: ${res.status}`);
-    shared = await createEvaluator(await res.json());
+/** `step` is the page plant's step (physics-triple.js / physics.js), used to plan one knot ahead. */
+export async function loadMppiActor(url, step) {
+  if (!shared.has(url)) {
+    shared.set(url, (async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`mppi spec ${url}: ${res.status}`);
+      return createEvaluator(await res.json());
+    })());
   }
+  const { spec, evaluator } = await shared.get(url);
   const cap = Number(query().get("mppi")) || undefined;
   // ?pipeline=0 plans from the exact boundary state instead (physics waits each knot).
   const pipelined = query().get("pipeline") !== "0";
-  const actor = createMppiController(shared.spec, shared.evaluator, {
+  const actor = createMppiController(spec, evaluator, {
     maxSamples: cap,
     step: pipelined ? step : null,
   });
-  actor.spec = shared.spec;
-  actor.evaluator = shared.evaluator;
+  actor.spec = spec;
+  actor.evaluator = evaluator;
   return actor;
 }

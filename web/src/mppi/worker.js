@@ -1,6 +1,6 @@
 /**
  * MPPI rollout worker. Messages:
- *   {type: "goals", goals: {GOAL: {p, K, P}}, cfg}   once, at startup
+ *   {type: "goals", spec: {plant, fields, goals, force_limit, mppi}}   once, at startup
  *   {type: "job", id, goal, s0, U, n, i0, i1, seed, samples?, costs?}
  *     -> {id, i0, m, samples, costs}
  * `samples` / `costs` are ArrayBuffers handed back and forth so no replan allocates.
@@ -14,8 +14,8 @@ let cfg = null;
 self.onmessage = (event) => {
   const msg = event.data;
   if (msg.type === "goals") {
-    goals = toParams(msg.goals);
-    cfg = msg.cfg;
+    goals = toParams(msg.spec);
+    cfg = msg.spec.mppi;
     return;
   }
   if (msg.type === "job") {

@@ -202,7 +202,7 @@ function applyPlantChrome() {
 async function loadPlantPolicy(next) {
   if (next.mppiUrl) {
     try {
-      const actor = await loadMppiActor(next.mppiUrl);
+      const actor = await loadMppiActor(next.mppiUrl, next.step);
       const { backend, workers } = actor.stats();
       setStatus(backend === "workers" ? `mppi · ${workers} workers` : `mppi · ${backend}`);
       if (params.has("bench")) showBench(actor);

@@ -27,6 +27,10 @@ export function setFastTrig(on) {
   fastTrig = Boolean(on);
 }
 
+export function fastTrigOn() {
+  return fastTrig;
+}
+
 function wrap(a) {
   // Python's (a + pi) % 2pi - pi (floored modulo).
   const r = (a + Math.PI) % TWO_PI;

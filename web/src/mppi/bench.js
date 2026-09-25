@@ -3,13 +3,17 @@
  * Each row is one sample count from a mid-swing state; the budget is one knot
  * of wall time (what the live loop must fit to hold real time).
  */
-import { rolloutCost } from "./rollout.js";
 import { toParams } from "./params.js";
 import { stateArray } from "./controller.js";
 
 const SWING = { x: 0.3, xd: 1.2, th1: 2.1, th1d: 4.0, th2: 2.8, th2d: -3.0, th3: 3.6, th3d: 2.5 };
 const COUNTS = [4096, 2048, 1024, 512, 256];
 const REPS = 15;
+
+/** The all-upright goal (UUU or UU): the hardest swing-up to plan for. */
+function upGoal(spec) {
+  return Object.keys(spec.goals).find((g) => /^U+$/.test(g));
+}
 
 function pct(sorted, q) {
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
@@ -22,17 +26,18 @@ function pct(sorted, q) {
 async function gpuParity(evaluator, spec) {
   const T = spec.mppi.n_knots;
   const n = 1024;
-  const params = toParams(spec.goals).UUU;
-  const s0 = stateArray(SWING);
+  const goal = upGoal(spec);
+  const params = toParams(spec)[goal];
+  const s0 = stateArray(SWING, params.layout);
   const plans = new Float64Array(n * T);
   let seed = 12345;
   for (let i = 0; i < plans.length; i += 1) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     plans[i] = ((seed / 4294967296) * 2 - 1) * 20;
   }
-  const { costs } = await evaluator.score("UUU", s0, plans, n);
+  const { costs } = await evaluator.score(goal, s0, plans, n);
   const gpu = Array.from(costs);
-  const cpu = Array.from({ length: n }, (_, i) => rolloutCost(params.p, params.K, params.P, s0, 0, plans, i * T, T));
+  const cpu = Array.from({ length: n }, (_, i) => params.rollout(params.p, params.K, params.P, s0, 0, plans, i * T, T));
   const rel = cpu.map((c, i) => Math.abs(c - gpu[i]) / Math.max(Math.abs(c), 1)).sort((a, b) => a - b);
   const top = (v) => new Set(v.map((c, i) => [c, i]).sort((a, b) => a[0] - b[0]).slice(0, 32).map((x) => x[1]));
   const tc = top(cpu);
@@ -45,7 +50,8 @@ async function gpuParity(evaluator, spec) {
 
 export async function runBench(actor, spec, print) {
   const cfg = spec.mppi;
-  const dt = spec.goals.UUU.p[12];
+  const goal = upGoal(spec);
+  const dt = toParams(spec)[goal].dt;
   const budget = cfg.knot * dt * 1000;
   const stats = actor.stats();
   const lines = [
@@ -55,11 +61,11 @@ export async function runBench(actor, spec, print) {
     "samples   median ms   p95 ms   Msteps/s   fits",
   ];
   print(lines.join("\n") + "\n(running)");
-  for (let w = 0; w < 3; w += 1) await actor.timeReplan(SWING, "UUU", 1024);
+  for (let w = 0; w < 3; w += 1) await actor.timeReplan(SWING, goal, 1024);
   let best = 0;
   for (const n of COUNTS) {
     const t = [];
-    for (let r = 0; r < REPS; r += 1) t.push(await actor.timeReplan(SWING, "UUU", n));
+    for (let r = 0; r < REPS; r += 1) t.push(await actor.timeReplan(SWING, goal, n));
     t.sort((a, b) => a - b);
     const med = pct(t, 0.5);
     const p95 = pct(t, 0.95);

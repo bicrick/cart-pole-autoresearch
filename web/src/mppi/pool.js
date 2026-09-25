@@ -7,6 +7,11 @@
 import { sampleChunk } from "./sampler.js";
 import { toParams } from "./params.js";
 
+/** What a worker needs to build its goal tables (params.js toParams). */
+function plantSpec(spec) {
+  return { plant: spec.plant, fields: spec.fields, goals: spec.goals, force_limit: spec.force_limit, mppi: spec.mppi };
+}
+
 function growable() {
   let samples = new Float64Array(0);
   let costs = new Float64Array(0);
@@ -19,7 +24,7 @@ function growable() {
 
 /** Everything on the calling thread (node tests, or no Worker support). */
 export function createLocalEvaluator(spec) {
-  const goals = toParams(spec.goals);
+  const goals = toParams(spec);
   const buffers = growable();
   return {
     size: 1,
@@ -37,7 +42,7 @@ export function createWorkerPool(spec, size) {
   const spare = [];
   for (let i = 0; i < size; i += 1) {
     const w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-    w.postMessage({ type: "goals", goals: spec.goals, cfg: spec.mppi });
+    w.postMessage({ type: "goals", spec: plantSpec(spec) });
     workers.push(w);
     spare.push(null);
   }

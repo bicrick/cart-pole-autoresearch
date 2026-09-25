@@ -2,7 +2,7 @@ import { DEFAULT_CONSTANTS, step as stepDouble, observe as observeDouble, normal
 import { GOAL_IDS as DOUBLE_GOALS, conditionedObs as condDouble, atGoal as atDouble, ghostTips as ghostDouble } from "./goals.js";
 import { TRIPLE_CONSTANTS, step as stepTriple, observe as observeTriple, tipPositions as tipsTriple, grabForces as grabTriple } from "./physics-triple.js";
 import { GOAL_IDS as TRIPLE_GOALS, atGoal as atTriple, ghostTips as ghostTriple } from "./goals-triple.js";
-import { HANGING, HANGING_TRIPLE, DOWN_TRIPLE } from "./falloff.js";
+import { HANGING, HANGING_TRIPLE, DOWN_DOUBLE, DOWN_TRIPLE } from "./falloff.js";
 
 function passObs(obs) {
   return obs;
@@ -12,11 +12,15 @@ export const PLANTS = {
   double: {
     id: "double",
     label: "double pendulum",
-    policyUrl: "/policy.json",
+    // Same in-browser MPPI as the triple (mppi/double.json); the old MLP
+    // (policy.json) is no longer loaded.
+    mppiUrl: "/mppi/double.json",
     obsDim: 16,
     defaultGoal: "UU",
     goalIds: DOUBLE_GOALS,
     hanging: HANGING,
+    initialState: DOWN_DOUBLE,
+    autostart: true,
     hint: "grab the cart or either pole · 1–4 goal · tab cycle · p policy · a/d shove",
     touchHint: "drag the cart or a joint · tap a goal",
     constants: DEFAULT_CONSTANTS,

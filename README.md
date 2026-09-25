@@ -11,7 +11,7 @@ Interactive cart–pendulum demos. Drag a link, shove the cart, and switch the t
 | Plant | Targets | What runs it |
 | --- | --- | --- |
 | **Triple** (3 links) | 8 equilibria, DDD through UUU | MPPI teacher in the browser, on Web Workers. No server. |
-| **Double** (2 links) | UU, UD, DU, DD | Small MLP in the browser. No server. |
+| **Double** (2 links) | UU, UD, DU, DD | The same MPPI controller, on Web Workers. No server. |
 
 `θ = 0` is upright. The ship plant has no track walls: leaving `|x| > 2.4 m` falls off and respawns.
 
@@ -65,7 +65,13 @@ The Python sim server is still there: `WARM=1 bash scripts/mppi-server.sh`, then
 cd web && npm install && npm run dev
 ```
 
-Open [http://localhost:5173/#double](http://localhost:5173/#double). The page loads `web/public/policy.json` and steps the physics itself.
+Open [http://localhost:5173/#double](http://localhost:5173/#double).
+
+The double runs the triple's MPPI controller: a gated LQR anchor, 1.5 s residual plans, the same costs, and hold mode. The plant is `web/src/physics.js` (20 N, closed-form 3x3 solve), and `web/src/mppi/rollout-double.js` matches it to about 1e-14. It uses 2048 samples on Web Workers, about 5 ms per replan on an M2 Pro, and there is no WebGPU kernel for it.
+
+- **Swing-up test:** in node from a hang (DD from near UU), 32/32 swing-ups and holds across the four goals at 2048 samples, and also at 512. The median time into the quiet box is 3.1–3.7 s, and 5.6 s for DD. Run it with `cd train && python -m mppi.test_web_mppi_double`.
+- **Config:** per-goal LQR and costs come from `python -m mppi.export_mppi_double` (writes `web/public/mppi/double.json`).
+- **Old policy:** the small MLP (`web/public/policy.json`) is no longer loaded.
 
 Same plant in pygame: `python3 train/play.py`.
 
@@ -106,7 +112,8 @@ web/src/mppi/               in-browser teacher: rollout, sampler, workers, WebGP
 web/public/mppi/triple.json per-goal costs, LQR gains and full/lite profiles (export_mppi.py)
 web/src/loop.js             physics and controller in the page (both plants)
 web/src/remote-loop.js      ?sim: render the Python sim server
-web/public/policy.json      double MLP
+web/public/mppi/double.json double: per-goal costs and LQR gains (export_mppi_double.py)
+web/public/policy.json      old double MLP (unused)
 scripts/mppi-server.sh      start the Python triple sim
 scripts/mppi-teacher-gates.sh
 shared/constants-triple.json

@@ -21,7 +21,7 @@ export async function createGpuEvaluator(spec) {
   if (errors.length) throw new Error(`WGSL: ${errors.map((m) => `${m.lineNum}: ${m.message}`).join("; ")}`);
   const pipeline = await device.createComputePipelineAsync({ layout: "auto", compute: { module, entryPoint: "main" } });
 
-  const goals = toParams(spec.goals);
+  const goals = toParams(spec);
   const cfg = spec.mppi;
   const T = cfg.n_knots;
   const lim = 2 * spec.force_limit;

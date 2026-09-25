@@ -24,6 +24,15 @@ export const UPRIGHT_TRIPLE = {
   th3d: 0,
 };
 
+export const DOWN_DOUBLE = {
+  x: 0,
+  xd: 0,
+  th1: Math.PI,
+  th1d: 0,
+  th2: Math.PI,
+  th2d: 0,
+};
+
 export const DOWN_TRIPLE = {
   x: 0,
   xd: 0,

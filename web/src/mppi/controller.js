@@ -1,7 +1,8 @@
 /**
- * In-browser MPPI teacher for the cart-triple: port of train/mppi/mppi.py
- * (`MPPI.optimize` / `MPPI.act`) running its samples on an evaluator
- * (Web Worker pool, or in-thread).
+ * In-browser MPPI controller: port of train/mppi/mppi.py (`MPPI.optimize` /
+ * `MPPI.act`) running its samples on an evaluator (WebGPU, Web Worker pool,
+ * or in-thread). Plant-agnostic: the spec's layout (params.js) supplies the
+ * state keys, angle slots and rollout kernel (triple or double).
  *
  * Every `knot` physics steps the controller switches to a new plan. The loop
  * asks `prepare()` before each step; it returns false while the plan for this
@@ -12,11 +13,9 @@
  *
  * `n` adapts so a replan fits `budgetMs` (default: one knot of wall time).
  */
-import { rolloutCost } from "./rollout.js";
-import { toParams } from "./params.js";
+import { LAYOUTS, toParams } from "./params.js";
 
 const TWO_PI = 2 * Math.PI;
-const KEYS = ["x", "xd", "th1", "th1d", "th2", "th2d", "th3", "th3d"];
 const LAMBDAS = Array.from({ length: 25 }, (_, i) => 10 ** (-4 + (4 * i) / 24));
 
 function wrap(a) {
@@ -24,29 +23,36 @@ function wrap(a) {
   return (r < 0 ? r + TWO_PI : r) - Math.PI;
 }
 
-export function stateArray(state) {
-  return Float64Array.from(KEYS, (k) => state[k]);
+export function stateArray(state, layout = LAYOUTS.triple) {
+  return Float64Array.from(layout.keys, (k) => state[k]);
 }
 
 /** Gated target-LQR force (mppi.py make_anchor) from a state array. */
 export function anchorForce(params, s) {
-  const { p, K } = params;
-  const e1 = wrap(s[2] - p[14]);
-  const e2 = wrap(s[4] - p[15]);
-  const e3 = wrap(s[6] - p[16]);
-  const d = (1 - Math.cos(e1)) + (1 - Math.cos(e2)) + (1 - Math.cos(e3));
-  const gate = Math.max(0, Math.min(1, (p[34] - d) / (p[34] - p[33])));
+  const { K, targets, layout, gateIn, gateOut } = params;
+  const e = Float64Array.from(s);
+  let d = 0;
+  layout.angles.forEach((i, j) => {
+    e[i] = wrap(s[i] - targets[j]);
+    d += 1 - Math.cos(e[i]);
+  });
+  const gate = Math.max(0, Math.min(1, (gateOut - d) / (gateOut - gateIn)));
   if (gate === 0) return 0;
-  const fb = K[0] * s[0] + K[1] * s[1] + K[2] * e1 + K[3] * s[3] + K[4] * e2 + K[5] * s[5] + K[6] * e3 + K[7] * s[7];
+  let fb = 0;
+  for (let i = 0; i < e.length; i += 1) fb += K[i] * e[i];
   return -gate * fb;
 }
 
 /** Quiet at the target (mppi.py `MPPI.holding`): replans use hold_samples. */
 export function holding(params, cfg, s) {
   if (!cfg.hold_samples) return false;
-  const { p } = params;
-  const d = (1 - Math.cos(s[2] - p[14])) + (1 - Math.cos(s[4] - p[15])) + (1 - Math.cos(s[6] - p[16]));
-  const spin = s[3] * s[3] + s[5] * s[5] + s[7] * s[7];
+  const { targets, layout } = params;
+  let d = 0;
+  let spin = 0;
+  layout.angles.forEach((i, j) => {
+    d += 1 - Math.cos(s[i] - targets[j]);
+    spin += s[i + 1] * s[i + 1];
+  });
   return d < cfg.hold_d && spin < cfg.hold_spin;
 }
 
@@ -87,11 +93,13 @@ export function mppiWeights(S, targetEss) {
 
 export function createMppiController(spec, evaluator, opts = {}) {
   const cfg = spec.mppi;
-  const goals = toParams(spec.goals);
+  const goals = toParams(spec);
+  const layout = Object.values(goals)[0].layout;
   const T = cfg.n_knots;
   const knot = cfg.knot;
   const fmax = spec.force_limit;
-  const dt = goals.UUU.p[12];
+  const dt = Object.values(goals)[0].dt;
+  const toArr = (state) => stateArray(state, layout);
   const budgetMs = opts.budgetMs ?? knot * dt * 1000 * 0.8;
   const maxN = opts.maxSamples ?? cfg.n_samples;
   const minN = opts.minSamples ?? 256;
@@ -99,7 +107,7 @@ export function createMppiController(spec, evaluator, opts = {}) {
   let n = opts.samples ?? maxN;
   let uff = new Float64Array(T);
   let tick = 0;
-  // Plant step (physics-triple `step`) enables pipelined replanning.
+  // The page plant's `step` (physics-triple.js / physics.js) enables pipelined replanning.
   const step = opts.step ?? null;
   let planned = false;
   let job = null;
@@ -126,8 +134,8 @@ export function createMppiController(spec, evaluator, opts = {}) {
       for (let t = 0; t < T; t += 1) mean[t] += wi * samples[off + t];
     }
     const best = samples.slice(bi * T, bi * T + T);
-    const cm = rolloutCost(params.p, params.K, params.P, s0, 0, mean, 0, T);
-    const cb = rolloutCost(params.p, params.K, params.P, s0, 0, best, 0, T);
+    const cm = params.rollout(params.p, params.K, params.P, s0, 0, mean, 0, T);
+    const cb = params.rollout(params.p, params.K, params.P, s0, 0, best, 0, T);
     // samples[0] is the unperturbed previous plan.
     if (costs[0] <= cm && costs[0] <= cb) return U;
     return cm <= cb ? mean : best;
@@ -143,10 +151,10 @@ export function createMppiController(spec, evaluator, opts = {}) {
   function predict(state) {
     let s = { ...state };
     for (let i = 0; i < knot; i += 1) {
-      const u = Math.max(-fmax, Math.min(fmax, anchorForce(goals[goal], stateArray(s)) + uff[0]));
+      const u = Math.max(-fmax, Math.min(fmax, anchorForce(goals[goal], toArr(s)) + uff[0]));
       s = step(s, u, null);
     }
-    return stateArray(s);
+    return toArr(s);
   }
 
   /** Start the replan that the knot boundary at `forTick` will use. */
@@ -188,7 +196,7 @@ export function createMppiController(spec, evaluator, opts = {}) {
         this.reset();
       }
       if (tick % knot !== 0 || planned) return true;
-      if (!job || job.forTick !== tick) job = launch(tick, stateArray(state), tick === 0 ? uff : shifted(uff));
+      if (!job || job.forTick !== tick) job = launch(tick, toArr(state), tick === 0 ? uff : shifted(uff));
       if (!job.plan) return false;
       uff = job.plan;
       planned = true;
@@ -196,7 +204,7 @@ export function createMppiController(spec, evaluator, opts = {}) {
       return true;
     },
     act(_obs, state) {
-      const s = stateArray(state);
+      const s = toArr(state);
       const u = Math.max(-fmax, Math.min(fmax, anchorForce(goals[goal], s) + uff[0]));
       tick += 1;
       if (tick % knot === 0) planned = false;
@@ -210,7 +218,7 @@ export function createMppiController(spec, evaluator, opts = {}) {
       const keep = n;
       n = samples;
       const t0 = performance.now();
-      await optimize(goalId, stateArray(state), new Float64Array(T));
+      await optimize(goalId, toArr(state), new Float64Array(T));
       n = keep;
       return performance.now() - t0;
     },

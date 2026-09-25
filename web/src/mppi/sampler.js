@@ -1,12 +1,10 @@
 /**
  * One chunk of MPPI samples: colored noise around the current plan, clipped,
- * then scored with rolloutCost. Shared by the Web Workers and the in-thread
- * fallback. Noise matches train/mppi/mppi.py `_noise`: AR(1) over knots with
+ * then scored with the goal's rollout kernel (params.js). Shared by the Web
+ * Workers and the in-thread fallback. Noise matches train/mppi/mppi.py `_noise`: AR(1) over knots with
  * coefficient `beta`, per-sample sigma (the last `wide_frac` of samples use
  * `sigma_wide`), and sample 0 is the unperturbed plan.
  */
-import { rolloutCost } from "./rollout.js";
-
 /** xorshift128+ -> uniform (0,1); seeded per job so workers never share a stream. */
 export function makeRng(seed) {
   let s0 = (seed ^ 0x9e3779b9) >>> 0 || 1;
@@ -62,7 +60,8 @@ export function sampleChunk(params, cfg, s0, U, n, i0, i1, seed, out = null) {
   const rng = makeRng(seed);
   const beta = cfg.noise_beta;
   const scale = Math.sqrt(1 - beta * beta);
-  const lim = 2 * params.p[13];
+  const lim = 2 * params.fmax;
+  const rollout = params.rollout;
   const wideFrom = n - Math.round(cfg.wide_frac * n);
   for (let r = 0; r < m; r += 1) {
     const i = i0 + r;
@@ -78,7 +77,7 @@ export function sampleChunk(params, cfg, s0, U, n, i0, i1, seed, out = null) {
         samples[off + t] = v < -lim ? -lim : v > lim ? lim : v;
       }
     }
-    costs[r] = rolloutCost(params.p, params.K, params.P, s0, 0, samples, off, T);
+    costs[r] = rollout(params.p, params.K, params.P, s0, 0, samples, off, T);
   }
   return { samples, costs };
 }
