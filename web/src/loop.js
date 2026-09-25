@@ -26,6 +26,10 @@ export function startLoop({
   const fmax = constants.forceLimit ?? 20;
   let raf = 0;
   let lastForce = 0;
+  let wasActing = false;
+  let simSteps = 0;
+  let rateAt = performance.now();
+  let rt = 1;
 
   function frame(now) {
     raf = requestAnimationFrame(frame);
@@ -49,13 +53,28 @@ export function startLoop({
         const obs = plant.normalizeObs(plant.conditionedObs(plant.observe(state), goalId), constants);
         const actor = typeof getPolicy === "function" ? getPolicy() : policy;
         let force = 0;
-        if (control && actor && driving) force = actor.act(obs, state, goalId);
+        const acting = Boolean(control && actor && driving);
+        // Stateful actors (the triple MPPI) restart when control resumes.
+        if (acting && !wasActing) actor.reset?.();
+        wasActing = acting;
+        // A replanning actor holds the sim until its plan for this step is ready.
+        if (acting && actor.prepare && !actor.prepare(state, goalId)) {
+          acc = Math.min(acc, 64);
+          break;
+        }
+        if (acting) force = actor.act(obs, state, goalId);
         const manual = control && typeof getManualForce === "function" ? getManualForce() : 0;
         force = Math.max(-fmax, Math.min(fmax, force + manual));
         lastForce = control ? force : 0;
         state = plant.step(state, lastForce, extraQ, constants);
         state = fall.step(state);
         acc -= dtMs;
+        simSteps += 1;
+      }
+      if (now - rateAt > 2000) {
+        rt = (simSteps * dtMs) / (now - rateAt);
+        simSteps = 0;
+        rateAt = now;
       }
       const tips = plant.tipPositions(state, constants);
       const visual = fall.visual();
@@ -83,6 +102,12 @@ export function startLoop({
     },
     setState(next) {
       state = next;
+      wasActing = false;
+    },
+    /** Sim speed vs wall clock over the last ~2 s, plus the actor's own stats. */
+    stats() {
+      const actor = typeof getPolicy === "function" ? getPolicy() : policy;
+      return { rt, ...(actor?.stats?.() ?? {}) };
     },
   };
 }

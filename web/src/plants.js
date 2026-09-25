@@ -31,7 +31,8 @@ export const PLANTS = {
   triple: {
     id: "triple",
     label: "triple pendulum",
-    remote: true,
+    serverCapable: true,
+    mppiUrl: "/mppi/triple.json",
     obsDim: 11,
     defaultGoal: "DDD",
     goalIds: TRIPLE_GOALS,

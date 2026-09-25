@@ -5,6 +5,7 @@ import { startLoop } from "./loop.js";
 import { PLANTS, plantFromHash, nextPlantId } from "./plants.js";
 import { bindTheme } from "./theme.js";
 import { startRemoteLoop } from "./remote-loop.js";
+import { loadMppiActor } from "./mppi/load.js";
 
 const page = document.querySelector(".page");
 const canvas = document.getElementById("stage");
@@ -27,9 +28,15 @@ let loop = null;
 let constants = plant.constants;
 let activePolicy = null;
 
-// The triple runs in the Python sim server (scripts/mppi-server.sh): same plant
-// the MPPI teacher was trained on, teacher in the loop. ?sim=ws://host:port overrides.
-const SIM_URL = new URLSearchParams(window.location.search).get("sim") || "ws://127.0.0.1:8765";
+// The triple runs the MPPI teacher in the browser (Web Workers). With ?sim (or
+// ?sim=ws://host:port) it instead renders the Python sim server
+// (scripts/mppi-server.sh).
+const params = new URLSearchParams(window.location.search);
+const SIM_URL = params.has("sim") ? params.get("sim") || "ws://127.0.0.1:8765" : null;
+
+function isRemote(p) {
+  return Boolean(p.serverCapable && SIM_URL);
+}
 
 function currentActor() {
   return activePolicy;
@@ -43,7 +50,7 @@ function setGoal(goal) {
     btn.classList.toggle("is-active", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
-  if (plant.remote) {
+  if (isRemote(plant) || plant.mppiUrl) {
     policyReady = true;
     setPolicyOn(started);
   }
@@ -114,8 +121,9 @@ function updateReadout(state, force, goalId) {
   ];
   if (state.th3 != null) parts.push(`θ3 ${fmt(state.th3)}`);
   parts.push(`u ${fmt(force, 1)} N`);
-  if (plant.remote && loop?.stats) {
-    const { rt, ms } = loop.stats();
+  if (loop?.stats && (isRemote(plant) || plant.mppiUrl)) {
+    const { rt, ms, samples } = loop.stats();
+    if (samples) parts.push(`mppi ${samples}`);
     parts.push(`${Math.round((rt ?? 0) * 100)}% speed · ${(ms ?? 0).toFixed(0)} ms/plan`);
   }
   readoutEl.textContent = parts.join("  ·  ");
@@ -132,6 +140,17 @@ function applyPlantChrome() {
 }
 
 async function loadPlantPolicy(next) {
+  if (next.mppiUrl) {
+    try {
+      const actor = await loadMppiActor(next.mppiUrl);
+      setStatus(`mppi · ${actor.stats().workers} workers`);
+      return { nextPolicy: actor, nextConstants: { ...next.constants }, ready: true };
+    } catch (err) {
+      console.warn(err);
+      setStatus("mppi failed to load");
+      return { nextPolicy: null, nextConstants: { ...next.constants }, ready: false };
+    }
+  }
   let nextPolicy = null;
   let nextConstants = { ...next.constants };
   let ready = false;
@@ -169,7 +188,7 @@ function startPlantLoop(nextPolicy, nextConstants) {
   if (loop) loop.stop();
   constants = nextConstants;
   activePolicy = nextPolicy;
-  if (plant.remote) {
+  if (isRemote(plant)) {
     loop = startRemoteLoop({
       url: SIM_URL,
       plant,
@@ -207,7 +226,7 @@ async function switchPlant(id) {
   applyPlantChrome();
   renderGoalButtons();
   setStatus("loading");
-  if (plant.remote) {
+  if (isRemote(plant)) {
     startPlantLoop(null, { ...plant.constants });
     return;
   }
@@ -236,7 +255,7 @@ let hudAt = 0;
 async function boot() {
   applyPlantChrome();
   renderGoalButtons();
-  if (plant.remote) {
+  if (isRemote(plant)) {
     setPolicyOn(false);
     startPlantLoop(null, { ...plant.constants });
   } else {
