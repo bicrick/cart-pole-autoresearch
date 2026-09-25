@@ -102,12 +102,19 @@ function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr, ghostTips
 export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, policyOn = true, visual = null, ghostTips = null) {
   const dpr = sizeCanvas(canvas);
   camera.canvas = canvas;
-  camera.x = 0;
   const track = constants.trackLimit ?? 2.4;
   const reach = poleReach(constants);
   const tip = 0.08;
   const pad = 0.16;
-  const halfSpan = track + reach * 0.45;
+  // Landscape shows the whole track. Portrait (phones) zooms to the pendulum
+  // and follows the cart, never panning past the track ends.
+  const full = track + reach * 0.45;
+  const portrait = canvas.height > canvas.width * 1.1;
+  camera.railY = portrait ? 0.48 : 0.56;
+  const halfSpan = portrait ? Math.min(full, reach + 0.2) : full;
+  const room = Math.max(0, track + 0.3 - halfSpan);
+  const target = Math.max(-room, Math.min(room, tips.cart.x));
+  camera.x = room > 0 ? camera.x + (target - camera.x) * 0.15 : 0;
   const scaleX = canvas.width / (2 * halfSpan);
   const up = (camera.railY * canvas.height) / (reach + tip + pad);
   const down = ((1 - camera.railY) * canvas.height) / (reach + tip + pad);

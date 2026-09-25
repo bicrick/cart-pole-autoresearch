@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>double pendulum</title>
+    <title>triple pendulum</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -12,12 +12,12 @@
       <div class="start" id="start">click to start</div>
       <header class="nav">
         <div class="nav-inner">
-          <button type="button" class="text-btn brand" id="plant-toggle">double pendulum</button>
+          <button type="button" class="text-btn brand" id="plant-toggle">triple pendulum</button>
           <nav class="goals" id="goals" role="group" aria-label="Desired equilibrium"></nav>
           <div class="meta">
             <button type="button" id="policy-toggle" class="text-btn">policy off</button>
             <span class="dot" aria-hidden="true">·</span>
-            <span id="status">loading</span>
+            <span id="status" class="is-alert">loading</span>
           </div>
         </div>
       </header>
@@ -26,8 +26,8 @@
       </main>
       <footer class="bar">
         <div class="bar-inner">
-          <div id="readout">x +0.00  ·  θ1 +0.00  ·  θ2 +0.00</div>
-          <div class="hint">grab the cart or either pole · 1–4 goal · tab cycle · p policy · a/d shove</div>
+          <div id="readout"></div>
+          <div class="hint"></div>
         </div>
       </footer>
     </div>

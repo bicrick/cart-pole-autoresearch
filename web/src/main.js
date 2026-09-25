@@ -16,6 +16,7 @@ const policyBtn = document.getElementById("policy-toggle");
 const plantBtn = document.getElementById("plant-toggle");
 const goalsNav = document.getElementById("goals");
 const hintEl = document.querySelector(".hint");
+const startEl = document.getElementById("start");
 const ctx = canvas.getContext("2d");
 const camera = createCamera();
 const input = createInput(canvas, camera);
@@ -34,6 +35,10 @@ let activePolicy = null;
 // (scripts/mppi-server.sh).
 const params = new URLSearchParams(window.location.search);
 const SIM_URL = params.has("sim") ? params.get("sim") || "ws://127.0.0.1:8765" : null;
+// ?debug shows the engine line (backend, samples, fps, state) and status text.
+const DEBUG = params.has("debug") || params.has("bench");
+const TOUCH = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+if (DEBUG) page.classList.add("is-debug");
 
 function isRemote(p) {
   return Boolean(p.serverCapable && SIM_URL);
@@ -84,7 +89,10 @@ function renderGoalButtons() {
     btn.dataset.goal = id;
     btn.textContent = id;
     btn.setAttribute("aria-pressed", "false");
-    btn.addEventListener("click", () => setGoal(id));
+    btn.addEventListener("click", () => {
+      begin();
+      setGoal(id);
+    });
     goalsNav.append(btn);
   });
   setGoal(currentGoal);
@@ -105,8 +113,11 @@ function cycleGoal(dir = 1) {
   setGoal(plant.goalIds[(i + dir + n) % n]);
 }
 
-function setStatus(text) {
-  if (statusEl) statusEl.textContent = text;
+/** Status text is engine detail (debug only) unless `alert` (loading, offline, errors). */
+function setStatus(text, alert = false) {
+  if (!statusEl) return;
+  statusEl.textContent = text;
+  statusEl.classList.toggle("is-alert", alert);
 }
 
 function begin() {
@@ -124,6 +135,10 @@ function fmt(n, digits = 2) {
 function updateReadout(state, force, goalId) {
   if (!readoutEl) return;
   const hit = plant.atGoal(state, goalId);
+  if (!DEBUG) {
+    readoutEl.textContent = `${goalId} · ${hit ? "at goal" : "on its way"}`;
+    return;
+  }
   const parts = [
     goalId,
     hit ? "at goal" : "seeking",
@@ -146,7 +161,8 @@ function applyPlantChrome() {
   document.title = plant.label;
   if (plantBtn) plantBtn.textContent = plant.label;
   page.dataset.plant = plant.id;
-  if (hintEl) hintEl.textContent = plant.hint;
+  if (hintEl) hintEl.textContent = TOUCH ? plant.touchHint ?? plant.hint : plant.hint;
+  if (startEl) startEl.textContent = TOUCH ? "tap to start" : "click to start";
   if (window.location.hash.replace("#", "") !== plant.id) {
     history.replaceState(null, "", `#${plant.id}`);
   }
@@ -162,7 +178,7 @@ async function loadPlantPolicy(next) {
       return { nextPolicy: actor, nextConstants: { ...next.constants }, ready: true };
     } catch (err) {
       console.warn(err);
-      setStatus("mppi failed to load");
+      setStatus("controller failed to load", true);
       return { nextPolicy: null, nextConstants: { ...next.constants }, ready: false };
     }
   }
@@ -183,7 +199,7 @@ async function loadPlantPolicy(next) {
     }
   } catch (err) {
     console.warn(err);
-    setStatus("physics only");
+    setStatus("physics only", true);
     nextPolicy = null;
     ready = false;
   }
@@ -214,7 +230,7 @@ function startPlantLoop(nextPolicy, nextConstants) {
       getStarted: () => started,
       getManualForce: () => keys.manualForce(constants.forceLimit ?? 40),
       onFrame: onPlantFrame,
-      onStatus: setStatus,
+      onStatus: (text) => setStatus(text, /offline|connecting/.test(text)),
     });
     return;
   }
@@ -240,7 +256,7 @@ async function switchPlant(id) {
   currentGoal = plant.defaultGoal;
   applyPlantChrome();
   renderGoalButtons();
-  setStatus("loading");
+  setStatus("loading", true);
   if (isRemote(plant)) {
     startPlantLoop(null, { ...plant.constants });
     return;

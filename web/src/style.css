@@ -202,28 +202,77 @@ html.is-dark body {
   text-align: right;
 }
 
-@media (max-width: 760px) {
-  .nav,
-  .bar {
-    padding: 0.85rem 1rem;
-  }
+/* Engine detail (backend, samples) is for ?debug; loading and errors always show. */
+.page:not(.is-debug) #status:not(.is-alert),
+.page:not(.is-debug) .meta:has(#status:not(.is-alert)) .dot {
+  display: none;
+}
 
+/* Phones: title and policy on top, a thumb-sized goal grid above a short footer. */
+@media (max-width: 760px) {
   .nav {
+    padding: max(0.9rem, env(safe-area-inset-top)) 1rem 0.9rem;
     padding-right: max(2.75rem, calc(1rem + env(safe-area-inset-right) + 1.4em));
   }
 
+  .nav-inner {
+    flex-wrap: nowrap;
+    align-items: baseline;
+  }
+
   .meta {
-    width: 100%;
+    margin-left: auto;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+
+  .goals {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(env(safe-area-inset-bottom) + 3.4rem);
+    padding: 0 max(1rem, env(safe-area-inset-left));
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+  }
+
+  .goals .dot {
+    display: none;
+  }
+
+  .goals .text-btn {
+    padding: 0.65rem 0;
+    border: 1px solid rgba(33, 35, 45, 0.14);
+    border-radius: 8px;
+    background: rgba(251, 251, 250, 0.9);
+    text-align: center;
+    font-size: 0.92rem;
+    letter-spacing: 0.04em;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .goals .text-btn.is-active {
+    border-color: var(--ink);
+  }
+
+  .bar {
+    padding: 0 1rem calc(env(safe-area-inset-bottom) + 0.9rem);
   }
 
   .bar-inner {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 0.35rem;
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  #readout,
+  .hint {
+    text-align: center;
   }
 
   .hint {
-    text-align: left;
+    font-size: 0.76rem;
   }
 }
 
