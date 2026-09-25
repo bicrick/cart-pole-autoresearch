@@ -38,6 +38,8 @@ const SIM_URL = params.has("sim") ? params.get("sim") || "ws://127.0.0.1:8765" :
 // ?debug shows the engine line (backend, samples, fps, state) and status text.
 const DEBUG = params.has("debug") || params.has("bench");
 const TOUCH = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+// Plants with `autostart` switch the policy on this long after the controller loads.
+const AUTOSTART_MS = 1200;
 if (DEBUG) page.classList.add("is-debug");
 
 function isRemote(p) {
@@ -70,6 +72,19 @@ function setGoal(goal) {
   if (isRemote(plant) || plant.mppiUrl) {
     policyReady = true;
     setPolicyOn(started);
+  }
+}
+
+// Phones stack the goal grid in the footer (above state and hint) instead of the top bar.
+const PHONE = window.matchMedia("(max-width: 760px)");
+const navInner = document.querySelector(".nav-inner");
+const barInner = document.querySelector(".bar-inner");
+
+function placeGoals() {
+  if (PHONE.matches) {
+    if (goalsNav.parentElement !== barInner) barInner.prepend(goalsNav);
+  } else if (goalsNav.parentElement !== navInner) {
+    navInner.insertBefore(goalsNav, navInner.querySelector(".meta"));
   }
 }
 
@@ -132,13 +147,29 @@ function fmt(n, digits = 2) {
   return (v >= 0 ? "+" : "") + v.toFixed(digits);
 }
 
+function field(label, value) {
+  const k = document.createElement("span");
+  k.className = "k";
+  k.textContent = label;
+  const v = document.createElement("span");
+  v.className = "v";
+  v.textContent = value;
+  return [k, v];
+}
+
 function updateReadout(state, force, goalId) {
   if (!readoutEl) return;
   const hit = plant.atGoal(state, goalId);
   if (!DEBUG) {
-    readoutEl.textContent = `${goalId} · ${hit ? "at goal" : "on its way"}`;
+    const state = !policyOn ? "policy off" : hit ? "at goal" : "seeking";
+    const key = `${goalId}|${state}`;
+    if (readoutEl.dataset.key !== key) {
+      readoutEl.dataset.key = key;
+      readoutEl.replaceChildren(...field("target", goalId), ...field("state", state));
+    }
     return;
   }
+  delete readoutEl.dataset.key;
   const parts = [
     goalId,
     hit ? "at goal" : "seeking",
@@ -284,6 +315,8 @@ const keys = createKeys({
 let hudAt = 0;
 
 async function boot() {
+  placeGoals();
+  PHONE.addEventListener("change", placeGoals);
   applyPlantChrome();
   renderGoalButtons();
   if (isRemote(plant)) {
@@ -294,10 +327,11 @@ async function boot() {
     policyReady = ready;
     setPolicyOn(false);
     startPlantLoop(nextPolicy, nextConstants);
+    if (ready && plant.autostart && !params.has("bench")) setTimeout(begin, AUTOSTART_MS);
   }
 
   const themeBtn = document.getElementById("theme-toggle");
-  if (themeBtn) bindTheme(page, themeBtn);
+  if (themeBtn) bindTheme(themeBtn);
 
   if (policyBtn) {
     policyBtn.addEventListener("click", () => setPolicyOn(!policyOn));

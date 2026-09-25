@@ -1,10 +1,26 @@
-const INK = "#21232d";
-const INK_SOFT = "#2a2d38";
-const MUTED = "#8b8f99";
-const MUTED_SOFT = "#9aa0aa";
-const LINK = "#2563eb";
-const RAIL = "#e8e8e6";
-const GHOST = "rgba(90, 94, 107, 0.38)";
+// Canvas colors for the light and dark palettes in style.css (html.is-dark).
+const LIGHT = {
+  ink: "#21232d",
+  body: "#2a2d38",
+  muted: "#8b8f99",
+  mutedBody: "#9aa0aa",
+  link: "#2563eb",
+  rail: "#e8e8e6",
+  ghost: "rgba(90, 94, 107, 0.38)",
+};
+const DARK = {
+  ink: "#ecece6",
+  body: "#c6c7cc",
+  muted: "#6d717c",
+  mutedBody: "#5d6069",
+  link: "#6b9eff",
+  rail: "#2c2e36",
+  ghost: "rgba(139, 142, 151, 0.4)",
+};
+
+function palette() {
+  return document.documentElement.classList.contains("is-dark") ? DARK : LIGHT;
+}
 
 export function createCamera() {
   const camera = {
@@ -55,7 +71,7 @@ function drawTrack(ctx, camera, canvas, constants, dpr) {
   const track = constants.trackLimit ?? 2.4;
   const left = camera.worldToScreen(-track, 0, canvas);
   const right = camera.worldToScreen(track, 0, canvas);
-  ctx.strokeStyle = RAIL;
+  ctx.strokeStyle = palette().rail;
   ctx.lineWidth = 2 * dpr;
   ctx.beginPath();
   ctx.moveTo(left.x, left.y);
@@ -63,7 +79,7 @@ function drawTrack(ctx, camera, canvas, constants, dpr) {
   ctx.stroke();
   if (!constants.trackWalls) return;
   const post = 18 * dpr;
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = palette().ink;
   ctx.lineWidth = 3 * dpr;
   ctx.beginPath();
   ctx.moveTo(left.x, left.y - post);
@@ -78,10 +94,10 @@ function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr, ghostTips
   const ghost = ghostTips(state.x, goalId, constants);
   const joints = polesOf(ghost);
   const g0 = camera.worldToScreen(ghost.cart.x, 0, canvas);
-  ctx.strokeStyle = GHOST;
+  ctx.strokeStyle = palette().ghost;
   ctx.lineWidth = 3 * dpr;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
   ctx.beginPath();
   ctx.moveTo(g0.x, g0.y);
   for (const joint of joints) {
@@ -89,14 +105,16 @@ function drawGhost(ctx, camera, canvas, state, goalId, constants, dpr, ghostTips
     ctx.lineTo(p.x, p.y);
   }
   ctx.stroke();
-  ctx.fillStyle = GHOST;
-  ctx.beginPath();
+  ctx.fillStyle = palette().ghost;
   joints.forEach((joint, i) => {
     const p = camera.worldToScreen(joint.x, joint.y, canvas);
-    ctx.moveTo(p.x + (4 + i) * dpr, p.y);
-    ctx.arc(p.x, p.y, (4 + i) * dpr, 0, Math.PI * 2);
+    square(ctx, p.x, p.y, (4 + i) * dpr);
   });
-  ctx.fill();
+}
+
+/** Filled square centred on (x, y) with half-side h: joints and wheels are square. */
+function square(ctx, x, y, h) {
+  ctx.fillRect(x - h, y - h, 2 * h, 2 * h);
 }
 
 export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, policyOn = true, visual = null, ghostTips = null) {
@@ -132,15 +150,16 @@ export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalI
     ...joint,
     screen: camera.worldToScreen(joint.x, joint.y + lift, canvas),
   }));
-  const ink = policyOn && !visual?.muted ? INK : MUTED;
-  const body = policyOn && !visual?.muted ? INK_SOFT : MUTED_SOFT;
+  const pal = palette();
+  const ink = policyOn && !visual?.muted ? pal.ink : pal.muted;
+  const body = policyOn && !visual?.muted ? pal.body : pal.mutedBody;
   ctx.save();
   ctx.globalAlpha = visual?.alpha ?? 1;
 
   ctx.strokeStyle = ink;
   ctx.lineWidth = 5 * dpr;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
   ctx.beginPath();
   ctx.moveTo(cart.x, cart.y);
   for (const joint of joints) ctx.lineTo(joint.screen.x, joint.screen.y);
@@ -153,29 +172,25 @@ export function draw(canvas, ctx, state, tips, camera, pointer, constants, goalI
   const wheelR = 0.03 * camera.scale;
   ctx.fillStyle = body;
   ctx.fillRect(cartX, cartY, cartW, cartH);
-  ctx.beginPath();
   ctx.fillStyle = ink;
-  ctx.arc(cart.x - cartW * 0.28, cart.y + cartH * 0.55, wheelR, 0, Math.PI * 2);
-  ctx.arc(cart.x + cartW * 0.28, cart.y + cartH * 0.55, wheelR, 0, Math.PI * 2);
-  ctx.fill();
+  square(ctx, cart.x - cartW * 0.28, cart.y + cartH * 0.55, wheelR);
+  square(ctx, cart.x + cartW * 0.28, cart.y + cartH * 0.55, wheelR);
 
   joints.forEach((joint, i) => {
-    const r = (0.045 + i * 0.01) * camera.scale;
-    ctx.fillStyle = pointer.body === joint.body ? LINK : ink;
-    ctx.beginPath();
-    ctx.arc(joint.screen.x, joint.screen.y, r, 0, Math.PI * 2);
-    ctx.fill();
+    const h = (0.038 + i * 0.008) * camera.scale;
+    ctx.fillStyle = pointer.body === joint.body ? pal.link : ink;
+    square(ctx, joint.screen.x, joint.screen.y, h);
   });
 
   if (pointer.body === "cart" && !visual?.muted) {
-    ctx.strokeStyle = LINK;
+    ctx.strokeStyle = pal.link;
     ctx.lineWidth = 2.5 * dpr;
     ctx.strokeRect(cart.x - cartW * 0.5, cart.y - cartH * 0.35, cartW, cartH);
   }
 
   if (pointer.active && pointer.body && !visual?.muted) {
     const grab = camera.worldToScreen(pointer.world.x, pointer.world.y, canvas);
-    ctx.strokeStyle = LINK;
+    ctx.strokeStyle = pal.link;
     ctx.lineWidth = 1.5 * dpr;
     ctx.setLineDash([4 * dpr, 4 * dpr]);
     ctx.beginPath();

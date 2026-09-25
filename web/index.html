@@ -4,11 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>triple pendulum</title>
+    <meta name="theme-color" content="#fbfbfa" />
+    <script>
+      try {
+        if (localStorage.getItem("theme") === "dark") document.documentElement.classList.add("is-dark");
+      } catch {}
+    </script>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div class="page">
-      <button type="button" class="text-btn theme" id="theme-toggle" aria-pressed="false" aria-label="dark mode">*</button>
       <div class="start" id="start">click to start</div>
       <header class="nav">
         <div class="nav-inner">
@@ -18,6 +23,7 @@
             <button type="button" id="policy-toggle" class="text-btn">policy off</button>
             <span class="dot" aria-hidden="true">·</span>
             <span id="status" class="is-alert">loading</span>
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false" aria-label="dark mode">#</button>
           </div>
         </div>
       </header>
