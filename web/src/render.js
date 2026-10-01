@@ -19,7 +19,11 @@ const DARK = {
 };
 
 function palette() {
-  return document.documentElement.classList.contains("is-dark") ? DARK : LIGHT;
+  const root = document.documentElement;
+  if (root.classList.contains("is-dark")) return DARK;
+  // The pale card paper is close to the light rail, so the track needs a cooler edge.
+  if (root.classList.contains("is-card")) return { ...LIGHT, rail: "#c5d2e4" };
+  return LIGHT;
 }
 
 export function createCamera() {

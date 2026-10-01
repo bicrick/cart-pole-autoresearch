@@ -37,8 +37,14 @@ html.is-dark {
   --stipple: rgba(255, 255, 255, 0.045);
 }
 
-/* ?card=1: the featured tile. Deep navy on top of the dark palette, in both themes. */
+/* ?card=1 follows the host theme, tinted so the panel separates from the page. */
 html.is-card {
+  --paper: #e4ecf8;
+  --rule: #d3deee;
+  --stipple: rgba(37, 99, 235, 0.07);
+}
+
+html.is-dark.is-card {
   --paper: #0b1626;
   --rule: #1d2b44;
   --stipple: rgba(130, 170, 255, 0.07);

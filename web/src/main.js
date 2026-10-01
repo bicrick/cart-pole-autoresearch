@@ -43,8 +43,7 @@ const DEBUG = params.has("debug") || params.has("bench");
 // ?embed=1 is the chromeless cut used inside the personal-site iframe.
 // ?theme=light|dark selects the palette and does not touch localStorage.
 const EMBED = params.has("embed");
-// ?card=1 is the featured-tile cut: always the dark navy palette, whatever the host
-// site's theme, so the tile stands out from the page instead of blending in.
+// ?card=1 is the featured-tile cut. It follows the host theme, with a tinted paper.
 const CARD = EMBED && params.has("card");
 // ?layout=desktop keeps the wide controls inside a narrow iframe.
 const DESKTOP = params.get("layout") === "desktop";
@@ -58,10 +57,8 @@ if (EMBED) {
   page.classList.add("is-embed");
   camera.embed = true;
 }
-if (CARD) {
-  document.documentElement.classList.add("is-card");
-  applyEmbedTheme(true);
-} else {
+if (CARD) document.documentElement.classList.add("is-card");
+{
   const theme = params.get("theme");
   if (theme === "dark" || theme === "light") applyEmbedTheme(theme === "dark");
 }
@@ -395,7 +392,7 @@ async function boot() {
     if (ready && plant.autostart && !params.has("bench")) setTimeout(begin, EMBED ? 400 : AUTOSTART_MS);
   }
 
-  if (EMBED && !CARD) {
+  if (EMBED) {
     window.addEventListener("message", (event) => {
       const data = event.data;
       if (!data || data.type !== THEME_MSG) return;
