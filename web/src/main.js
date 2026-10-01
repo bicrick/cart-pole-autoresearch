@@ -8,6 +8,7 @@ import { applyEmbedTheme, bindTheme } from "./theme.js";
 import { startRemoteLoop } from "./remote-loop.js";
 import { loadMppiActor } from "./mppi/load.js";
 import { runBench } from "./mppi/bench.js";
+import { createReel } from "./embed-reel.js";
 
 const page = document.querySelector(".page");
 const canvas = document.getElementById("stage");
@@ -18,6 +19,7 @@ const plantSwitchEl = document.getElementById("plant-switch");
 const goalsNav = document.getElementById("goals");
 const hintEl = document.querySelector(".hint");
 const startEl = document.getElementById("start");
+const captionEl = document.getElementById("embed-caption");
 const ctx = canvas.getContext("2d");
 const camera = createCamera();
 const input = createInput(canvas, camera);
@@ -41,9 +43,11 @@ const DEBUG = params.has("debug") || params.has("bench");
 // ?embed=1 is the chromeless cut used inside the personal-site iframe.
 // ?theme=light|dark selects the palette and does not touch localStorage.
 const EMBED = params.has("embed");
+// ?card=1 is the featured-tile cut: always the dark navy palette, whatever the host
+// site's theme, so the tile stands out from the page instead of blending in.
+const CARD = EMBED && params.has("card");
 // ?layout=desktop keeps the wide controls inside a narrow iframe.
 const DESKTOP = params.get("layout") === "desktop";
-const EMBED_HOLD_MS = 2800;
 const THEME_MSG = "cart-pole-theme";
 const TOUCH = window.matchMedia?.("(pointer: coarse)").matches ?? false;
 // Plants with `autostart` switch the policy on this long after the controller loads.
@@ -54,7 +58,10 @@ if (EMBED) {
   page.classList.add("is-embed");
   camera.embed = true;
 }
-{
+if (CARD) {
+  document.documentElement.classList.add("is-card");
+  applyEmbedTheme(true);
+} else {
   const theme = params.get("theme");
   if (theme === "dark" || theme === "light") applyEmbedTheme(theme === "dark");
 }
@@ -78,9 +85,19 @@ function currentActor() {
   return activePolicy;
 }
 
+/** Embed caption: which pendulum and which target the reel is showing. */
+function updateCaption() {
+  if (!captionEl) return;
+  const key = `${plant.id}|${currentGoal}`;
+  if (captionEl.dataset.key === key) return;
+  captionEl.dataset.key = key;
+  captionEl.replaceChildren(...field(plant.label, `target ${currentGoal}`));
+}
+
 function setGoal(goal) {
   if (!plant.goalIds.includes(goal)) return;
   currentGoal = goal;
+  updateCaption();
   [...goalsNav.querySelectorAll("[data-goal]")].forEach((btn) => {
     const on = btn.dataset.goal === goal;
     btn.classList.toggle("is-active", on);
@@ -215,6 +232,7 @@ function applyPlantChrome(dir = 1) {
   document.title = plant.label;
   plantSwitch?.set(plant.id, dir);
   page.dataset.plant = plant.id;
+  updateCaption();
   if (hintEl) hintEl.textContent = TOUCH ? plant.touchHint ?? plant.hint : plant.hint;
   if (startEl) startEl.textContent = TOUCH ? "tap to start" : "click to start";
   if (window.location.hash.replace("#", "") !== plant.id) {
@@ -261,20 +279,28 @@ async function loadPlantPolicy(next) {
   return { nextPolicy, nextConstants, ready };
 }
 
-let embedHeld = 0;
-let embedAt = performance.now();
+const reel = EMBED ? createReel({ startPlant: plant.id }) : null;
+let reelAt = performance.now();
+let reelBusy = false;
+
+async function advanceReel(next) {
+  if (next.plant) {
+    reelBusy = true;
+    await switchPlant(next.plant, 1);
+    reelBusy = false;
+  } else {
+    setGoal(next.goal);
+  }
+}
 
 function onPlantFrame({ state, tips, pointer, force, goalId, policyOn: driving, visual }) {
-  if (EMBED && started && loop) {
+  if (reel && started && loop) {
     const now = performance.now();
-    const dt = now - embedAt;
-    embedAt = now;
-    if (plant.atGoal(state, goalId)) embedHeld += dt;
-    else embedHeld = 0;
-    if (embedHeld > EMBED_HOLD_MS) {
-      embedHeld = 0;
-      loop.setState({ ...(plant.initialState || plant.hanging) });
-      activePolicy?.reset?.();
+    const dt = now - reelAt;
+    reelAt = now;
+    if (!reelBusy) {
+      const next = reel.tick(dt, plant.atGoal(state, goalId));
+      if (next) advanceReel(next);
     }
   }
   draw(canvas, ctx, state, tips, camera, pointer, constants, goalId, driving, visual, plant.ghostTips);
@@ -369,7 +395,7 @@ async function boot() {
     if (ready && plant.autostart && !params.has("bench")) setTimeout(begin, EMBED ? 400 : AUTOSTART_MS);
   }
 
-  if (EMBED) {
+  if (EMBED && !CARD) {
     window.addEventListener("message", (event) => {
       const data = event.data;
       if (!data || data.type !== THEME_MSG) return;
